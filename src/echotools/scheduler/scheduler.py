@@ -52,7 +52,7 @@ class TaskScheduler:
     async def cancel_all(self) -> None:
         """取消所有活跃任务。"""
         for task_id, task in list(self._active_tasks.items()):
-            logger.info("取消任务: %s", task_id)
+            logger.debug("取消任务: %s", task_id)
             task.cancel()
         self._active_tasks.clear()
 

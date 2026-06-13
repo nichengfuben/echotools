@@ -119,7 +119,7 @@ class AdaptiveSelector:
             except Exception:
                 pass
         if count:
-            logger.info("加载 %d 条 TAS 记录", count)
+            logger.debug("加载 %d 条 TAS 记录", count)
 
     def _ensure(self, key: str, group: str = "") -> TASRecord:
         """获取或创建记录。"""

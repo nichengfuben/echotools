@@ -44,7 +44,7 @@ class AutoUpdater:
     async def run(self) -> None:
         """启动自动更新循环。"""
         self._running = True
-        logger.info(
+        logger.debug(
             "自动更新已启动 (branch=%s, interval=%ds)",
             self._branch,
             self._interval,
@@ -60,7 +60,7 @@ class AutoUpdater:
     def stop(self) -> None:
         """停止更新循环。"""
         self._running = False
-        logger.info("自动更新已停止")
+        logger.debug("自动更新已停止")
 
     async def _check_and_update(self) -> None:
         """执行一次检查与更新。"""
@@ -71,7 +71,7 @@ class AutoUpdater:
         is_behind, local_hash, remote_hash = await self._is_behind()
         if not is_behind:
             return
-        logger.info(
+        logger.debug(
             "检测到新提交: %s -> %s，正在更新",
             (local_hash or "?")[:8],
             (remote_hash or "?")[:8],
@@ -79,7 +79,7 @@ class AutoUpdater:
         if not await self._pull():
             logger.error("git pull 失败")
             return
-        logger.info("更新成功，触发回调")
+        logger.debug("更新成功，触发回调")
         self._on_update()
 
     def _is_git_repo(self) -> bool:
@@ -149,7 +149,7 @@ class AutoUpdater:
             if not ok:
                 logger.error("git pull 失败: %s", err)
                 return False
-        logger.info("git pull 成功: %s", out)
+        logger.debug("git pull 成功: %s", out)
         return True
 
     @staticmethod

@@ -151,4 +151,4 @@ class EchoTools:
             await self._scheduler.cancel_all()
         if self._lifecycle is not None:
             await self._lifecycle.shutdown()
-        logger.info("EchoTools 已关闭")
+        logger.debug("EchoTools 已关闭")

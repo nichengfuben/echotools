@@ -40,7 +40,7 @@ class LifecycleManager:
         """执行全部启动钩子。"""
         if self._started:
             return
-        logger.info("生命周期启动，执行 %d 个钩子", len(self._startup_hooks))
+        logger.debug("生命周期启动，执行 %d 个钩子", len(self._startup_hooks))
         for hook in self._startup_hooks:
             await self._run(hook)
         self._started = True
@@ -49,7 +49,7 @@ class LifecycleManager:
         """逆序执行全部关闭钩子。"""
         if not self._started:
             return
-        logger.info(
+        logger.debug(
             "生命周期关闭，执行 %d 个钩子", len(self._shutdown_hooks)
         )
         for hook in reversed(self._shutdown_hooks):
