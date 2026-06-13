@@ -15,6 +15,7 @@ htmlcov/
 .venv/
 venv/
 env/
+tmp/
 *.so
 .DS_Store
 Thumbs.db

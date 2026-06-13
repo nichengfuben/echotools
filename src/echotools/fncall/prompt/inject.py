@@ -91,7 +91,10 @@ def inject_fncall(
     else:
         history_messages = normalized
         current_user_message = ""
-    tool_descs = format_tool_descs(tools)
+    if hasattr(protocol, 'format_tool_descs'):
+        tool_descs = protocol.format_tool_descs(tools)
+    else:
+        tool_descs = format_tool_descs(tools)
     history_text = _format_conversation_history(
         history_messages, protocol=protocol
     ).strip()
