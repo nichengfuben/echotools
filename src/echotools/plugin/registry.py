@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type
 
 from echotools.logger.manager import get_logger
 from echotools.plugin.base import Plugin
@@ -23,7 +23,8 @@ class PluginRegistry:
 
     def __init__(self) -> None:
         """初始化注册表。"""
-        self._plugins: Dict[str, Plugin] = {}
+        self._plugins: Dict[str, Any] = {}
+        self._shutdown_method: str = "shutdown"
 
     async def discover_and_register(
         self,
@@ -32,16 +33,29 @@ class PluginRegistry:
         *,
         whitelist: Optional[List[str]] = None,
         blacklist: Optional[List[str]] = None,
+        base_class: Optional[Type] = None,
+        required_methods: Optional[tuple] = None,
+        init_method: str = "startup",
+        shutdown_method: str = "shutdown",
     ) -> None:
         """发现并注册插件。
 
         Args:
             root_package: 插件根包名。
-            context: 共享上下文，传给 startup。
+            context: 共享上下文，传给 init_method。
             whitelist: 白名单（仅注册名单内）。
             blacklist: 黑名单（排除名单内）。
+            base_class: 插件基类，默认 Plugin。
+            required_methods: 鸭子类型所需方法名。
+            init_method: 初始化方法名，默认 "startup"。
+            shutdown_method: 关闭方法名，默认 "shutdown"。
         """
-        classes = discover_plugins(root_package)
+        self._shutdown_method = shutdown_method
+        classes = discover_plugins(
+            root_package,
+            base_class=base_class,
+            required_methods=required_methods,
+        )
         if not classes:
             logger.warning("未发现任何插件: %s", root_package)
             return
@@ -55,7 +69,7 @@ class PluginRegistry:
             except Exception as exc:
                 logger.error("实例化插件 %s 失败: %s", cls.__name__, exc)
                 return
-            name = plugin.name
+            name = getattr(plugin, "name", cls.__name__)
             if wl is not None and name not in wl:
                 logger.info("插件 [%s] 不在白名单，跳过", name)
                 return
@@ -63,13 +77,16 @@ class PluginRegistry:
                 logger.info("插件 [%s] 在黑名单，跳过", name)
                 return
             try:
-                await plugin.startup(context)
+                init_fn = getattr(plugin, init_method)
+                await init_fn(context)
                 self._plugins[name] = plugin
                 logger.info("插件 [%s] 已注册", name)
             except Exception as exc:
                 logger.error("插件 [%s] 启动失败: %s", name, exc)
                 try:
-                    await plugin.shutdown()
+                    shutdown_fn = getattr(plugin, shutdown_method, None)
+                    if shutdown_fn:
+                        await shutdown_fn()
                 except Exception as e:
                     logger.warning("插件 [%s] 回滚关闭异常: %s", name, e)
 
@@ -110,7 +127,9 @@ class PluginRegistry:
         old = self._plugins.get(name)
         if old is not None:
             try:
-                await old.shutdown()
+                old_shutdown = getattr(old, self._shutdown_method, None)
+                if old_shutdown:
+                    await old_shutdown()
             except Exception as exc:
                 logger.warning("关闭旧插件 [%s] 失败: %s", name, exc)
         prefix = root_package
@@ -149,10 +168,13 @@ class PluginRegistry:
 
     async def close(self) -> None:
         """并发关闭全部插件。"""
+        sm = self._shutdown_method
 
-        async def _close_one(name: str, plugin: Plugin) -> None:
+        async def _close_one(name: str, plugin: Any) -> None:
             try:
-                await asyncio.wait_for(plugin.shutdown(), timeout=5.0)
+                shutdown_fn = getattr(plugin, sm, None)
+                if shutdown_fn:
+                    await asyncio.wait_for(shutdown_fn(), timeout=5.0)
             except asyncio.TimeoutError:
                 logger.warning("关闭插件 [%s] 超时", name)
             except Exception as exc:
