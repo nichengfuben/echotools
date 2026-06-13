@@ -34,6 +34,7 @@ class ListCache:
         fallback: List[str],
         cache_path: str,
         overwrite: bool = True,
+        data_key: str = "items",
     ) -> None:
         """初始化列表缓存。
 
@@ -42,6 +43,7 @@ class ListCache:
             fallback: 兜底列表。
             cache_path: 持久化文件路径。
             overwrite: True=覆盖，False=只增不减。
+            data_key: JSON 中存储列表的键名，默认 "items"。
         """
         self._name = name
         self._fallback = list(fallback)
@@ -49,6 +51,7 @@ class ListCache:
         self._items: List[str] = list(fallback)
         self._cache_path = Path(cache_path)
         self._refreshing = False
+        self._data_key = data_key
 
     async def load(self) -> List[str]:
         """从缓存文件加载列表。
@@ -60,7 +63,7 @@ class ListCache:
             if self._cache_path.is_file():
                 text = self._cache_path.read_text(encoding="utf-8")
                 data = json.loads(text)
-                items = data.get("items", [])
+                items = data.get(self._data_key, [])
                 if items:
                     self._items = list(items)
                     logger.info(
@@ -80,7 +83,7 @@ class ListCache:
         """
         try:
             self._cache_path.parent.mkdir(parents=True, exist_ok=True)
-            data = {"items": items, "updated_at": int(time.time())}
+            data = {self._data_key: items, "updated_at": int(time.time())}
             self._cache_path.write_text(
                 json.dumps(data, ensure_ascii=False, indent=2),
                 encoding="utf-8",
