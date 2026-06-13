@@ -1,4 +1,8 @@
-"""Nous Research XML style tool invocation protocol."""
+"""Nous Research / Hermes style tool invocation protocol.
+
+Based on the classical branch qwen_util.py implementation.
+Format: function=name with JSON args, tools block, tool_response.
+"""
 
 import json
 import re
@@ -9,153 +13,136 @@ from echotools.fncall.prompt.templates import (
     _HISTORY_CLARIFY_EN,
     _HISTORY_CLARIFY_ZH,
 )
-from echotools.fncall.shared.coercion import _build_param_schema_index, _coerce_param_value
-from echotools.fncall.shared.normalization import format_tool_descs
 
-
-# Regex patterns
-_CDATA_RE = re.compile(r'<!\[CDATA\[(.*?)\]\]>', re.DOTALL)
-_FC_BLOCK_RE = re.compile(r'<function_calls>([\s\S]*?)</function_calls>', re.DOTALL)
-_INV_RE = re.compile(r'<invoke name="([^"]+)"\s*>([\s\S]*?)</invoke>', re.DOTALL)
-_PARAM_RE = re.compile(r'<parameter name="([^"]+)"\s*>([\s\S]*?)</parameter>', re.DOTALL)
-
-
+# Tag constants
 _LT = chr(60)
 _GT = chr(62)
-_DQ = chr(34)
-_SQ = chr(39)
-_P_TAG = 'parameter'
+_FN_TAG = _LT + 'function='
+_FN_END = _LT + '/function' + _GT
+_TR_TAG = _LT + 'tool_response' + _GT
+_TR_END = _LT + '/tool_response' + _GT
+_TOOLS_S = _LT + 'tools' + _GT
+_TOOLS_E = _LT + '/tools' + _GT
 
-def _tag(n, a=""):
-    return _LT + n + (" " + a if a else "") + _GT
+# Regex
+_FN_CALL_RE = re.compile(r'<function=([^>]*)>([\s\S]*?)</function>', re.DOTALL)
+_FN_CLEAN_RE = re.compile(r'<function=[^>]*>[\s\S]*?</function>', re.DOTALL)
+_TR_BLOCK_RE = re.compile(r'<tool_response>[\s\S]*?</tool_response>', re.DOTALL)
 
-def _tc(n):
-    return _LT + "/" + n + _GT
 
-_FC_S = '<function_calls>'
-_FC_E = '</function_calls>'
-_FR_S = '<function_results>'
-_FR_E = '</function_results>'
+def _format_tool_descs_nous(tools):
+    """Format tool definitions in Nous XML style."""
+    if not tools:
+        return ""
+    parts = []
+    for tool in tools:
+        fn = tool.get('function', tool)
+        name = fn.get('name', 'unknown')
+        desc = fn.get('description', '')
+        params = fn.get('parameters', {})
+        pj = json.dumps(params, ensure_ascii=False)
+        parts.append(
+            _LT + 'function' + _GT + '\n'
+            + _LT + 'name' + _GT + name + _LT + '/name' + _GT + '\n'
+            + _LT + 'description' + _GT + desc + _LT + '/description' + _GT + '\n'
+            + _LT + 'parameters' + _GT + pj + _LT + '/parameters' + _GT + '\n'
+            + _LT + '/function' + _GT
+        )
+    return '\n\n'.join(parts)
+
 
 class NousProtocol(ToolProtocol):
-    """Nous Research XML format."""
+    """Nous Research / Hermes function calling format."""
 
     @property
     def id(self) -> str:
         return 'nous'
 
     def get_trigger_tags(self) -> List[str]:
-        return [_FC_S]
+        return [_FN_TAG]
 
-    def render_prompt(
-        self, tool_descs: str, lang: str,
-        user_system_prompt: str = '',
-        history_text: str = '',
-        loop_warning: str = '',
-        current_user_message: str = '',
-    ) -> str:
-        instruction = (
-            '## Available Tools\n'
-            'You can interact with the following tools:\n\n'
-            + tool_descs + '\n\n'
-            'When calling a tool, respond with:\n\n'
-            + _FC_S + "\n"
-            + '  ' + _tag('invoke', 'name=' + _DQ + 'exact_tool_name' + _DQ) + "\n"
-            + '    ' + _tag(_P_TAG, 'name=' + _DQ + 'param' + _DQ) + '<![CDATA[value]]>' + _tc(_P_TAG) + "\n"
-            + '  ' + _tc('invoke') + "\n"
-            + _FC_E
-        )
-        sections = [instruction]
+    def format_tool_descs(self, tools):
+        return _format_tool_descs_nous(tools)
+
+    def render_prompt(self, tool_descs, lang, user_system_prompt='', history_text='', loop_warning='', current_user_message=''):
+        ex = _FN_TAG + 'function_name' + _GT + '{"param": "value"}' + _FN_END
+        if lang == 'zh':
+            inst = (
+                '你是一个乐于助人的 AI 助手。\n\n'
+                + '# 工具\n\n'
+                + '你可以使用以下函数：\n\n'
+                + _TOOLS_S + '\n' + tool_descs + '\n' + _TOOLS_E + '\n\n'
+                + '调用格式：\n\n' + ex
+            )
+        else:
+            inst = (
+                'You are a helpful AI assistant with tool access.\n\n'
+                + '# Tools\n\n'
+                + 'Available functions:\n\n'
+                + _TOOLS_S + '\n' + tool_descs + '\n' + _TOOLS_E + '\n\n'
+                + 'Call format:\n\n' + ex
+            )
+        sections = [inst]
         if user_system_prompt and user_system_prompt.strip():
-            sections.append('<user_system_prompt>\n' + user_system_prompt.strip() + '\n</user_system_prompt>')
+            sections.append(user_system_prompt.strip())
         if history_text:
-            clarify = _HISTORY_CLARIFY_ZH if lang == "zh" else _HISTORY_CLARIFY_EN
-            sections.append('<conversation_history>\n' + clarify + '\n\n' + history_text + '\n</conversation_history>')
+            clarify = _HISTORY_CLARIFY_ZH if lang == 'zh' else _HISTORY_CLARIFY_EN
+            sections.append(clarify + '\n\n' + history_text)
         if loop_warning:
-            sections.append('<loop_warning>\n' + loop_warning + '\n</loop_warning>')
+            sections.append(loop_warning)
         if current_user_message:
-            sections.append('<current_user_message>\n' + current_user_message + '\n</current_user_message>')
+            sections.append(current_user_message)
         return '\n\n'.join(sections)
 
-    def detect_start(self, buffer: str) -> Tuple[bool, int]:
-        pos = buffer.find(_FC_S)
+    def detect_start(self, buffer):
+        pos = buffer.find(_FN_TAG)
         if pos >= 0:
             return (True, pos)
         return (False, -1)
 
-    def parse(self, text: str, tools: Optional[List[Dict[str, Any]]] = None) -> Tuple[str, List[Dict[str, Any]]]:
-        tool_calls: List[Dict[str, Any]] = []
-        for block_m in _FC_BLOCK_RE.finditer(text):
-            block_body = block_m.group(1)
-            for inv_m in _INV_RE.finditer(block_body):
-                func_name = inv_m.group(1).strip()
-                params_text = inv_m.group(2)
-                arguments = self._parse_params(params_text, func_name, tools)
-                tool_calls.append({
-                    'id': f'call_{len(tool_calls)}',
-                    'type': 'function',
-                    'function': {'name': func_name, 'arguments': arguments},
-                })
+    def parse(self, text, tools=None):
+        tool_calls = []
+        for m in _FN_CALL_RE.finditer(text):
+            func_name = m.group(1).strip()
+            args_text = m.group(2).strip()
+            try:
+                args_dict = json.loads(args_text) if args_text else {}
+            except (json.JSONDecodeError, ValueError):
+                args_dict = {}
+            tool_calls.append({
+                'id': 'call_{}'.format(len(tool_calls)),
+                'type': 'function',
+                'function': {
+                    'name': func_name,
+                    'arguments': json.dumps(args_dict, ensure_ascii=False),
+                },
+            })
         clean = text
         if tool_calls:
-            clean = _FC_BLOCK_RE.sub('', text).strip()
+            clean = _FN_CLEAN_RE.sub('', text).strip()
         return clean, tool_calls
 
-    def _parse_params(self, body: str, func_name: str, tools: Optional[List[Dict[str, Any]]] = None) -> str:
-        result: Dict[str, Any] = {}
-        schema_index = _build_param_schema_index(tools) if tools else None
-        param_schemas: Dict[str, Dict[str, Any]] = {}
-        if schema_index and func_name:
-            param_schemas = schema_index.get(func_name) or {}
-        for pm in _PARAM_RE.finditer(body):
-            key = pm.group(1).strip()
-            val = _CDATA_RE.sub(r'\1', pm.group(2)).strip()
-            pschema = param_schemas.get(key) or {}
-            if pschema:
-                result[key] = _coerce_param_value(val, pschema)
-            else:
-                try:
-                    result[key] = json.loads(val)
-                except (json.JSONDecodeError, ValueError):
-                    result[key] = val
-        return json.dumps(result, ensure_ascii=False) if result else '{}'
-
-    def parse_fragment(self, fragment: str, tools: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    def parse_fragment(self, fragment, tools=None):
         _, tool_calls = self.parse(fragment, tools)
         return tool_calls
 
-    def clean_tags(self, content: str) -> str:
-        cleaned = _FC_BLOCK_RE.sub('', content)
+    def clean_tags(self, content):
+        cleaned = _FN_CLEAN_RE.sub('', content)
+        cleaned = _TR_BLOCK_RE.sub('', cleaned)
         return cleaned.strip()
 
-    def format_assistant_tool_calls(self, tool_calls: List[Dict[str, Any]]) -> str:
+    def format_assistant_tool_calls(self, tool_calls):
         if not tool_calls:
             return ''
-        invokes = []
-        for tc_item in tool_calls:
-            name = tc_item.get('function', {}).get('name', '')
-            args = tc_item.get('function', {}).get('arguments', '{}')
-            try:
-                args_dict = json.loads(args) if isinstance(args, str) else args
-            except (json.JSONDecodeError, ValueError):
-                args_dict = {}
-            params = ''
-            for pname, pval in args_dict.items():
-                text_val = pval if isinstance(pval, str) else json.dumps(pval, ensure_ascii=False)
-                params += _tag(_P_TAG, 'name=' + _DQ + pname + _DQ) + '<![CDATA[' + text_val + ']]>' + _tc(_P_TAG)
+        parts = []
+        for tc in tool_calls:
+            name = tc.get('function', {}).get('name', '')
+            args = tc.get('function', {}).get('arguments', '{}')
+            parts.append(_FN_TAG + name + _GT + args + _FN_END)
+        return '\n'.join(parts)
 
-            invokes.append(_tag('invoke', 'name=' + _DQ + name + _DQ) + params + _tc('invoke'))
+    def format_tool_result(self, content, tool_name='', is_error=False, tool_call_id=''):
+        return _TR_TAG + '\n' + content + '\n' + _TR_END
 
-        return _FC_S + ''.join(invokes) + _FC_E
-
-    def format_tool_result(self, content: str, tool_name: str = '', is_error: bool = False, tool_call_id: str = '') -> str:
-        return (
-            _FR_S
-            + _tag('function_result', 'name=' + _DQ + tool_name + _DQ + ' tool_call_id=' + _DQ + tool_call_id + _DQ)
-            + '<![CDATA[' + content + ']]>'
-            + _tc('function_result')
-            + _FR_E
-        )
-
-    def supports_streaming(self) -> bool:
+    def supports_streaming(self):
         return True
