@@ -75,11 +75,17 @@ class AdaptiveSelector:
     基于 5 维指标自适应评分，权重自动调优，持久化到磁盘。
     """
 
-    def __init__(self, persist_dir: str = "persist/dispatch") -> None:
+    def __init__(
+        self,
+        persist_dir: str = "persist/dispatch",
+        group_attr: str = "group",
+    ) -> None:
         """初始化选择器。
 
         Args:
             persist_dir: 持久化目录。
+            group_attr: 候选项对象上的分组属性名，默认 "group"。
+                项目的 Candidate 用 "platform" 时传 group_attr="platform"。
         """
         self._pool: Dict[str, TASRecord] = {}
         self._cf: Dict[str, int] = {}
@@ -87,6 +93,7 @@ class AdaptiveSelector:
         self._eps = ER
         self._n = 0
         self._persist_dir = Path(persist_dir)
+        self._ga = group_attr
         self._load()
 
     def _load(self) -> None:
@@ -188,7 +195,7 @@ class AdaptiveSelector:
                 p = max(
                     rem,
                     key=lambda c: self._score_one(
-                        self._ensure(c.id, c.group),
+                        self._ensure(c.id, getattr(c, self._ga, "")),
                         mean_speed,
                         mean_lat,
                     ),
@@ -229,7 +236,7 @@ class AdaptiveSelector:
             (
                 c,
                 self._score_one(
-                    self._ensure(c.id, c.group), mean_speed, mean_lat
+                    self._ensure(c.id, getattr(c, self._ga, "")), mean_speed, mean_lat
                 ),
             )
             for c in cs
@@ -237,7 +244,7 @@ class AdaptiveSelector:
         scored.sort(key=lambda x: x[1], reverse=True)
         s0, s1 = scored[0][1], scored[1][1]
         return (s0 - s1) > 0.1 and self._ensure(
-            scored[0][0].id, scored[0][0].group
+            scored[0][0].id, getattr(scored[0][0], self._ga, "")
         ).n_calls >= MS * 2
 
     def _score_one(
@@ -282,7 +289,7 @@ class AdaptiveSelector:
         """探索选择：评分 + 高斯噪声。"""
         best_s, best = -float("inf"), cs[0]
         for c in cs:
-            r = self._ensure(c.id, c.group)
+            r = self._ensure(c.id, getattr(c, self._ga, ""))
             sc = self._score_one(
                 r, mean_speed, mean_lat
             ) + random.gauss(0, 0.05)
@@ -340,6 +347,7 @@ class AdaptiveSelector:
         generation_dur: float = 0,
         completion_tokens: int = 0,
         group: str = "",
+        platform: str = "",
     ) -> None:
         """记录请求结果并持久化。
 
@@ -352,8 +360,10 @@ class AdaptiveSelector:
             generation_dur: 纯生成时长。
             completion_tokens: 实际产出计数。
             group: 分组标识。
+            platform: 平台标识（group 的别名，兼容项目 API）。
         """
-        r = self._ensure(cid, group)
+        grp = group or platform
+        r = self._ensure(cid, grp)
         if success:
             r.last_call = time.time()
             r.n_calls += 1
