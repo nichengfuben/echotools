@@ -21,19 +21,22 @@ _RESET = "\033[0m"
 
 
 class _ColorFormatter(logging.Formatter):
-    """带颜色的格式化器。"""
+    """带颜色的格式化器 — 仅着色级别名。"""
 
     def __init__(self, fmt: str, datefmt: str, use_color: bool) -> None:
         super().__init__(fmt=fmt, datefmt=datefmt)
         self._use_color = use_color
 
     def format(self, record: logging.LogRecord) -> str:
-        text = super().format(record)
         if self._use_color:
             color = _COLORS.get(record.levelname, "")
             if color:
-                return "{}{}{}".format(color, text, _RESET)
-        return text
+                saved = record.levelname
+                record.levelname = "{}{}{}".format(color, saved, _RESET)
+                text = super().format(record)
+                record.levelname = saved
+                return text
+        return super().format(record)
 
 
 class LoggerManager:
