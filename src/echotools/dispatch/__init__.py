@@ -9,6 +9,7 @@ from echotools.dispatch.selector import (
     TASRecord,
     TASWeights,
 )
+from echotools.dispatch.usage import fallback_usage, normalize_usage
 
 __all__ = [
     "TaskCandidate",
@@ -17,4 +18,6 @@ __all__ = [
     "TASRecord",
     "TASWeights",
     "TaskDispatcher",
+    "normalize_usage",
+    "fallback_usage",
 ]

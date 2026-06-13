@@ -14,9 +14,21 @@ from echotools.errors.common import (
     TimeoutError,
     ValidationError,
 )
+from echotools.errors.http import (
+    AuthError,
+    ContextLengthError,
+    ForbiddenError,
+    HttpError,
+    NotFoundError,
+    QuotaExceededError,
+    RateLimitError,
+    ServerError,
+    StreamError,
+)
 
 __all__ = [
     "EchoError",
+    "HttpError",
     "ConfigError",
     "ValidationError",
     "NetworkError",
@@ -25,5 +37,13 @@ __all__ = [
     "NoCandidateError",
     "PluginError",
     "ProtocolError",
+    "AuthError",
+    "ForbiddenError",
+    "NotFoundError",
+    "RateLimitError",
+    "QuotaExceededError",
+    "ContextLengthError",
+    "ServerError",
+    "StreamError",
     "classify_http_error",
 ]
