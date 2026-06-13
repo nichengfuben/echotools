@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echotools"
+version = "1.0.0"
+description = "通用基础设施 SDK：配置、日志、事件、调度、插件、协议、调用链"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "nichengfuben" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "typing-extensions>=4.7.0",
+]
+
+[project.optional-dependencies]
+toml = ["tomlkit>=0.11.0", "tomli>=2.0.0; python_version < '3.11'"]
+watch = ["watchdog>=3.0.0"]
+http = ["aiohttp>=3.8.0"]
+socks = ["aiohttp-socks>=0.8.0"]
+all = [
+    "tomlkit>=0.11.0",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "watchdog>=3.0.0",
+    "aiohttp>=3.8.0",
+    "aiohttp-socks>=0.8.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "mypy>=1.5.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/nichengfuben/echotools"
+Repository = "https://github.com/nichengfuben/echotools"
+Issues = "https://github.com/nichengfuben/echotools/issues"
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312", "py313"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["echotools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["--strict-markers", "--tb=short"]
+
+[tool.coverage.run]
+source = ["src/echotools"]
+branch = true
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 90
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
