@@ -49,19 +49,15 @@ class _LogFormatter(logging.Formatter):
             if color:
                 level_str = "{}{}{}".format(color, level_str, _RESET)
 
-        # Build line: MM-DD HH:MM:SS | [ X ] | name:func:line | message
+        # Build line: MM-DD HH:MM:SS | [ X ] | name | message
         msg = record.getMessage()
         if record.exc_info and not record.exc_text:
             record.exc_text = self.formatException(record.exc_info)
         if record.exc_text:
             msg = msg + "\n" + record.exc_text
 
-        location = "{}:{}:{}".format(
-            record.name, record.funcName, record.lineno
-        )
-
         return "{} | {} | {} | {}".format(
-            record.asctime, level_str, location, msg
+            record.asctime, level_str, record.name, msg
         )
 
 
