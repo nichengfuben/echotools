@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""日志管理器：统一日志输出，可选调用链上下文注入。"""
+"""日志管理器 — 匹配 src.logger (loguru) 的输出格式。"""
 
 import logging
 import logging.handlers
@@ -19,67 +19,71 @@ _COLORS = {
 }
 _RESET = "\033[0m"
 
+_LEVEL_LETTERS = {
+    "DEBUG": "D",
+    "INFO": "I",
+    "WARNING": "W",
+    "ERROR": "E",
+    "CRITICAL": "C",
+}
 
-class _ColorFormatter(logging.Formatter):
-    """带颜色的格式化器 — 仅着色级别名。"""
 
-    def __init__(self, fmt: str, datefmt: str, use_color: bool) -> None:
-        super().__init__(fmt=fmt, datefmt=datefmt)
+class _LogFormatter(logging.Formatter):
+    """匹配 src.logger 格式: MM-DD HH:MM:SS | [ X ] | name | message"""
+
+    def __init__(self, datefmt: str, use_color: bool) -> None:
+        super().__init__(datefmt=datefmt)
         self._use_color = use_color
 
     def format(self, record: logging.LogRecord) -> str:
+        # Format timestamp
+        record.asctime = self.formatTime(record, self.datefmt)
+
+        # Level letter
+        letter = _LEVEL_LETTERS.get(record.levelname, "?")
+        level_str = "[ {} ]".format(letter)
+
+        # Color
         if self._use_color:
             color = _COLORS.get(record.levelname, "")
             if color:
-                saved = record.levelname
-                record.levelname = "{}{}{}".format(color, saved, _RESET)
-                text = super().format(record)
-                record.levelname = saved
-                return text
-        return super().format(record)
+                level_str = "{}{}{}".format(color, level_str, _RESET)
+
+        # Build line: MM-DD HH:MM:SS | [ X ] | name | message
+        msg = record.getMessage()
+        if record.exc_info and not record.exc_text:
+            record.exc_text = self.formatException(record.exc_info)
+        if record.exc_text:
+            msg = msg + "\n" + record.exc_text
+
+        return "{} | {} | {} | {}".format(
+            record.asctime, level_str, record.name, msg
+        )
 
 
 class LoggerManager:
-    """日志中央管理器。
+    """日志中央管理器。"""
 
-    支持控制台、文件、轮转、颜色控制。
-    """
-
-    _DEFAULT_FMT = (
-        "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d"
-        " | %(message)s"
-    )
-    _DEFAULT_DATEFMT = "%Y-%m-%d %H:%M:%S"
+    _DEFAULT_DATEFMT = "%m-%d %H:%M:%S"
 
     def __init__(self) -> None:
         self._use_color = False
         self._level = logging.INFO
         self._configured = False
         self._log_file: Optional[Path] = None
-        self._fmt = self._DEFAULT_FMT
 
     def configure(
         self,
         level: str = "INFO",
         color: bool = False,
         log_file: Optional[str] = None,
-        fmt: Optional[str] = None,
         max_bytes: int = 10 * 1024 * 1024,
         backup_count: int = 5,
+        **kwargs,
     ) -> None:
-        """配置全局日志。
-
-        Args:
-            level: 日志级别。
-            color: 是否启用颜色（默认 False）。
-            log_file: 日志文件路径。
-            fmt: 自定义格式。
-            max_bytes: 单文件最大字节。
-            backup_count: 保留文件数。
-        """
+        """配置全局日志。"""
         self._use_color = color
         self._level = getattr(logging, level.upper(), logging.INFO)
-        self._fmt = fmt or self._DEFAULT_FMT
         if log_file is not None:
             self._log_file = Path(log_file)
 
@@ -89,7 +93,7 @@ class LoggerManager:
 
         console = logging.StreamHandler(sys.stderr)
         console.setFormatter(
-            _ColorFormatter(self._fmt, self._DEFAULT_DATEFMT, self._use_color)
+            _LogFormatter(self._DEFAULT_DATEFMT, self._use_color)
         )
         root.addHandler(console)
 
@@ -102,7 +106,7 @@ class LoggerManager:
                 encoding="utf-8",
             )
             fh.setFormatter(
-                _ColorFormatter(self._fmt, self._DEFAULT_DATEFMT, False)
+                _LogFormatter(self._DEFAULT_DATEFMT, False)
             )
             root.addHandler(fh)
 
@@ -113,13 +117,13 @@ class LoggerManager:
         self._use_color = enabled
         for handler in logging.getLogger().handlers:
             fmtr = handler.formatter
-            if isinstance(fmtr, _ColorFormatter):
+            if isinstance(fmtr, _LogFormatter):
                 fmtr._use_color = enabled and not isinstance(
                     handler, logging.handlers.RotatingFileHandler
                 )
 
     def get_logger(self, name: str) -> logging.Logger:
-        """获取命名 logger，直接使用传入的 name。"""
+        """获取命名 logger。"""
         if not self._configured:
             self.configure()
         return logging.getLogger(name)

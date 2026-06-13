@@ -61,7 +61,7 @@ class PluginRegistry:
             return
         wl = set(whitelist) if whitelist else None
         bl = set(blacklist) if blacklist else set()
-        logger.info("发现 %d 个插件，开始注册", len(classes))
+        logger.debug("发现 %d 个插件，开始注册", len(classes))
 
         async def _init_one(cls: type) -> None:
             try:
@@ -71,16 +71,16 @@ class PluginRegistry:
                 return
             name = getattr(plugin, "name", cls.__name__)
             if wl is not None and name not in wl:
-                logger.info("插件 [%s] 不在白名单，跳过", name)
+                logger.debug("插件 [%s] 不在白名单，跳过", name)
                 return
             if name in bl:
-                logger.info("插件 [%s] 在黑名单，跳过", name)
+                logger.debug("插件 [%s] 在黑名单，跳过", name)
                 return
             try:
                 init_fn = getattr(plugin, init_method)
                 await init_fn(context)
                 self._plugins[name] = plugin
-                logger.info("插件 [%s] 已注册", name)
+                logger.debug("插件 [%s] 已注册", name)
             except Exception as exc:
                 logger.error("插件 [%s] 启动失败: %s", name, exc)
                 try:
@@ -93,7 +93,7 @@ class PluginRegistry:
         await asyncio.gather(
             *[_init_one(c) for c in classes], return_exceptions=True
         )
-        logger.info("注册完成: %s", list(self._plugins.keys()))
+        logger.debug("注册完成: %s", list(self._plugins.keys()))
 
     def register(self, plugin: Plugin) -> None:
         """手动注册已实例化插件。"""
@@ -159,7 +159,7 @@ class PluginRegistry:
                 return False
             await target.startup(context)
             self._plugins[name] = target
-            logger.info("插件 [%s] 热重载成功", name)
+            logger.debug("插件 [%s] 热重载成功", name)
             return True
         except Exception as exc:
             logger.error("插件 [%s] 热重载失败: %s", name, exc)

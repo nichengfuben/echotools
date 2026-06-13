@@ -78,7 +78,7 @@ class FileWatcher:
         self._callback = callback
         self._running = True
         self._mtimes = self._scan()
-        logger.info("文件监视已启动: %s", [str(p) for p in self._paths])
+        logger.debug("文件监视已启动: %s", [str(p) for p in self._paths])
         while self._running:
             await asyncio.sleep(self._interval)
             try:
@@ -98,7 +98,7 @@ class FileWatcher:
         self._mtimes = current
         if not changed:
             return
-        logger.info(
+        logger.debug(
             "检测到文件变更: %s", [Path(f).name for f in changed]
         )
         if self._callback is not None:
@@ -107,4 +107,4 @@ class FileWatcher:
     def stop(self) -> None:
         """停止监视。"""
         self._running = False
-        logger.info("文件监视已停止")
+        logger.debug("文件监视已停止")

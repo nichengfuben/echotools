@@ -95,7 +95,7 @@ class ConfigCenter:
         if self._path is None:
             raise ConfigError("未找到配置文件: {}".format(filename))
         self._raw = load_file(self._path)
-        logger.info("配置已加载: %s", self._path)
+        logger.debug("配置已加载: %s", self._path)
         return dict(self._raw)
 
     def get(self, path: str, default: Any = None) -> Any:
@@ -186,7 +186,7 @@ class ConfigCenter:
                 return False
             self._raw = new
             await self._notify(old, new)
-            logger.info("配置已重载: %s", self._path)
+            logger.debug("配置已重载: %s", self._path)
             return True
 
     async def _notify(
@@ -197,7 +197,7 @@ class ConfigCenter:
             old_val = self._dig(old, path)
             new_val = self._dig(new, path)
             if old_val != new_val:
-                logger.info("配置变更: %s", path)
+                logger.debug("配置变更: %s", path)
                 for cb in callbacks:
                     try:
                         if asyncio.iscoroutinefunction(cb):
@@ -261,7 +261,7 @@ class ConfigCenter:
             target = Path.cwd() / filename
             shutil.copy2(str(tpl), str(target))
             self._path = target
-            logger.info("从模板创建配置: %s", target)
+            logger.debug("从模板创建配置: %s", target)
             if exit_after_create:
                 raise SystemExit(0)
 
@@ -269,7 +269,7 @@ class ConfigCenter:
         self._try_merge_template(
             template_dir, template_name, version_path, exit_after_merge
         )
-        logger.info("配置已加载: %s", self._path)
+        logger.debug("配置已加载: %s", self._path)
         return dict(self._raw)
 
     def _try_merge_template(
@@ -302,7 +302,7 @@ class ConfigCenter:
         self.backup()
         merge_dicts(self._raw, tpl_raw)
         write_toml(self._path, self._raw)
-        logger.info("已合并模板新增字段到 %s", self._path)
+        logger.debug("已合并模板新增字段到 %s", self._path)
         if exit_after_merge:
             raise SystemExit(0)
 
@@ -341,7 +341,7 @@ class ConfigCenter:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = bdir / "{}.bak.{}".format(self._path.name, ts)
         shutil.copy2(str(self._path), str(backup_path))
-        logger.info("已备份: %s", backup_path)
+        logger.debug("已备份: %s", backup_path)
         return backup_path
 
     # ------------------------------------------------------------------
@@ -408,7 +408,7 @@ class ConfigCenter:
         self._observer = Observer()
         self._observer.schedule(_Handler(), str(self._path.parent), recursive=False)
         self._observer.start()
-        logger.info("已启动配置监控: %s", self._path)
+        logger.debug("已启动配置监控: %s", self._path)
 
     async def stop_watch(self) -> None:
         """停止文件监控。"""
@@ -417,7 +417,7 @@ class ConfigCenter:
         self._observer.stop()
         self._observer.join(timeout=2)
         self._observer = None
-        logger.info("配置监控已停止")
+        logger.debug("配置监控已停止")
 
     async def _debounced_reload(self) -> None:
         """防抖重载。"""

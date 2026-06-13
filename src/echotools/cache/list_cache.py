@@ -66,7 +66,7 @@ class ListCache:
                 items = data.get(self._data_key, [])
                 if items:
                     self._items = list(items)
-                    logger.info(
+                    logger.debug(
                         "[%s] 从缓存加载 %d 项",
                         self._name,
                         len(self._items),
@@ -141,7 +141,7 @@ class ListCache:
                 await self.save(merged)
                 if on_update is not None:
                     await on_update(merged)
-                logger.info(
+                logger.debug(
                     "[%s] 列表已刷新: %d 项", self._name, len(merged)
                 )
         except Exception as e:

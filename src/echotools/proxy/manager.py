@@ -67,15 +67,15 @@ class ProxyManager:
                 "{}={}".format(k, v)
                 for k, v in sorted(self._proxies.items())
             )
-            logger.info("代理已激活: %s", desc)
+            logger.debug("代理已激活: %s", desc)
         else:
-            logger.info("代理未激活：无可用配置")
+            logger.debug("代理未激活：无可用配置")
 
     def deactivate(self) -> None:
         """停用代理。"""
         self._active = False
         self._proxies = {}
-        logger.info("代理已停用")
+        logger.debug("代理已停用")
 
     def is_active(self) -> bool:
         """返回是否激活。"""
