@@ -247,10 +247,11 @@ def _convert_assistant_pseudo_calls(message: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _normalize_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """对消息列表做两步预处理。"""
+    """对消息列表做预处理：伪格式转换 + 孤立 tool_call 补全。"""
     if not messages:
         return []
 
+    # Step 1: convert pseudo tool calls in assistant messages
     step1: List[Dict[str, Any]] = []
     for m in messages:
         role = m.get("role") or "user"
@@ -259,19 +260,45 @@ def _normalize_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         else:
             step1.append(m)
 
+    # Step 2: collect known tool_call IDs from assistant messages
     known_tool_ids = _collect_tool_call_ids(step1)
     if not known_tool_ids:
         return step1
 
-    result: List[Dict[str, Any]] = []
+    # Step 3: convert user messages that look like tool results
+    step2: List[Dict[str, Any]] = []
     for m in step1:
         role = m.get("role") or "user"
         if role == "user":
             converted = _try_convert_user_to_tool(m, known_tool_ids)
             if converted is not None:
-                result.append(converted)
+                step2.append(converted)
                 continue
+        step2.append(m)
+
+    # Step 4: detect orphan tool_calls (no corresponding tool result) and inject synthetic results
+    existing_tool_ids: Set[str] = set()
+    for m in step2:
+        if (m.get("role") or "user") == "tool":
+            tid = m.get("tool_call_id") or ""
+            if tid:
+                existing_tool_ids.add(tid)
+
+    result: List[Dict[str, Any]] = []
+    for m in step2:
         result.append(m)
+        role = m.get("role") or "user"
+        if role == "assistant":
+            for tc in m.get("tool_calls") or []:
+                tid = tc.get("id") or ""
+                if tid and tid not in existing_tool_ids:
+                    fn_name = (tc.get("function") or {}).get("name") or "unknown"
+                    result.append({
+                        "role": "tool",
+                        "tool_call_id": tid,
+                        "content": f"[tool {fn_name} was called but no result was provided]",
+                    })
+                    existing_tool_ids.add(tid)
 
     return result
 
