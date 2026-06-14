@@ -242,7 +242,7 @@ class OriginalProtocol(ToolProtocol):
 def _extract_response_items(value: Any) -> List[Any]:
     """从各种 JSON 结构中提取响应项列表。
 
-    对应 Chat2API 的 extractResponseItems：
+    支持以下格式：
       - 数组: 直接返回
       - {"type": "function_call"}: 包装为单元素列表
       - {"output": [...]}: 返回 output

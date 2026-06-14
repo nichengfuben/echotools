@@ -1,6 +1,6 @@
 """XML 协议实现。
 
-Chat2API managedXml 风格的 Python 等价实现，使用 <|PROVIDER| 命名空间。
+使用 <|PROVIDER| 命名空间的 managed XML 格式。
 同时支持旧版 <function_calls> 格式作为回退。
 """
 
@@ -61,7 +61,7 @@ class XmlProtocol(ToolProtocol):
     ) -> str:
         """构建完整的 prompt 字符串，注入工具定义。
 
-        遵循 Chat2API managedXml 风格，使用 <|PROVIDER| 命名空间。
+        使用 <|PROVIDER| 命名空间的 managed XML 格式。
         """
         instruction = f"""## Available Tools
 You can invoke the following developer tools. Tool names are case-sensitive.
@@ -114,7 +114,7 @@ Tool results will be provided as XML result blocks:
             for inv_m in _PROVIDER_INVOKE_RE.finditer(block_body):
                 func_name = inv_m.group(1).strip()
                 body = inv_m.group(2)
-                arguments = self._parse_provider_params(body, func_name, tools)
+                arguments = self._parse_managed_xml_params(body, func_name, tools)
                 tool_calls.append({
                     "id": f"call_{len(tool_calls)}",
                     "type": "function",
@@ -138,7 +138,7 @@ Tool results will be provided as XML result blocks:
 
         return clean, tool_calls
 
-    def _parse_provider_params(
+    def _parse_managed_xml_params(
         self,
         body: str,
         func_name: str,
@@ -188,7 +188,7 @@ Tool results will be provided as XML result blocks:
             for inv_m in _PROVIDER_INVOKE_RE.finditer(block_body):
                 func_name = inv_m.group(1).strip()
                 body = inv_m.group(2)
-                arguments = self._parse_provider_params(body, func_name, tools)
+                arguments = self._parse_managed_xml_params(body, func_name, tools)
                 tool_calls.append({
                     "id": f"call_{len(tool_calls)}",
                     "type": "function",

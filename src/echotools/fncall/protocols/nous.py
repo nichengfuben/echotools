@@ -1,6 +1,5 @@
 """Nous Research / Hermes style tool invocation protocol.
 
-Based on the classical branch qwen_util.py implementation.
 Format: function=name with JSON args, tools block, tool_response.
 """
 

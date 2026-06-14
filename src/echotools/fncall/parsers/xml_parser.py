@@ -263,7 +263,7 @@ def parse_fncall_xml(
     return tool_calls
 
 
-def parse_fncall_provider(
+def parse_fncall_managed_xml(
     xml: str,
     tools: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
@@ -315,6 +315,6 @@ def parse_fncall_provider(
                     }
                 )
     except Exception as exc:
-        logger.warning("parse_fncall_provider 解析失败: %s", exc)
+        logger.warning("parse_fncall_managed_xml 解析失败: %s", exc)
 
     return tool_calls
