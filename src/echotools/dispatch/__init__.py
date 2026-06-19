@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from echotools.dispatch.candidate import TaskCandidate, make_id
 from echotools.dispatch.dispatcher import TaskDispatcher
+from echotools.dispatch.proxy_selector import ProxyRecord, ProxySelector
 from echotools.dispatch.selector import (
     AdaptiveSelector,
     TASRecord,
@@ -18,6 +19,8 @@ __all__ = [
     "TASRecord",
     "TASWeights",
     "TaskDispatcher",
+    "ProxyRecord",
+    "ProxySelector",
     "normalize_usage",
     "fallback_usage",
 ]

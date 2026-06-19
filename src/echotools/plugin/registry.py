@@ -113,6 +113,11 @@ class PluginRegistry:
         name: str,
         root_package: str,
         context: Any = None,
+        *,
+        base_class: Optional[Type] = None,
+        required_methods: Optional[tuple] = None,
+        init_method: str = "startup",
+        shutdown_method: Optional[str] = None,
     ) -> bool:
         """热重载指定插件。
 
@@ -120,14 +125,20 @@ class PluginRegistry:
             name: 插件名。
             root_package: 该插件所在的子包名。
             context: 共享上下文。
+            base_class: 插件基类，默认 Plugin。
+            required_methods: 鸭子类型所需方法名。
+            init_method: 初始化方法名，默认 "startup"。
+            shutdown_method: 关闭方法名，默认使用 discover_and_register
+                时设定的值。显式传入可避免依赖内部状态。
 
         Returns:
             是否成功。
         """
+        sm = shutdown_method or self._shutdown_method
         old = self._plugins.get(name)
         if old is not None:
             try:
-                old_shutdown = getattr(old, self._shutdown_method, None)
+                old_shutdown = getattr(old, sm, None)
                 if old_shutdown:
                     await old_shutdown()
             except Exception as exc:
@@ -144,20 +155,35 @@ class PluginRegistry:
         for mod_key in to_remove:
             del sys.modules[mod_key]
         try:
-            classes = discover_plugins(prefix)
+            classes = discover_plugins(
+                prefix,
+                base_class=base_class,
+                required_methods=required_methods,
+            )
             target = None
             for cls in classes:
                 try:
                     inst = cls()
                 except Exception:
                     continue
-                if inst.name == name:
+                if getattr(inst, "name", None) == name:
                     target = inst
                     break
             if target is None:
-                logger.error("重载 [%s] 未找到匹配插件", name)
+                found = [
+                    "{}.{}".format(
+                        getattr(cls, "__module__", "?"),
+                        cls.__name__,
+                    )
+                    for cls in classes
+                ]
+                logger.error(
+                    "重载 [%s] 未找到匹配插件 (发现 %d 个类: %s)",
+                    name, len(classes), found,
+                )
                 return False
-            await target.startup(context)
+            init_fn = getattr(target, init_method)
+            await init_fn(context)
             self._plugins[name] = target
             logger.debug("插件 [%s] 热重载成功", name)
             return True

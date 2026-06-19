@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from typing import List, Set
 
@@ -50,13 +51,19 @@ def ensure_port_available(
     for pid in pids:
         if _kill_pid(pid):
             released.append(pid)
-    remaining = sorted(_find_pids_by_port(port))
-    if remaining:
-        return PortReleaseResult(
-            port, True, False, remaining, "failed to release all"
-        )
+    # Retry with delay: OS may need a moment to release the TCP socket
+    # after the process is killed (especially on Windows).
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        remaining = sorted(_find_pids_by_port(port))
+        if not remaining:
+            return PortReleaseResult(
+                port, True, True, released, "force killed processes"
+            )
+        if attempt < max_retries:
+            time.sleep(0.5)
     return PortReleaseResult(
-        port, True, True, released, "force killed processes"
+        port, True, False, remaining, "failed to release all"
     )
 
 
@@ -168,12 +175,15 @@ def _kill_pid(pid: int) -> bool:
         return False
     try:
         if sys.platform == "win32":
-            subprocess.run(
+            result = subprocess.run(
                 ["taskkill", "/F", "/PID", str(pid)],
                 check=False,
                 capture_output=True,
                 text=True,
             )
+            if result.returncode != 0:
+                logger.warning("终止进程失败 [%s]: %s", pid, result.stderr.strip())
+                return False
         else:
             os.kill(pid, signal.SIGKILL)
         logger.warning("已终止占用端口的进程: %s", pid)

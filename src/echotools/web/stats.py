@@ -190,6 +190,54 @@ class RequestStats:
             self._time_buckets.clear()
             self._start_time = time.time()
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Export all stats data for persistence."""
+        with self._lock:
+            # Sample latencies to avoid huge payloads (keep last 1000)
+            lat_sample = self._latencies[-1000:] if len(self._latencies) > 1000 else list(self._latencies)
+            return {
+                "total": self._total,
+                "errors": self._errors,
+                "by_platform": dict(self._by_platform),
+                "by_model": dict(self._by_model),
+                "by_status": {str(k): v for k, v in self._by_status.items()},
+                "latencies": lat_sample,
+                "tokens_in": self._tokens_in,
+                "tokens_out": self._tokens_out,
+                "timeline": self._timeline.snapshot(),
+                "time_buckets": {str(k): v for k, v in self._time_buckets.items()},
+                "start_time": self._start_time,
+            }
+
+    def restore(self, data: Dict[str, Any]) -> None:
+        """Restore stats data from a persisted dict."""
+        with self._lock:
+            self._total = data.get("total", 0)
+            self._errors = data.get("errors", 0)
+            self._by_platform = defaultdict(int, data.get("by_platform", {}))
+            self._by_model = defaultdict(int, data.get("by_model", {}))
+            raw_status = data.get("by_status", {})
+            self._by_status = defaultdict(int, {int(k): v for k, v in raw_status.items()})
+            self._latencies = data.get("latencies", [])
+            self._tokens_in = data.get("tokens_in", 0)
+            self._tokens_out = data.get("tokens_out", 0)
+            # Restore timeline ring buffer
+            timeline_data = data.get("timeline", [])
+            self._timeline.clear()
+            for item in timeline_data:
+                self._timeline.append(item)
+            # Restore time buckets
+            raw_buckets = data.get("time_buckets", {})
+            self._time_buckets = defaultdict(
+                lambda: {"requests": 0, "errors": 0, "tokens_in": 0, "tokens_out": 0}
+            )
+            for k, v in raw_buckets.items():
+                self._time_buckets[int(k)] = v
+            # Restore start time for accurate uptime
+            saved_start = data.get("start_time")
+            if saved_start and isinstance(saved_start, (int, float)):
+                self._start_time = saved_start
+
 
 _instance: Optional[RequestStats] = None
 

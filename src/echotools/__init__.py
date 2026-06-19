@@ -9,6 +9,8 @@ from echotools.cache import ListCache, MemoryCache
 from echotools.config import ConfigBase, ConfigCenter
 from echotools.dispatch import (
     AdaptiveSelector,
+    ProxyRecord,
+    ProxySelector,
     TaskCandidate,
     TaskDispatcher,
     make_id,
@@ -33,6 +35,7 @@ from echotools.io import (
     ensure_directory,
     read_text_if_exists,
 )
+from echotools.keys import KeyPool, KeyState
 from echotools.lifecycle import AutoUpdater, LifecycleManager
 from echotools.logger import LoggerManager, configure, get_logger, set_color
 from echotools.plugin import Plugin, PluginRegistry, discover_plugins
@@ -45,6 +48,7 @@ from echotools.protocol.base import (
 )
 from echotools.proxy import ProxyManager
 from echotools.retry import (
+    retry_async_generator,
     retry_on_empty,
     retry_on_exception,
     retry_with_backoff,
@@ -62,6 +66,17 @@ from echotools.tracing import (
     set_current_span_id,
     set_current_trace_id,
     set_request_id,
+)
+from echotools.terminal import (
+    LocalTerminal,
+    SSHTerminal,
+    TerminalCallback,
+    TerminalSession,
+)
+from echotools.translate import (
+    extract_text_from_messages,
+    format_translation_response,
+    split_text_chunks,
 )
 from echotools.web import WebApplication, json_body, safe_flush
 
@@ -101,6 +116,9 @@ __all__ = [
     "AdaptiveSelector",
     "TaskDispatcher",
     "TaskScheduler",
+    # 代理选择
+    "ProxySelector",
+    "ProxyRecord",
     # 插件
     "Plugin",
     "PluginRegistry",
@@ -135,6 +153,19 @@ __all__ = [
     "retry_with_backoff",
     "retry_on_empty",
     "retry_on_exception",
+    "retry_async_generator",
+    # Key 管理
+    "KeyState",
+    "KeyPool",
+    # 翻译
+    "extract_text_from_messages",
+    "split_text_chunks",
+    "format_translation_response",
+    # 终端
+    "TerminalSession",
+    "TerminalCallback",
+    "LocalTerminal",
+    "SSHTerminal",
     # 错误
     "EchoError",
     "ConfigError",

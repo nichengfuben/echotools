@@ -58,8 +58,16 @@ def _collect_from_module(
     base_class: Type,
     required_methods: Optional[tuple] = None,
 ) -> None:
-    """从模块收集插件类。"""
-    for attr_name in dir(module):
+    """从模块收集插件类。
+
+    同时检查 dir() 和 __all__：使用 __getattr__ 延迟加载（PEP 562）
+    的模块，dir() 不包含这些名称，但 __all__ 会声明它们。
+    """
+    names = set(dir(module))
+    all_names = getattr(module, "__all__", None)
+    if all_names:
+        names.update(all_names)
+    for attr_name in names:
         try:
             attr = getattr(module, attr_name)
         except Exception as exc:

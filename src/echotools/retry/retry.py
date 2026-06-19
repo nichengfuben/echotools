@@ -3,11 +3,11 @@ from __future__ import annotations
 """异步重试工具。"""
 
 import asyncio
-from typing import Any, Callable, Optional, Tuple, Type
+from typing import Any, AsyncGenerator, Callable, Optional, Tuple, Type, TypeVar
 
 from echotools.logger.manager import get_logger
 
-__all__ = ["retry_with_backoff", "retry_on_empty", "retry_on_exception"]
+__all__ = ["retry_with_backoff", "retry_on_empty", "retry_on_exception", "retry_async_generator"]
 
 logger = get_logger(__name__)
 
@@ -125,3 +125,61 @@ async def retry_on_exception(
             if i < max_retries - 1:
                 await asyncio.sleep(1.0 * (2 ** i))
     raise last  # type: ignore[misc]
+
+
+async def retry_async_generator(
+    gen_factory: Callable[..., AsyncGenerator[Any, None]],
+    *a: Any,
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+    fatal_check: Optional[Callable[[Exception], bool]] = None,
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+    **kw: Any,
+) -> AsyncGenerator[Any, None]:
+    """Retry an async generator factory with exponential backoff.
+
+    On each retry the generator is re-created from scratch via *gen_factory*.
+    This is the standard pattern used across platform clients where each
+    ``async for chunk in self._do_request(...)`` call is a fresh HTTP request.
+
+    Args:
+        gen_factory: Callable that returns an async generator.
+        *a: Positional arguments forwarded to *gen_factory*.
+        max_retries: Maximum number of retry attempts (0 = no retries).
+        base_delay: Initial backoff delay in seconds.
+        max_delay: Maximum backoff delay cap in seconds.
+        fatal_check: Optional callable ``(exc) -> bool``.  Return ``True``
+            to treat the exception as fatal and skip retrying (e.g. auth
+            errors or quota exhaustion).
+        exceptions: Exception types that trigger a retry.
+        **kw: Keyword arguments forwarded to *gen_factory*.
+
+    Yields:
+        Items from the successful generator invocation.
+
+    Raises:
+        The last exception if all retries are exhausted, or a fatal exception.
+    """
+    last: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        if attempt > 0:
+            delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
+            logger.warning(
+                "异步生成器重试 %d/%d: %s，%.1fs 后重试",
+                attempt,
+                max_retries,
+                last,
+                delay,
+            )
+            await asyncio.sleep(delay)
+        try:
+            async for item in gen_factory(*a, **kw):
+                yield item
+            return
+        except exceptions as e:
+            if fatal_check is not None and fatal_check(e):
+                raise
+            last = e
+    if last is not None:
+        raise last
