@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "echotools"
-version = "1.0.24"
+version = "1.0.26"
 description = "通用基础设施 SDK：配置、日志、事件、调度、插件、协议、调用链"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -33,6 +33,7 @@ watch = ["watchdog>=3.0.0"]
 http = ["aiohttp>=3.8.0"]
 socks = ["aiohttp-socks>=0.8.0"]
 ssh = ["paramiko>=3.0.0"]
+terminal = ["pywinpty>=2.0.0; sys_platform == 'win32'"]
 all = [
     "tomlkit>=0.11.0",
     "tomli>=2.0.0; python_version < '3.11'",
@@ -40,6 +41,7 @@ all = [
     "aiohttp>=3.8.0",
     "aiohttp-socks>=0.8.0",
     "paramiko>=3.0.0",
+    "pywinpty>=2.0.0; sys_platform == 'win32'",
 ]
 dev = [
     "pytest>=7.4.0",
