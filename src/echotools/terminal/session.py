@@ -138,7 +138,7 @@ class TerminalSession(ABC):
         self._detached = True
         self._callbacks.clear()
         self._callback = None
-        logger.info("Session %s detached (process kept alive)", self.session_id)
+        logger.debug("Session %s detached (process kept alive)", self.session_id)
 
     def attach(self, callback: TerminalCallback) -> str:
         """Attach a new client callback.
@@ -158,7 +158,7 @@ class TerminalSession(ABC):
         self._offline_buffer = ""
         self._offline_buffer_size = 0
 
-        logger.info(
+        logger.debug(
             "Session %s attached (buffered %d bytes)", self.session_id, len(buffered)
         )
         return buffered

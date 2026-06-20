@@ -216,7 +216,7 @@ class LocalTerminal(TerminalSession):
                     pass
 
         self._pid = None
-        logger.info("Session %s killed", self.session_id)
+        logger.debug("Session %s killed", self.session_id)
 
     async def close(self) -> None:
         """Terminate the session and clean up resources.
@@ -368,14 +368,14 @@ class LocalTerminal(TerminalSession):
                 # file.  On Unix, we would need the pty fd which is lost.
                 # For now, mark as alive but note that reattachment is
                 # limited on both platforms.
-                logger.info(
+                logger.debug(
                     "Recovered session %s (pid=%d, alive=True)", session_id, pid
                 )
                 recovered[session_id] = terminal
             else:
                 # Process is dead -- mark as exited
                 terminal.alive = False
-                logger.info(
+                logger.debug(
                     "Recovered session %s (pid=%s, alive=False)", session_id, pid
                 )
                 recovered[session_id] = terminal
@@ -428,7 +428,7 @@ class LocalTerminal(TerminalSession):
         self._pid = handle.pid
         self.alive = True
         self._reader_task = asyncio.ensure_future(self._read_conpty())
-        logger.info("ConPTY terminal started (pid=%s)", handle.pid)
+        logger.debug("ConPTY terminal started (pid=%s)", handle.pid)
         return True
 
     async def _read_conpty(self) -> None:
@@ -528,36 +528,72 @@ class LocalTerminal(TerminalSession):
 
     async def _start_unix(self, cols: int, rows: int) -> bool:
         """Start local terminal on Unix using pty."""
-        import pty
+        loop = asyncio.get_event_loop()
 
-        master_fd, slave_fd = pty.openpty()
-        shell = os.environ.get("SHELL", "/bin/bash")
+        def _spawn_unix_pty():
+            """Allocate PTY and spawn shell (blocking, runs in executor)."""
+            import pty
 
-        env = os.environ.copy()
-        env["TERM"] = "xterm-256color"
-        env["COLUMNS"] = str(cols)
-        env["LINES"] = str(rows)
+            master_fd, slave_fd = pty.openpty()
 
-        self._process = subprocess.Popen(
-            [shell],
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            env=env,
-            preexec_fn=os.setsid,
-            bufsize=0,
-        )
-        os.close(slave_fd)
+            shell_candidates = []
+            user_shell = os.environ.get("SHELL")
+            if user_shell:
+                shell_candidates.append(user_shell)
+            shell_candidates.extend(["/bin/bash", "/bin/sh", "/bin/zsh"])
+
+            shell = None
+            for candidate in shell_candidates:
+                if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                    shell = candidate
+                    break
+
+            if shell is None:
+                os.close(master_fd)
+                os.close(slave_fd)
+                raise RuntimeError(
+                    "No usable shell found (tried: "
+                    + ", ".join(shell_candidates)
+                    + ")"
+                )
+
+            env = os.environ.copy()
+            env["TERM"] = "xterm-256color"
+            env["COLUMNS"] = str(cols)
+            env["LINES"] = str(rows)
+
+            try:
+                proc = subprocess.Popen(
+                    [shell],
+                    stdin=slave_fd,
+                    stdout=slave_fd,
+                    stderr=slave_fd,
+                    env=env,
+                    preexec_fn=os.setsid,
+                    bufsize=0,
+                )
+            finally:
+                os.close(slave_fd)
+
+            return master_fd, proc, shell
+
+        try:
+            master_fd, proc, shell_path = await loop.run_in_executor(
+                None, _spawn_unix_pty
+            )
+        except Exception as exc:
+            await self._fire_error(f"Failed to start Unix terminal: {exc}")
+            return False
+
         self._fd = master_fd
-        self._pid = self._process.pid
+        self._process = proc
+        self._pid = proc.pid
         self.alive = True
 
-        # Set initial window size
         self._set_pty_size(cols, rows)
 
-        # Start reader
-        loop = asyncio.get_event_loop()
         self._reader_task = loop.create_task(self._read_pty())
+        logger.debug("Unix PTY terminal started (pid=%s, shell=%s)", proc.pid, shell_path)
         return True
 
     async def _read_pty(self) -> None:
@@ -577,15 +613,27 @@ class LocalTerminal(TerminalSession):
             await self._fire_exit(code if code is not None else -1)
 
     def _read_pty_chunk(self) -> Optional[bytes]:
-        """Read a chunk from the pty fd (blocking, runs in executor)."""
+        """Read a chunk from the pty fd (blocking, runs in executor).
+
+        Uses ``select`` with a short timeout so the thread does not block
+        indefinitely when no output is available.  This allows the reader
+        loop to check ``self.alive`` periodically and exit cleanly when
+        the session is killed.
+        """
         if self._fd is None:
             return None
         try:
+            import select
+
+            ready, _, _ = select.select([self._fd], [], [], 0.5)
+            if not ready:
+                return b""
             data = os.read(self._fd, 4096)
             if not data:
                 return None
             return data
         except OSError:
+            # EIO on macOS/Linux: slave PTY closed (shell exited)
             return None
 
     # ------------------------------------------------------------------
