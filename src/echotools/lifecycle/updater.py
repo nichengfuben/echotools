@@ -49,7 +49,10 @@ class AutoUpdater:
             self._branch,
             self._interval,
         )
-        await self._check_and_update()
+        try:
+            await self._check_and_update()
+        except Exception as e:
+            logger.warning("自动更新首次检查异常: %s", e)
         while self._running:
             await asyncio.sleep(self._interval)
             try:
@@ -129,27 +132,72 @@ class AutoUpdater:
             return False, local_hash, None
         if local_hash == remote_hash:
             return False, local_hash, remote_hash
+        # Ancestry check: only update if local is ancestor of remote
+        ok, _, _ = await self._run_git(
+            "merge-base", "--is-ancestor", local_hash, remote_hash
+        )
+        if not ok:
+            logger.warning(
+                "本地分支与远端分叉 (%s vs %s)，跳过自动更新",
+                local_hash[:8], remote_hash[:8],
+            )
+            return False, local_hash, remote_hash
         return True, local_hash, remote_hash
 
     async def _pull(self) -> bool:
-        """执行 git pull。"""
+        """执行 git pull，带完整的错误恢复。
+
+        恢复策略:
+        1. 检测到未完成的合并 → git merge --abort
+        2. 暂存本地改动
+        3. 尝试 fast-forward pull
+        4. ff 失败 → git reset --hard origin/<branch>
+        5. 恢复暂存
+        """
+        # Step 1: Abort any in-progress merge
         ok, out, _ = await self._run_git("status", "--porcelain")
+        if ok and any(
+            line.startswith(("UU", "AA", "DD", "AU", "UA", "DU", "UD"))
+            for line in out.splitlines()
+        ):
+            logger.warning("检测到未完成的合并，正在中止")
+            await self._run_git("merge", "--abort")
+
+        # Step 2: Stash local changes if dirty
+        ok, out, _ = await self._run_git("status", "--porcelain")
+        stashed = False
         if ok and out:
             logger.warning("工作树有改动，暂存中")
-            await self._run_git(
+            ok_s, _, _ = await self._run_git(
                 "stash", "push", "-m", "autoupdate stash"
             )
+            stashed = ok_s
+
+        # Step 3: Try fast-forward pull
         ok, out, err = await self._run_git(
             "pull", "--ff-only", "origin", self._branch
         )
+
         if not ok:
-            ok, out, err = await self._run_git(
-                "pull", "origin", self._branch
+            # Step 4: Fallback to hard reset
+            logger.warning(
+                "fast-forward 失败，回退到 hard reset: %s", err
             )
-            if not ok:
-                logger.error("git pull 失败: %s", err)
+            ok_r, _, err_r = await self._run_git(
+                "reset", "--hard", "origin/{}".format(self._branch)
+            )
+            if not ok_r:
+                logger.error("hard reset 也失败: %s", err_r)
+                # Pop stash before returning to avoid losing changes
+                if stashed:
+                    await self._run_git("stash", "pop")
                 return False
-        logger.debug("git pull 成功: %s", out)
+
+        # Step 5: Pop stash
+        if stashed:
+            await self._run_git("stash", "pop")
+
+        logger.debug("git 更新成功: %s", out)
         return True
 
     @staticmethod
