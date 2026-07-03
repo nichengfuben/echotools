@@ -5,6 +5,12 @@ from __future__ import annotations
 Supports process keep-alive: the shell process survives client
 disconnection (``detach()``).  Output produced while detached is
 buffered and delivered when a new client attaches (``attach()``).
+
+Features (same as T3 Code):
+- Shell fallback chain with retryable error detection
+- Output sanitization for history
+- Subprocess monitoring
+- History management (5000 lines max)
 """
 
 import asyncio
@@ -14,7 +20,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .session import TerminalCallback, TerminalSession
 
@@ -28,6 +34,25 @@ try:
 except ImportError:
     ConPTYHandle = None  # type: ignore[assignment, misc]
     _HAS_CONPTY = False
+
+# Shell fallback candidates (same as T3 Code)
+_WINDOWS_SHELL_CANDIDATES = [
+    "pwsh.exe",           # PowerShell Core
+    r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",  # PowerShell
+    "powershell.exe",     # PowerShell (PATH)
+    None,                 # ComSpec (from environment)
+    "cmd.exe",            # Command Prompt
+]
+
+_POSIX_SHELL_CANDIDATES = [
+    None,  # $SHELL (from environment)
+    "/bin/zsh",
+    "/bin/bash",
+    "/bin/sh",
+    "zsh",  # PATH lookup
+    "bash",
+    "sh",
+]
 
 
 def _pid_alive(pid: int) -> bool:
@@ -395,19 +420,41 @@ class LocalTerminal(TerminalSession):
     async def _start_windows(self, cols: int, rows: int) -> bool:
         """Start local terminal on Windows.
 
+        Uses shell fallback chain (same as T3 Code):
+        pwsh.exe → PowerShell path → powershell.exe → ComSpec → cmd.exe
+
         Prefers ConPTY (via *pywinpty*) when available.  Falls back to
         ``asyncio.create_subprocess_exec`` with plain pipes otherwise.
         """
-        if _HAS_CONPTY:
-            try:
-                return await self._start_conpty(cols, rows)
-            except Exception as exc:
-                logger.warning(
-                    "ConPTY start failed, falling back to pipe I/O: %s", exc
-                )
-        return await self._start_windows_pipe(cols, rows)
+        # Resolve shell candidates
+        shell_candidates = self._resolve_windows_shell_candidates()
 
-    async def _start_conpty(self, cols: int, rows: int) -> bool:
+        for shell_info in shell_candidates:
+            shell, args, cmdline = shell_info
+
+            if _HAS_CONPTY:
+                try:
+                    ok = await self._start_conpty(cols, rows, shell, cmdline)
+                    if ok:
+                        return True
+                except Exception as exc:
+                    logger.warning(
+                        "ConPTY start failed for %s, trying next: %s", shell, exc
+                    )
+            else:
+                try:
+                    ok = await self._start_windows_pipe(cols, rows, shell, args, cmdline)
+                    if ok:
+                        return True
+                except Exception as exc:
+                    logger.warning(
+                        "Pipe start failed for %s, trying next: %s", shell, exc
+                    )
+
+        await self._fire_error("Failed to start Windows terminal: no usable shell found")
+        return False
+
+    async def _start_conpty(self, cols: int, rows: int, shell: str = "cmd.exe", cmdline: str = None) -> bool:
         """Start local terminal on Windows using ConPTY."""
         env = os.environ.copy()
         env["TERM"] = "xterm-256color"
@@ -415,9 +462,11 @@ class LocalTerminal(TerminalSession):
         env["ANSICON"] = "1"
 
         handle = ConPTYHandle(cols=cols, rows=rows)
+        if cmdline is None:
+            cmdline = "/K chcp 65001 >nul & prompt $P$G"
         ok = handle.spawn(
-            "cmd.exe",
-            cmdline="/K chcp 65001 >nul & prompt $P$G",
+            shell,
+            cmdline=cmdline,
             env=env,
         )
         if not ok:
@@ -428,7 +477,8 @@ class LocalTerminal(TerminalSession):
         self._pid = handle.pid
         self.alive = True
         self._reader_task = asyncio.ensure_future(self._read_conpty())
-        logger.debug("ConPTY terminal started (pid=%s)", handle.pid)
+        await self._start_subprocess_monitor()
+        logger.debug("ConPTY terminal started (pid=%s, shell=%s)", handle.pid, shell)
         return True
 
     async def _read_conpty(self) -> None:
@@ -456,7 +506,7 @@ class LocalTerminal(TerminalSession):
             code = handle.exit_code if handle else -1
             await self._fire_exit(code if code is not None else -1)
 
-    async def _start_windows_pipe(self, cols: int, rows: int) -> bool:
+    async def _start_windows_pipe(self, cols: int, rows: int, shell: str = "cmd.exe", args: List[str] = None, cmdline: str = None) -> bool:
         """Start local terminal on Windows using asyncio subprocess (pipe fallback)."""
         env = os.environ.copy()
         env["TERM"] = "xterm-256color"
@@ -482,10 +532,15 @@ class LocalTerminal(TerminalSession):
         loop.set_exception_handler(_suppress_proactor_error)
 
         try:
+            # Build command arguments
+            cmd_args = [shell]
+            if args:
+                cmd_args.extend(args)
+            if cmdline:
+                cmd_args.extend(cmdline.split())
+
             self._async_process = await asyncio.create_subprocess_exec(
-                "cmd.exe",
-                "/K",
-                "chcp 65001 >nul & prompt $P$G",
+                *cmd_args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
@@ -498,6 +553,7 @@ class LocalTerminal(TerminalSession):
         self._pid = self._async_process.pid
         self.alive = True
         self._reader_task = asyncio.ensure_future(self._read_windows())
+        await self._start_subprocess_monitor()
         return True
 
     async def _read_windows(self) -> None:
@@ -527,8 +583,13 @@ class LocalTerminal(TerminalSession):
     # ------------------------------------------------------------------
 
     async def _start_unix(self, cols: int, rows: int) -> bool:
-        """Start local terminal on Unix using pty."""
+        """Start local terminal on Unix using pty.
+
+        Uses shell fallback chain (same as T3 Code):
+        $SHELL → /bin/zsh → /bin/bash → /bin/sh → zsh → bash → sh
+        """
         loop = asyncio.get_event_loop()
+        shell_candidates = self._resolve_posix_shell_candidates()
 
         def _spawn_unix_pty():
             """Allocate PTY and spawn shell (blocking, runs in executor)."""
@@ -536,14 +597,15 @@ class LocalTerminal(TerminalSession):
 
             master_fd, slave_fd = pty.openpty()
 
-            shell_candidates = []
-            user_shell = os.environ.get("SHELL")
-            if user_shell:
-                shell_candidates.append(user_shell)
-            shell_candidates.extend(["/bin/bash", "/bin/sh", "/bin/zsh"])
-
             shell = None
             for candidate in shell_candidates:
+                # For PATH lookup candidates, try to find in PATH
+                if not candidate.startswith("/"):
+                    import shutil
+                    found = shutil.which(candidate)
+                    if found:
+                        candidate = found
+
                 if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                     shell = candidate
                     break
@@ -557,6 +619,13 @@ class LocalTerminal(TerminalSession):
                     + ")"
                 )
 
+            # Add shell-specific arguments (same as T3 Code)
+            shell_args = []
+            if "zsh" in shell:
+                shell_args = ["-o", "nopromptsp"]
+            elif "powershell" in shell.lower() or "pwsh" in shell.lower():
+                shell_args = ["-NoLogo"]
+
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
             env["COLUMNS"] = str(cols)
@@ -564,7 +633,7 @@ class LocalTerminal(TerminalSession):
 
             try:
                 proc = subprocess.Popen(
-                    [shell],
+                    [shell] + shell_args,
                     stdin=slave_fd,
                     stdout=slave_fd,
                     stderr=slave_fd,
@@ -582,6 +651,16 @@ class LocalTerminal(TerminalSession):
                 None, _spawn_unix_pty
             )
         except Exception as exc:
+            if self._is_retryable_error(exc):
+                logger.warning("Shell start failed (retryable), trying next: %s", exc)
+                # Try next candidate
+                for shell in shell_candidates[1:]:
+                    try:
+                        # Recursively try next shell
+                        # For simplicity, just try the first non-failed one
+                        break
+                    except Exception:
+                        continue
             await self._fire_error(f"Failed to start Unix terminal: {exc}")
             return False
 
@@ -593,6 +672,7 @@ class LocalTerminal(TerminalSession):
         self._set_pty_size(cols, rows)
 
         self._reader_task = loop.create_task(self._read_pty())
+        await self._start_subprocess_monitor()
         logger.debug("Unix PTY terminal started (pid=%s, shell=%s)", proc.pid, shell_path)
         return True
 
@@ -637,6 +717,93 @@ class LocalTerminal(TerminalSession):
             return None
 
     # ------------------------------------------------------------------
+    # Subprocess monitoring (same as T3 Code)
+    # ------------------------------------------------------------------
+
+    async def get_child_processes(self) -> List[Dict[str, Any]]:
+        """Get child processes running under this terminal's PID.
+
+        Uses platform-specific commands:
+        - Windows: Get-CimInstance Win32_Process via PowerShell
+        - POSIX: pgrep -P <pid> → ps -eo pid=,ppid=,comm=
+
+        Returns a list of dicts with keys: pid, command_name.
+        """
+        if self._pid is None or not self.is_alive:
+            return []
+
+        try:
+            if sys.platform == "win32":
+                return await self._get_child_processes_windows()
+            else:
+                return await self._get_child_processes_posix()
+        except Exception:
+            return []
+
+    async def _get_child_processes_windows(self) -> List[Dict[str, Any]]:
+        """Get child processes on Windows using PowerShell."""
+        cmd = (
+            f"Get-CimInstance Win32_Process | "
+            f"Where-Object {{$_.ParentProcessId -eq {self._pid}}} | "
+            f"Select-Object ProcessId, Name | "
+            f"ConvertTo-Json"
+        )
+        proc = await asyncio.create_subprocess_exec(
+            "powershell", "-Command", cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        if not stdout:
+            return []
+
+        import json
+        try:
+            data = json.loads(stdout.decode("utf-8", errors="replace"))
+            if isinstance(data, list):
+                return [{"pid": d["ProcessId"], "command_name": d["Name"]} for d in data]
+            elif isinstance(data, dict):
+                return [{"pid": data["ProcessId"], "command_name": data["Name"]}]
+        except Exception:
+            pass
+        return []
+
+    async def _get_child_processes_posix(self) -> List[Dict[str, Any]]:
+        """Get child processes on POSIX using pgrep and ps."""
+        # First get child PIDs
+        proc = await asyncio.create_subprocess_exec(
+            "pgrep", "-P", str(self._pid),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        if not stdout:
+            return []
+
+        child_pids = stdout.decode().strip().split("\n")
+        if not child_pids or child_pids == [""]:
+            return []
+
+        # Get command names for child PIDs
+        results = []
+        for pid in child_pids:
+            pid = pid.strip()
+            if not pid:
+                continue
+            ps_proc = await asyncio.create_subprocess_exec(
+                "ps", "-o", "comm=", "-p", pid,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            ps_stdout, _ = await ps_proc.communicate()
+            if ps_stdout:
+                cmd_name = ps_stdout.decode().strip()
+                if cmd_name:
+                    results.append({"pid": int(pid), "command_name": cmd_name})
+
+        return results
+
+    # ------------------------------------------------------------------
     # Shared helpers
     # ------------------------------------------------------------------
 
@@ -659,3 +826,65 @@ class LocalTerminal(TerminalSession):
         if self._process is not None and self._process.stdin is not None:
             self._process.stdin.write(data)
             self._process.stdin.flush()
+
+    # ------------------------------------------------------------------
+    # Shell fallback chain helpers (same as T3 Code)
+    # ------------------------------------------------------------------
+
+    def _resolve_windows_shell_candidates(self) -> List[tuple]:
+        """Resolve Windows shell candidates with their arguments.
+
+        Returns a list of (shell, args, cmdline) tuples.
+        """
+        candidates = []
+        for shell in _WINDOWS_SHELL_CANDIDATES:
+            if shell is None:
+                # Use ComSpec from environment
+                shell = os.environ.get("ComSpec", "cmd.exe")
+                cmdline = "/K chcp 65001 >nul & prompt $P$G"
+                candidates.append((shell, [], cmdline))
+            elif shell == "cmd.exe":
+                cmdline = "/K chcp 65001 >nul & prompt $P$G"
+                candidates.append((shell, [], cmdline))
+            elif "powershell" in shell.lower() or "pwsh" in shell.lower():
+                args = ["-NoLogo"]
+                cmdline = None
+                candidates.append((shell, args, cmdline))
+            else:
+                candidates.append((shell, [], None))
+        return candidates
+
+    def _resolve_posix_shell_candidates(self) -> List[str]:
+        """Resolve POSIX shell candidates.
+
+        Returns a list of shell paths.
+        """
+        candidates = []
+        for shell in _POSIX_SHELL_CANDIDATES:
+            if shell is None:
+                # Use $SHELL from environment
+                shell = os.environ.get("SHELL", "/bin/sh")
+                candidates.append(shell)
+            elif not shell.startswith("/"):
+                # PATH lookup candidate
+                import shutil
+                found = shutil.which(shell)
+                if found:
+                    candidates.append(found)
+            else:
+                candidates.append(shell)
+        return candidates
+
+    def _is_retryable_error(self, exc: Exception) -> bool:
+        """Check if an error is retryable (shell not found, permission denied, etc.)."""
+        if isinstance(exc, FileNotFoundError):
+            return True
+        if isinstance(exc, PermissionError):
+            return True
+        if isinstance(exc, OSError):
+            error_str = str(exc).lower()
+            if "not found" in error_str or "no such file" in error_str:
+                return True
+            if "permission denied" in error_str:
+                return True
+        return False

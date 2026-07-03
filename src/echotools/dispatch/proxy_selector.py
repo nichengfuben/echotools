@@ -1,26 +1,18 @@
-"""Smart proxy selector: binary choice (proxy vs direct) with TAS-like scoring.
+"""贝叶斯代理选择器 -- 代理 vs 直连的汤普森采样。
 
-Tracks performance of proxy vs direct connections and uses a multi-dimensional
-scoring algorithm to decide which path to use for each request.
-
-Dimensions:
-- n_fails: consecutive failure count (lower = better)
-- last_success: timestamp of last success (more recent = better)
-- ema_latency: EMA of response latency in ms (lower = better)
-- n_calls: total call count (more data = more confident)
-
-Persistence: separate JSON file (not the main usage.json).
+将代理和直连视为两个臂，使用汤普森采样选择最优路径。
 """
+
 from __future__ import annotations
 
 import json
 import math
 import os
-import random
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+
+import numpy as np
 
 from echotools.logger.manager import get_logger
 
@@ -29,39 +21,41 @@ logger = get_logger(__name__)
 
 @dataclass
 class ProxyRecord:
-    """Performance metrics for one connection path (proxy or direct)."""
+    """连接路径的贝叶斯充分统计量。"""
 
+    n_success: int = 0
     n_fails: int = 0
+    latency_sum: float = 0.0
+    latency_sum_sq: float = 0.0
+    n_latency_samples: int = 0
     last_success: float = 0.0
-    ema_latency: float = 0.0
+    last_used: float = 0.0
     n_calls: int = 0
+
+    @property
+    def success_rate(self) -> float:
+        total = self.n_success + self.n_fails
+        if total == 0:
+            return 0.5
+        return (self.n_success + 1) / (total + 2)
+
+    @property
+    def mean_latency(self) -> float:
+        if self.n_latency_samples == 0:
+            return 1000.0
+        return self.latency_sum / self.n_latency_samples
 
 
 class ProxySelector:
-    """Binary proxy-vs-direct selector with exploration and TAS-like scoring.
+    """汤普森采样代理选择器。
 
-    Usage::
-
-        selector = ProxySelector(Path("persist/qwen/proxy.json"))
-        use_proxy = selector.select()
-        # ... make request ...
-        selector.record(use_proxy, success=True, latency_ms=420.0)
-
-    Scoring weights (4-dimensional, sum = 1.0):
-    - fail_score:     0.30  (penalty for consecutive failures)
-    - recency_score:  0.20  (bonus for recent success)
-    - latency_score:  0.30  (lower EMA latency = better)
-    - confidence:     0.20  (more calls = more confident)
-
-    Exploration: 10% chance to try the less-used path, ensuring both
-    paths are periodically tested.
+    从 Beta 后验采样成功概率，从 Normal-InverseGamma 采样延迟，
+    组合后选择奖励更高的路径。
     """
 
-    _EXPLORATION_RATE: float = 0.10
-    _MAX_FAIL_PENALTY: int = 10
-    _RECENCY_HALFLIFE: float = 300.0  # 5 minutes
-    _LATENCY_CEILING: float = 5000.0  # ms
-    _CONFIDENCE_SATURATE: float = 50.0  # calls
+    _BETA_PRIOR_A: float = 2.0
+    _BETA_PRIOR_B: float = 2.0
+    _RECENCY_HALFLIFE: float = 300.0
 
     def __init__(self, persist_path: Path, ema_alpha: float = 0.3) -> None:
         self._path = persist_path
@@ -71,118 +65,108 @@ class ProxySelector:
         self._load()
 
     def select(self) -> bool:
-        """Decide whether to use proxy (True) or direct (False).
-
-        Considers both performance scoring and exploration.
+        """汤普森采样决定是否使用代理。
 
         Returns:
-            True to route through proxy, False for direct connection.
+            True 使用代理，False 直连。
         """
-        # --- exploration: ensure both paths have data ---
-        if self._proxy.n_calls == 0 and self._direct.n_calls == 0:
-            # Both untried: prefer proxy
-            return True
-        if self._proxy.n_calls == 0:
-            return True
-        if self._direct.n_calls == 0:
-            return False
+        now = time.time()
+        proxy_reward = self._sample_reward(self._proxy, now)
+        direct_reward = self._sample_reward(self._direct, now)
 
-        # --- 10% exploration: randomly try the less-used path ---
-        if random.random() < self._EXPLORATION_RATE:
-            return self._proxy.n_calls < self._direct.n_calls
+        logger.debug(
+            "Thompson: proxy=%.4f, direct=%.4f",
+            proxy_reward, direct_reward
+        )
+        return proxy_reward >= direct_reward
 
-        # --- exploitation: score both and pick the better one ---
-        proxy_score = self._score(self._proxy)
-        direct_score = self._score(self._direct)
-        return proxy_score >= direct_score
+    def _sample_reward(self, r: ProxyRecord, now: float) -> float:
+        """采样路径奖励。"""
+        alpha = self._BETA_PRIOR_A + r.n_success
+        beta = self._BETA_PRIOR_B + r.n_fails
+        theta = np.random.beta(alpha, beta)
+
+        latency = self._sample_latency(r)
+        latency_reward = math.exp(-latency / 5000.0)
+
+        if r.last_used == 0:
+            recency = 1.5
+        else:
+            elapsed = now - r.last_used
+            recency = 1.0 + 0.3 * (1.0 - math.exp(-elapsed / self._RECENCY_HALFLIFE))
+
+        return theta * latency_reward * recency
+
+    def _sample_latency(self, r: ProxyRecord) -> float:
+        """采样延迟。"""
+        if r.n_latency_samples < 2:
+            return max(1.0, np.random.gamma(2, 500))
+        
+        n = r.n_latency_samples
+        mean = r.latency_sum / n
+        var = max(1.0, (r.latency_sum_sq / n) - mean**2)
+        return max(1.0, np.random.normal(mean, math.sqrt(var / n)))
 
     def record(self, use_proxy: bool, success: bool, latency_ms: float = 0.0) -> None:
-        """Record the outcome of a request.
+        """记录请求结果。"""
+        r = self._proxy if use_proxy else self._direct
+        now = time.time()
+        r.last_used = now
 
-        Args:
-            use_proxy: Whether the request went through proxy.
-            success: Whether the request succeeded.
-            latency_ms: Response latency in milliseconds (only meaningful on success).
-        """
-        rec = self._proxy if use_proxy else self._direct
         if success:
-            rec.n_fails = 0
-            rec.last_success = time.time()
-            rec.n_calls += 1
-            if rec.ema_latency == 0:
-                rec.ema_latency = latency_ms
-            else:
-                rec.ema_latency = (
-                    self._alpha * latency_ms + (1 - self._alpha) * rec.ema_latency
-                )
+            r.n_success += 1
+            r.n_calls += 1
+            r.last_success = now
+            if latency_ms > 0:
+                r.latency_sum += latency_ms
+                r.latency_sum_sq += latency_ms ** 2
+                r.n_latency_samples += 1
         else:
-            rec.n_fails += 1
+            r.n_fails += 1
+
         self._save()
 
-    # -------------------------------------------------------------------------
-    # Scoring
-    # -------------------------------------------------------------------------
-
-    def _score(self, rec: ProxyRecord) -> float:
-        """Compute composite score for a ProxyRecord.  Higher is better."""
-        now = time.time()
-
-        # Failure penalty: more consecutive fails → worse (range: -1.0 to 0.0)
-        fail_score = -min(rec.n_fails, self._MAX_FAIL_PENALTY) / float(
-            self._MAX_FAIL_PENALTY
-        )
-
-        # Recency bonus: more recent success → better (range: 0.0 to 1.0)
-        if rec.last_success > 0:
-            elapsed = now - rec.last_success
-            recency = min(1.0, elapsed / self._RECENCY_HALFLIFE)
-        else:
-            recency = 1.0  # never succeeded → worst recency
-        recency_score = 1.0 - recency
-
-        # Latency score: lower EMA → better (range: 0.0 to 1.0)
-        if rec.ema_latency > 0:
-            lat_score = max(0.0, 1.0 - rec.ema_latency / self._LATENCY_CEILING)
-        else:
-            lat_score = 0.5  # no data → neutral
-
-        # Confidence: more calls → more confident (range: 0.0 to 1.0)
-        conf = min(1.0, rec.n_calls / self._CONFIDENCE_SATURATE)
-
-        return (
-            0.30 * fail_score
-            + 0.20 * recency_score
-            + 0.30 * lat_score
-            + 0.20 * conf
-        )
-
-    # -------------------------------------------------------------------------
-    # Persistence
-    # -------------------------------------------------------------------------
-
     def _save(self) -> None:
-        """Atomically persist proxy and direct records to disk."""
+        """原子持久化。"""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             data = {
-                "proxy": asdict(self._proxy),
-                "direct": asdict(self._direct),
+                "proxy": {
+                    "n_success": self._proxy.n_success,
+                    "n_fails": self._proxy.n_fails,
+                    "latency_sum": self._proxy.latency_sum,
+                    "latency_sum_sq": self._proxy.latency_sum_sq,
+                    "n_latency_samples": self._proxy.n_latency_samples,
+                    "last_success": self._proxy.last_success,
+                    "last_used": self._proxy.last_used,
+                    "n_calls": self._proxy.n_calls,
+                },
+                "direct": {
+                    "n_success": self._direct.n_success,
+                    "n_fails": self._direct.n_fails,
+                    "latency_sum": self._direct.latency_sum,
+                    "latency_sum_sq": self._direct.latency_sum_sq,
+                    "n_latency_samples": self._direct.n_latency_samples,
+                    "last_success": self._direct.last_success,
+                    "last_used": self._direct.last_used,
+                    "n_calls": self._direct.n_calls,
+                },
             }
             tmp = self._path.with_suffix(".tmp")
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
             os.replace(str(tmp), str(self._path))
         except Exception as e:
-            logger.warning("ProxySelector 持久化写入失败: %s", e)
+            logger.warning("ProxySelector save failed: %s", e)
 
     def _load(self) -> None:
-        """Load persisted records from disk (silent on missing/corrupt)."""
+        """加载持久化记录。"""
         if not self._path.exists():
             return
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
-            if "proxy" in data:
-                self._proxy = ProxyRecord(**data["proxy"])
-            if "direct" in data:
-                self._direct = ProxyRecord(**data["direct"])
+            for key in ("proxy", "direct"):
+                if key in data:
+                    rec = ProxyRecord(**data[key])
+                    setattr(self, f"_{key}", rec)
         except Exception:
             pass

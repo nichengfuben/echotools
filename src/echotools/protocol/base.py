@@ -23,6 +23,7 @@ VALID_PROTOCOL_IDS = (
     "original",
     "bracket",
     "nous",
+    "dsml",
     "custom",
 )
 

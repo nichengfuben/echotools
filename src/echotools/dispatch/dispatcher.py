@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-"""通用任务调度器：单发与并发竞速。"""
+"""通用任务调度器：单发与并发竞速 -- 贝叶斯预筛选版。
+
+竞速策略：
+1. 使用汤普森采样预筛选候选（selector.select）
+2. 对预筛选的候选启动并发竞速
+3. 第一个达到 min_tokens 的候选成为胜者
+4. 对胜者继续消费剩余流，对败者取消并记录部分成功
+"""
 
 import asyncio
 import time
 from typing import (
     Any,
     AsyncGenerator,
-    Awaitable,
     Callable,
     Dict,
     List,
@@ -26,7 +32,6 @@ logger = get_logger(__name__)
 
 _RACE_CHUNK_TIMEOUT = 120.0
 
-# 执行器签名：接收候选项，返回异步生成器（产出 str 或 dict）
 Executor = Callable[
     [TaskCandidate], AsyncGenerator[Union[str, Dict[str, Any]], None]
 ]
@@ -35,21 +40,14 @@ Executor = Callable[
 class TaskDispatcher:
     """通用任务调度器。
 
-    不绑定任何业务语义，通过 executor 回调执行实际任务，
-    支持单候选执行与多候选并发竞速。
+    使用贝叶斯汤普森采样预筛选 + 并发竞速。
     """
 
     def __init__(self, selector: Optional[AdaptiveSelector] = None) -> None:
-        """初始化调度器。
-
-        Args:
-            selector: 自适应选择器，None 时自动创建。
-        """
         self._selector = selector or AdaptiveSelector()
 
     @property
     def selector(self) -> AdaptiveSelector:
-        """选择器实例。"""
         return self._selector
 
     async def dispatch(
@@ -62,45 +60,61 @@ class TaskDispatcher:
     ) -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
         """分发任务。
 
+        流程：
+        1. 汤普森采样预筛选 concurrent 个最优候选
+        2. 若 concurrent=1：单候选执行
+        3. 若 concurrent>1：并发竞速，首个达到 min_tokens 的胜出
+
         Args:
             candidates: 候选项列表。
             executor: 执行器回调。
             concurrent: 并发数（>1 启用竞速）。
-            min_tokens: 竞速最小分片数（决定胜者）。
+            min_tokens: 竞速最小分片数。
 
         Yields:
             执行器产出的 str 或 dict。
 
         Raises:
-            NoCandidateError: 无候选或选择失败。
+            NoCandidateError: 无候选或全部失败。
         """
         if not candidates:
-            raise NoCandidateError("无候选项")
+            raise NoCandidateError("No candidates")
+
+        # 汤普森采样预筛选
         n = max(1, min(concurrent, len(candidates)))
         sel = await self._selector.select(candidates, n)
+
         if not sel:
-            raise NoCandidateError("选择失败")
+            raise NoCandidateError("Selection returned empty")
+
         if len(sel) == 1:
             async for chunk in self._single(sel[0], executor):
                 yield chunk
             return
+
         async for chunk in self._race(sel, executor, min_tokens):
             yield chunk
 
     async def _single(
         self, cand: TaskCandidate, executor: Executor
     ) -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
-        """单候选执行并记录指标。"""
+        """单候选执行。"""
         start = time.monotonic()
         ft: Optional[float] = None
         tc = 0
+        ct = 0
         ok = False
         try:
             async for chunk in executor(cand):
                 if isinstance(chunk, str):
                     tc += 1
+                    ct += len(chunk) // 3  # 粗略估计 token
                     if ft is None:
                         ft = time.monotonic()
+                elif isinstance(chunk, dict):
+                    if "usage" in chunk:
+                        u = chunk["usage"]
+                        ct = u.get("completion_tokens", ct)
                 yield chunk
             ok = True
         finally:
@@ -114,6 +128,7 @@ class TaskDispatcher:
                 tokens=tc,
                 duration=dur,
                 generation_dur=gen_dur,
+                completion_tokens=ct,
                 group=cand.group,
             )
 
@@ -123,7 +138,7 @@ class TaskDispatcher:
         executor: Executor,
         min_tok: int,
     ) -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
-        """多候选竞速执行。"""
+        """多候选并发竞速。"""
         infos: List[Dict[str, Any]] = []
 
         async def _worker(
@@ -153,25 +168,25 @@ class TaskDispatcher:
             q: "asyncio.Queue[Any]" = asyncio.Queue()
             ev = asyncio.Event()
             task = asyncio.ensure_future(_worker(i, c, q, ev))
-            infos.append(
-                {
-                    "idx": i,
-                    "cand": c,
-                    "q": q,
-                    "ev": ev,
-                    "task": task,
-                    "tok": 0,
-                    "buf": [],
-                    "start": time.monotonic(),
-                    "ft": None,
-                    "done": False,
-                    "err": False,
-                    "err_msg": "",
-                }
-            )
+            infos.append({
+                "idx": i,
+                "cand": c,
+                "q": q,
+                "ev": ev,
+                "task": task,
+                "tok": 0,
+                "ct": 0,
+                "buf": [],
+                "start": time.monotonic(),
+                "ft": None,
+                "done": False,
+                "err": False,
+                "err_msg": "",
+            })
 
         winner: Optional[Dict[str, Any]] = None
         try:
+            # 等待首个达到 min_tok 的候选
             while winner is None:
                 if all(i["done"] or i["err"] for i in infos):
                     break
@@ -186,8 +201,11 @@ class TaskDispatcher:
                         info["buf"].append(data)
                         if isinstance(data, str):
                             info["tok"] += 1
+                            info["ct"] += len(data) // 3
                             if info["ft"] is None:
                                 info["ft"] = time.monotonic()
+                        elif isinstance(data, dict) and "usage" in data:
+                            info["ct"] = data["usage"].get("completion_tokens", info["ct"])
                         if info["tok"] >= min_tok:
                             winner = info
                             break
@@ -200,6 +218,7 @@ class TaskDispatcher:
                 if winner is None:
                     await asyncio.sleep(0.02)
 
+            # 无胜者：选择产出最多的
             if winner is None:
                 valid = [i for i in infos if i["buf"] and not i["err"]]
                 if valid:
@@ -207,8 +226,9 @@ class TaskDispatcher:
                 else:
                     for i in infos:
                         await self._rec(i, False)
-                    raise NoCandidateError("所有并发任务失败")
+                    raise NoCandidateError("All race candidates failed")
 
+            # 取消败者，记录部分成功
             for i in infos:
                 if i is not winner:
                     i["ev"].set()
@@ -216,9 +236,11 @@ class TaskDispatcher:
                         i["task"].cancel()
                     await self._rec(i, i["tok"] > 0)
 
+            # 产出胜者缓冲
             for ch in winner["buf"]:
                 yield ch
 
+            # 消费胜者剩余流
             if not winner["done"]:
                 while True:
                     try:
@@ -228,11 +250,14 @@ class TaskDispatcher:
                         if tp == "chunk":
                             if isinstance(data, str):
                                 winner["tok"] += 1
+                                winner["ct"] += len(data) // 3
+                            elif isinstance(data, dict) and "usage" in data:
+                                winner["ct"] = data["usage"].get("completion_tokens", winner["ct"])
                             yield data
                         elif tp in ("done", "err", "cancel"):
                             break
                     except asyncio.TimeoutError:
-                        logger.warning("竞速队列超时，提前结束")
+                        logger.warning("Race queue timeout, ending early")
                         break
 
             await self._rec(winner, True)
@@ -250,9 +275,7 @@ class TaskDispatcher:
         try:
             dur = time.monotonic() - info["start"]
             lat = (info["ft"] - info["start"]) if info["ft"] else dur
-            gen_dur = (
-                (time.monotonic() - info["ft"]) if info["ft"] else dur
-            )
+            gen_dur = (time.monotonic() - info["ft"]) if info["ft"] else dur
             await self._selector.record(
                 info["cand"].id,
                 ok,
@@ -260,9 +283,8 @@ class TaskDispatcher:
                 tokens=info["tok"],
                 duration=dur,
                 generation_dur=gen_dur,
+                completion_tokens=info["ct"],
                 group=info["cand"].group,
             )
         except Exception as e:
-            logger.warning(
-                "记录候选 [%s] 失败: %s", info["cand"].id, e
-            )
+            logger.warning("Record candidate [%s] failed: %s", info["cand"].id, e)

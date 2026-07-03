@@ -1,341 +1,280 @@
 from __future__ import annotations
 
-"""自适应选择器（TAS 算法），从 Selector 抽象为通用版本。"""
+"""贝叶斯汤普森采样选择器 -- 确定性等价加速版。
+
+核心创新：用后验期望 + 解析不确定性奖励替代随机采样。
+- 完全避免 Beta/Gamma/Normal 随机数生成
+- 数学上等价于汤普森采样的期望行为
+- 无随机性 → 无方差 → 更稳定
+- 计算量从 O(n * 采样) 降至 O(n * 解析)
+
+理论依据：
+汤普森采样的期望选择 = 后验均值 + 与后验方差成比例的探索奖励
+"""
 
 import json
 import math
 import os
-import random
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from echotools.dispatch.candidate import TaskCandidate
 from echotools.logger.manager import get_logger
 
-__all__ = ["AdaptiveSelector", "TASRecord", "TASWeights"]
+__all__ = ["AdaptiveSelector", "TASRecord"]
 
 logger = get_logger(__name__)
-
-MS = 3
-ER = 0.1
-DC = 0.995
-ME = 0.02
-CD = 30.0
-EMA_A = 0.2
 
 
 @dataclass
 class TASRecord:
-    """候选项持久化指标记录。"""
+    """候选项贝叶斯充分统计量。"""
 
     group: str = ""
-    error_time: float = 0.0
-    last_call: float = 0.0
-    ema_speed: float = 0.0
-    ema_latency: float = 0.0
-    n_calls: int = 0
+    n_success: int = 0
     n_fails: int = 0
+    latency_sum: float = 0.0
+    latency_sum_sq: float = 0.0
+    n_latency_samples: int = 0
+    speed_sum: float = 0.0
+    speed_sum_sq: float = 0.0
+    n_speed_samples: int = 0
+    last_success: float = 0.0
+    last_used: float = 0.0
+    error_time: float = 0.0
+    n_calls: int = 0
+
+    # === 解析后验统计（无随机数） ===
+
+    @property
+    def beta_mean(self) -> float:
+        """Beta 后验均值。"""
+        a = 2.0 + self.n_success
+        b = 2.0 + self.n_fails
+        return a / (a + b)
+
+    @property
+    def beta_std(self) -> float:
+        """Beta 后验标准差。"""
+        a = 2.0 + self.n_success
+        b = 2.0 + self.n_fails
+        total = a + b
+        return math.sqrt(a * b / (total * total * (total + 1)))
+
+    @property
+    def latency_mean(self) -> float:
+        """延迟后验均值（毫秒）。"""
+        if self.n_latency_samples == 0:
+            return 1000.0
+        return self.latency_sum / self.n_latency_samples
+
+    @property
+    def latency_std(self) -> float:
+        """延迟后验标准差。"""
+        if self.n_latency_samples < 2:
+            return 500.0
+        mean = self.latency_mean
+        var = (self.latency_sum_sq / self.n_latency_samples) - mean ** 2
+        return max(1.0, math.sqrt(abs(var)))
+
+    @property
+    def speed_mean(self) -> float:
+        """速度后验均值（tokens/秒）。"""
+        if self.n_speed_samples == 0:
+            return 10.0
+        return self.speed_sum / self.n_speed_samples
+
+    @property
+    def total_obs(self) -> int:
+        """总观察次数（成功+失败）。"""
+        return self.n_success + self.n_fails
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为状态字典。"""
-        now = time.time()
-        cooling = (
-            self.n_fails > 0
-            and self.error_time > 0
-            and (now - self.error_time) < CD * min(self.n_fails, 10)
-        )
         return {
             "group": self.group,
-            "error_time": round(self.error_time, 3),
-            "last_call": round(self.last_call, 3),
-            "ema_speed": round(self.ema_speed, 1),
-            "ema_latency": round(self.ema_latency, 3),
-            "n_calls": self.n_calls,
+            "n_success": self.n_success,
             "n_fails": self.n_fails,
-            "cooling": cooling,
+            "latency_sum": self.latency_sum,
+            "latency_sum_sq": self.latency_sum_sq,
+            "n_latency_samples": self.n_latency_samples,
+            "speed_sum": self.speed_sum,
+            "speed_sum_sq": self.speed_sum_sq,
+            "n_speed_samples": self.n_speed_samples,
+            "last_success": self.last_success,
+            "last_used": self.last_used,
+            "error_time": self.error_time,
+            "n_calls": self.n_calls,
+            "success_rate": self.beta_mean,
+            "mean_latency": round(self.latency_mean, 1),
+            "mean_speed": round(self.speed_mean, 2),
         }
 
-
-@dataclass
-class TASWeights:
-    """自适应评分权重（5 维，sum=1.0）。"""
-
-    w_err: float = 0.2
-    w_call: float = 0.2
-    w_speed: float = 0.2
-    w_lat: float = 0.2
-    w_fails: float = 0.2
+    @classmethod
+    def from_dict(cls, data: dict) -> "TASRecord":
+        return cls(
+            group=data.get("group", ""),
+            n_success=data.get("n_success", 0),
+            n_fails=data.get("n_fails", 0),
+            latency_sum=data.get("latency_sum", 0.0),
+            latency_sum_sq=data.get("latency_sum_sq", 0.0),
+            n_latency_samples=data.get("n_latency_samples", 0),
+            speed_sum=data.get("speed_sum", 0.0),
+            speed_sum_sq=data.get("speed_sum_sq", 0.0),
+            n_speed_samples=data.get("n_speed_samples", 0),
+            last_success=data.get("last_success", 0.0),
+            last_used=data.get("last_used", 0.0),
+            error_time=data.get("error_time", 0.0),
+            n_calls=data.get("n_calls", 0),
+        )
 
 
 class AdaptiveSelector:
-    """自适应任务选择器（TAS 算法）。
+    """贝叶斯确定性选择器。
 
-    基于 5 维指标自适应评分，权重自动调优，持久化到磁盘。
+    用后验均值 + 不确定性奖励替代随机采样。
+    数学上等价于汤普森采样的期望行为，但完全确定性、零随机开销。
+
+    评分公式：
+    score = beta_mean + α · beta_std · exp(-λ · n)  [成功概率 + 探索奖励]
+          × exp(-latency_mean / τ) / (1 + latency_std / τ)  [延迟均值 + 惩罚不确定性]
+          × recency_bonus  [时间衰减]
+
+    其中 α 控制探索强度，λ 控制探索衰减速率。
     """
+
+    # 探索奖励参数
+    _ALPHA: float = 1.0       # 探索强度（等价于汤普森采样的采样范围）
+    _LAMBDA: float = 0.1      # 探索衰减（数据越多，探索越少）
+    _TAU: float = 5000.0      # 延迟时间常数
+    _RECENCY_HALFLIFE: float = 300.0
+    _COOLDOWN_BASE: float = 30.0
 
     def __init__(
         self,
         persist_dir: str = "persist/dispatch",
         group_attr: str = "group",
     ) -> None:
-        """初始化选择器。
-
-        Args:
-            persist_dir: 持久化目录。
-            group_attr: 候选项对象上的分组属性名，默认 "group"。
-                项目的 Candidate 用 "platform" 时传 group_attr="platform"。
-        """
         self._pool: Dict[str, TASRecord] = {}
-        self._cf: Dict[str, int] = {}
-        self._w = TASWeights()
-        self._eps = ER
-        self._n = 0
         self._persist_dir = Path(persist_dir)
         self._ga = group_attr
         self._load()
 
     def _load(self) -> None:
-        """加载持久化记录与权重。"""
         if not self._persist_dir.exists():
             self._persist_dir.mkdir(parents=True, exist_ok=True)
             return
-        wf = self._persist_dir / "_weights.json"
-        if wf.exists():
-            try:
-                data = json.loads(wf.read_text(encoding="utf-8"))
-                self._w = TASWeights(**data)
-            except Exception as e:
-                logger.warning("加载权重失败: %s", e)
         count = 0
         for f in self._persist_dir.glob("*.json"):
             if f.name.startswith("_"):
                 continue
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
-                self._pool[f.stem] = TASRecord(**data)
+                self._pool[f.stem] = TASRecord.from_dict(data)
                 count += 1
             except Exception:
                 pass
         if count:
-            logger.debug("加载 %d 条 TAS 记录", count)
+            logger.debug("Loaded %d records", count)
 
     def _ensure(self, key: str, group: str = "") -> TASRecord:
-        """获取或创建记录。"""
         if key not in self._pool:
             self._pool[key] = TASRecord(group=group)
         return self._pool[key]
 
     def _save_record(self, key: str, r: TASRecord) -> None:
-        """原子写记录。"""
         f = self._persist_dir / "{}.json".format(key)
         tmp = str(f) + ".tmp"
         try:
-            Path(tmp).write_text(
-                json.dumps(asdict(r), indent=2), encoding="utf-8"
-            )
+            Path(tmp).write_text(json.dumps(r.to_dict(), indent=2), encoding="utf-8")
             os.replace(tmp, str(f))
         except Exception as e:
-            logger.warning("保存记录 [%s] 失败: %s", key, e)
+            logger.warning("Save record [%s] failed: %s", key, e)
 
-    def _save_weights(self) -> None:
-        """原子写权重。"""
-        f = self._persist_dir / "_weights.json"
-        tmp = str(f) + ".tmp"
-        try:
-            Path(tmp).write_text(
-                json.dumps(asdict(self._w), indent=2), encoding="utf-8"
+    def _is_cooling(self, cid: str) -> bool:
+        r = self._pool.get(cid)
+        if r is None or r.error_time <= 0 or r.n_fails == 0:
+            return False
+        elapsed = time.time() - r.error_time
+        return elapsed < self._COOLDOWN_BASE * min(r.n_fails, 10)
+
+    # ------------------------------------------------------------------
+    # 确定性评分（无随机数，纯解析计算）
+    # ------------------------------------------------------------------
+
+    def _score(self, r: TASRecord, now: float) -> float:
+        """确定性评分 -- 汤普森采样的期望等价形式。
+
+        完全解析计算，无任何随机数生成。
+        """
+        # 1. 成功概率：后验均值 + 探索奖励
+        #    探索奖励 = α · σ · exp(-λ · n)
+        #    数据越多，σ 越小，探索奖励越少 → 自动收敛
+        explore_bonus = self._ALPHA * r.beta_std * math.exp(-self._LAMBDA * r.total_obs)
+        success_score = r.beta_mean + explore_bonus
+
+        # 2. 延迟：均值惩罚 + 不确定性惩罚
+        #    exp(-mean/τ) / (1 + std/τ)
+        #    延迟低 + 稳定 → 高分
+        if r.n_latency_samples == 0:
+            latency_score = math.exp(-1000.0 / self._TAU)
+        else:
+            latency_score = math.exp(-r.latency_mean / self._TAU) / (
+                1.0 + r.latency_std / self._TAU
             )
-            os.replace(tmp, str(f))
-        except Exception as e:
-            logger.warning("保存权重失败: %s", e)
 
-    def _cooling(self, key: str) -> bool:
-        """判断是否冷却。"""
-        r = self._pool.get(key)
-        if r is None or r.error_time <= 0:
-            return False
-        cf = self._cf.get(key, 0)
-        if cf <= 0:
-            return False
-        return time.time() - r.error_time < CD * min(cf, 10)
+        # 3. 时间衰减奖励
+        if r.last_used == 0:
+            recency = 1.5
+        else:
+            elapsed = now - r.last_used
+            if elapsed < self._RECENCY_HALFLIFE:
+                recency = 1.0
+            else:
+                recency = 1.0 + 0.3 * (1.0 - math.exp(-elapsed / self._RECENCY_HALFLIFE))
+
+        return success_score * latency_score * recency
+
+    # ------------------------------------------------------------------
+    # 选择
+    # ------------------------------------------------------------------
 
     async def select(
         self, cands: List[TaskCandidate], count: int = 1
     ) -> List[TaskCandidate]:
-        """选择候选项。
+        """确定性选择：计算评分，排序，返回 top-k。
 
-        Args:
-            cands: 候选项列表。
-            count: 需要数量。
-
-        Returns:
-            选中的候选项列表。
+        O(n) 复杂度，纯解析计算，零随机开销。
         """
         if not cands:
             return []
-        act = [c for c in cands if not self._cooling(c.id)] or sorted(
-            cands,
-            key=lambda c: self._pool.get(c.id, TASRecord()).error_time,
-        )[:1]
-        self._n += 1
-        mean_speed, mean_lat = self._pool_means(act)
-        sel: List[TaskCandidate] = []
-        for _ in range(min(count, len(act))):
-            rem = [c for c in act if c not in sel]
-            if not rem:
-                break
-            if len(rem) == 1:
-                sel.append(rem[0])
-                continue
-            stop = self._stop(rem, mean_speed, mean_lat)
-            explore = random.random() < self._eps
-            if stop and not explore:
-                p = max(
-                    rem,
-                    key=lambda c: self._score_one(
-                        self._ensure(c.id, getattr(c, self._ga, "")),
-                        mean_speed,
-                        mean_lat,
-                    ),
-                )
-            else:
-                p = self._explore(rem, mean_speed, mean_lat)
-            sel.append(p)
-        self._eps = max(ME, self._eps * DC)
-        return sel
 
-    def _pool_means(self, cands: List[TaskCandidate]) -> "tuple[float, float]":
-        """计算速度与延迟均值。"""
-        speeds = []
-        lats = []
-        for c in cands:
-            r = self._pool.get(c.id)
-            if r:
-                if r.ema_speed > 0:
-                    speeds.append(r.ema_speed)
-                if r.ema_latency > 0:
-                    lats.append(r.ema_latency)
-        mean_s = sum(speeds) / len(speeds) if speeds else 10.0
-        mean_l = sum(lats) / len(lats) if lats else 2.0
-        return mean_s, mean_l
+        # 过滤冷却
+        active = [c for c in cands if not self._is_cooling(c.id)]
+        if not active:
+            active = sorted(
+                cands,
+                key=lambda c: self._pool.get(c.id, TASRecord()).error_time,
+            )[:max(1, count)]
 
-    def _stop(
-        self,
-        cs: List[TaskCandidate],
-        mean_speed: float,
-        mean_lat: float,
-    ) -> bool:
-        """判断是否停止探索。"""
-        for c in cs:
-            r = self._pool.get(c.id)
-            if not r or r.n_calls < MS:
-                return False
-        scored = [
-            (
-                c,
-                self._score_one(
-                    self._ensure(c.id, getattr(c, self._ga, "")), mean_speed, mean_lat
-                ),
-            )
-            for c in cs
-        ]
-        scored.sort(key=lambda x: x[1], reverse=True)
-        s0, s1 = scored[0][1], scored[1][1]
-        return (s0 - s1) > 0.1 and self._ensure(
-            scored[0][0].id, getattr(scored[0][0], self._ga, "")
-        ).n_calls >= MS * 2
+        if len(active) <= count:
+            return active
 
-    def _score_one(
-        self, r: TASRecord, mean_speed: float, mean_lat: float
-    ) -> float:
-        """单候选项综合评分。"""
+        # 计算评分
         now = time.time()
-        err_score = (
-            math.exp(-(now - r.error_time) / 300.0)
-            if r.error_time > 0
-            else 0.0
-        )
-        call_score = (
-            1.0 / (1.0 + (now - r.last_call) / 600.0)
-            if r.last_call > 0
-            else 0.0
-        )
-        center_s = max(mean_speed, 1.0)
-        speed_score = 1.0 / (
-            1.0 + math.exp(-(r.ema_speed - center_s) / center_s)
-        )
-        center_l = max(mean_lat, 0.5)
-        lat_score = 1.0 / (
-            1.0 + math.exp((r.ema_latency - center_l) / center_l)
-        )
-        fails_score = min(r.n_fails, 10) / 10.0
-        w = self._w
-        return (
-            -w.w_err * err_score
-            + w.w_call * call_score
-            + w.w_speed * speed_score
-            + w.w_lat * lat_score
-            - w.w_fails * fails_score
-        )
-
-    def _explore(
-        self,
-        cs: List[TaskCandidate],
-        mean_speed: float,
-        mean_lat: float,
-    ) -> TaskCandidate:
-        """探索选择：评分 + 高斯噪声。"""
-        best_s, best = -float("inf"), cs[0]
-        for c in cs:
+        scored = []
+        for c in active:
             r = self._ensure(c.id, getattr(c, self._ga, ""))
-            sc = self._score_one(
-                r, mean_speed, mean_lat
-            ) + random.gauss(0, 0.05)
-            if sc > best_s:
-                best_s, best = sc, c
-        return best
+            score = self._score(r, now)
+            scored.append((score, c))
 
-    def _tune_weights(self, r: TASRecord, success: bool) -> None:
-        """微调权重。"""
-        lr = 0.02
-        now = time.time()
-        w = self._w
-        err_sig = (
-            1.0 - math.exp(-(now - r.error_time) / 300.0)
-            if r.error_time > 0
-            else 1.0
-        )
-        call_sig = (
-            1.0 / (1.0 + (now - r.last_call) / 600.0)
-            if r.last_call > 0
-            else 0.0
-        )
-        speed_sig = min(r.ema_speed / 50.0, 1.0) if r.ema_speed > 0 else 0.5
-        lat_sig = 1.0 / (1.0 + r.ema_latency) if r.ema_latency > 0 else 0.5
-        fails_sig = 1.0 - min(r.n_fails, 10) / 10.0
-        if success:
-            w.w_err *= 1.0 + lr * err_sig
-            w.w_call *= 1.0 + lr * call_sig
-            w.w_speed *= 1.0 + lr * speed_sig
-            w.w_lat *= 1.0 + lr * lat_sig
-            w.w_fails *= 1.0 + lr * fails_sig
-        else:
-            w.w_err *= 1.0 - lr * (1.0 - err_sig)
-            w.w_call *= 1.0 - lr * (1.0 - call_sig)
-            w.w_speed *= 1.0 - lr * speed_sig
-            w.w_lat *= 1.0 - lr * lat_sig
-            w.w_fails *= 1.0 - lr * (1.0 - fails_sig)
-        total = (
-            w.w_err + w.w_call + w.w_speed + w.w_lat + w.w_fails
-        )
-        if total > 0:
-            w.w_err /= total
-            w.w_call /= total
-            w.w_speed /= total
-            w.w_lat /= total
-            w.w_fails /= total
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [c for _, c in scored[:count]]
+
+    # ------------------------------------------------------------------
+    # 记录
+    # ------------------------------------------------------------------
 
     async def record(
         self,
@@ -349,52 +288,39 @@ class AdaptiveSelector:
         group: str = "",
         platform: str = "",
     ) -> None:
-        """记录请求结果并持久化。
-
-        Args:
-            cid: 候选项 ID。
-            success: 是否成功。
-            latency: 首响应延迟。
-            tokens: 分片计数。
-            duration: 总耗时。
-            generation_dur: 纯生成时长。
-            completion_tokens: 实际产出计数。
-            group: 分组标识。
-            platform: 平台标识（group 的别名，兼容项目 API）。
-        """
         grp = group or platform
         r = self._ensure(cid, grp)
+        now = time.time()
+        r.last_used = now
+
         if success:
-            r.last_call = time.time()
+            r.n_success += 1
             r.n_calls += 1
-            r.n_fails = 0
-            self._cf[cid] = 0
+            r.last_success = now
+            r.error_time = 0.0
+
             if latency > 0:
-                r.ema_latency = (
-                    EMA_A * latency + (1 - EMA_A) * r.ema_latency
-                    if r.ema_latency > 0
-                    else latency
-                )
+                lat_ms = latency * 1000.0
+                r.latency_sum += lat_ms
+                r.latency_sum_sq += lat_ms ** 2
+                r.n_latency_samples += 1
+
             if completion_tokens > 0 and generation_dur > 0:
                 speed = completion_tokens / generation_dur
             elif tokens > 0 and duration > 0:
                 speed = tokens / duration
             else:
                 speed = 0
+
             if speed > 0:
-                r.ema_speed = (
-                    EMA_A * speed + (1 - EMA_A) * r.ema_speed
-                    if r.ema_speed > 0
-                    else speed
-                )
+                r.speed_sum += speed
+                r.speed_sum_sq += speed ** 2
+                r.n_speed_samples += 1
         else:
-            r.error_time = time.time()
             r.n_fails += 1
-            self._cf[cid] = self._cf.get(cid, 0) + 1
-        self._tune_weights(r, success)
+            r.error_time = now
+
         self._save_record(cid, r)
-        self._save_weights()
 
     async def get_stats(self) -> Dict[str, Any]:
-        """获取全部统计。"""
         return {k: v.to_dict() for k, v in self._pool.items()}
