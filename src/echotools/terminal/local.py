@@ -462,7 +462,7 @@ class LocalTerminal(TerminalSession):
         env["ANSICON"] = "1"
 
         handle = ConPTYHandle(cols=cols, rows=rows)
-        if cmdline is None:
+        if cmdline is None and ("cmd" in shell.lower()):
             cmdline = "/K chcp 65001 >nul & prompt $P$G"
         ok = handle.spawn(
             shell,

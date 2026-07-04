@@ -80,7 +80,7 @@ from echotools.translate import (
 )
 from echotools.web import WebApplication, json_body, safe_flush
 
-__version__ = "1.0.29"
+__version__ = "1.0.34"
 
 __all__ = [
     "__version__",
