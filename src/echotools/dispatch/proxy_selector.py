@@ -1,19 +1,15 @@
-"""贝叶斯代理选择器 -- 代理 vs 直连的汤普森采样。
-
-将代理和直连视为两个臂，使用汤普森采样选择最优路径。
-"""
+"""Bayesian proxy selector -- Thompson sampling for proxy vs direct."""
 
 from __future__ import annotations
 
 import json
 import math
-import os
+import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-
+from echotools.io.io_utils import atomic_write_text
 from echotools.logger.manager import get_logger
 
 logger = get_logger(__name__)
@@ -21,7 +17,7 @@ logger = get_logger(__name__)
 
 @dataclass
 class ProxyRecord:
-    """连接路径的贝叶斯充分统计量。"""
+    """Bayesian sufficient statistics for a connection path."""
 
     n_success: int = 0
     n_fails: int = 0
@@ -47,11 +43,7 @@ class ProxyRecord:
 
 
 class ProxySelector:
-    """汤普森采样代理选择器。
-
-    从 Beta 后验采样成功概率，从 Normal-InverseGamma 采样延迟，
-    组合后选择奖励更高的路径。
-    """
+    """Thompson-sampling selector for proxy vs direct paths."""
 
     _BETA_PRIOR_A: float = 2.0
     _BETA_PRIOR_B: float = 2.0
@@ -65,26 +57,22 @@ class ProxySelector:
         self._load()
 
     def select(self) -> bool:
-        """汤普森采样决定是否使用代理。
-
-        Returns:
-            True 使用代理，False 直连。
-        """
+        """Thompson sample: True = use proxy, False = direct."""
         now = time.time()
         proxy_reward = self._sample_reward(self._proxy, now)
         direct_reward = self._sample_reward(self._direct, now)
 
         logger.debug(
             "Thompson: proxy=%.4f, direct=%.4f",
-            proxy_reward, direct_reward
+            proxy_reward,
+            direct_reward,
         )
         return proxy_reward >= direct_reward
 
     def _sample_reward(self, r: ProxyRecord, now: float) -> float:
-        """采样路径奖励。"""
         alpha = self._BETA_PRIOR_A + r.n_success
         beta = self._BETA_PRIOR_B + r.n_fails
-        theta = np.random.beta(alpha, beta)
+        theta = random.betavariate(alpha, beta)
 
         latency = self._sample_latency(r)
         latency_reward = math.exp(-latency / 5000.0)
@@ -93,22 +81,21 @@ class ProxySelector:
             recency = 1.5
         else:
             elapsed = now - r.last_used
-            recency = 1.0 + 0.3 * (1.0 - math.exp(-elapsed / self._RECENCY_HALFLIFE))
+            recency = 1.0 + 0.3 * (
+                1.0 - math.exp(-elapsed / self._RECENCY_HALFLIFE)
+            )
 
         return theta * latency_reward * recency
 
     def _sample_latency(self, r: ProxyRecord) -> float:
-        """采样延迟。"""
         if r.n_latency_samples < 2:
-            return max(1.0, np.random.gamma(2, 500))
-        
+            return max(1.0, random.gammavariate(2, 1.0 / 500.0))
         n = r.n_latency_samples
         mean = r.latency_sum / n
-        var = max(1.0, (r.latency_sum_sq / n) - mean**2)
-        return max(1.0, np.random.normal(mean, math.sqrt(var / n)))
+        var = max(1.0, (r.latency_sum_sq / n) - mean ** 2)
+        return max(1.0, random.gauss(mean, math.sqrt(var / n)))
 
     def record(self, use_proxy: bool, success: bool, latency_ms: float = 0.0) -> None:
-        """记录请求结果。"""
         r = self._proxy if use_proxy else self._direct
         now = time.time()
         r.last_used = now
@@ -127,9 +114,7 @@ class ProxySelector:
         self._save()
 
     def _save(self) -> None:
-        """原子持久化。"""
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 "proxy": {
                     "n_success": self._proxy.n_success,
@@ -152,14 +137,11 @@ class ProxySelector:
                     "n_calls": self._direct.n_calls,
                 },
             }
-            tmp = self._path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            os.replace(str(tmp), str(self._path))
+            atomic_write_text(self._path, json.dumps(data, indent=2))
         except Exception as e:
             logger.warning("ProxySelector save failed: %s", e)
 
     def _load(self) -> None:
-        """加载持久化记录。"""
         if not self._path.exists():
             return
         try:

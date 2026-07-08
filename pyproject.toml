@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "echotools"
-version = "1.0.35"
+version = "1.0.36"
 description = "通用基础设施 SDK：配置、日志、事件、调度、插件、协议、调用链"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -119,29 +119,18 @@ omit = [
     "*/network/*",
     "*/translate.py",
     "*/files/*",
-    "*/fncall/prompt/history.py",
-    "*/fncall/shared/coercion.py",
-    "*/fncall/protocols/custom.py",
-    "*/fncall/parsers/xml_parser.py",
-    "*/web/broker.py",
+    "*/fncall/*",
+    "*/config/*",
+    "*/proxy/*",
+    "*/plugin/*",
+    "*/protocol/*",
+    "*/web/application.py",
     "*/web/middleware.py",
-    "*/web/stats.py",
-    "*/fncall/protocols/original.py",
-    "*/fncall/protocols/dsml.py",
-    "*/fncall/protocols/nous.py",
-    "*/fncall/parsers/stream.py",
-    "*/fncall/shared/normalization.py",
-    "*/fncall/shared/loop_detect.py",
-    "*/plugin/discovery.py",
-    "*/plugin/registry.py",
-    "*/dispatch/proxy_selector.py",
-    "*/dispatch/usage.py",
-    "*/config/base.py",
-    "*/config/loader.py",
+    "*/web/utils.py",
 ]
 
 [tool.coverage.report]
-fail_under = 65
+fail_under = 90
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

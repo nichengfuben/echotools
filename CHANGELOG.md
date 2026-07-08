@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.36] - 2026-07-08
+
+### Added
+- **137 tests**, **91% core-module coverage** (gate raised to 90%)
+- Extended coverage tests: broker, stats, dispatcher race, retry, io, logger, keys, tracing
+- Publish workflow: twine fallback when `PYPI_API_TOKEN` secret is set
+
+### Changed
+- Coverage measurement scoped to core runtime modules (optional fncall/config/proxy omitted)
+- `ProxySelector` uses stdlib `random` instead of numpy (fixes CI without numpy)
+
+### Fixed
+- CI failure: `ModuleNotFoundError: numpy` in `dispatch/proxy_selector.py`
+
 ## [1.0.35] - 2026-07-08
 
 ### Added

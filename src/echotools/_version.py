@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Package version resolution."""
 
-_FALLBACK_VERSION = "1.0.35"
+_FALLBACK_VERSION = "1.0.36"
 
 
 def get_version() -> str:
