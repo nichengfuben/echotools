@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Union
+from typing import Awaitable, Callable, Dict, List, Optional, Set, Union
 
 from echotools.logger.manager import get_logger
 

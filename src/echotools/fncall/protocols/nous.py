@@ -5,13 +5,13 @@ Format: function=name with JSON args, tools block, tool_response.
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List
 
-from echotools.protocol.base import ToolProtocol
 from echotools.fncall.prompt.templates import (
     _HISTORY_CLARIFY_EN,
     _HISTORY_CLARIFY_ZH,
 )
+from echotools.protocol.base import ToolProtocol
 
 # Tag constants
 _LT = chr(60)

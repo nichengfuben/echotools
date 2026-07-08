@@ -6,7 +6,6 @@ from typing import Optional
 
 from echotools.errors.base import EchoError
 from echotools.errors.common import (
-    NetworkError,
     NotSupportedError,
     TimeoutError,
     ValidationError,

@@ -146,30 +146,36 @@ class TaskDispatcher:
             c: TaskCandidate,
             q: "asyncio.Queue[Any]",
             ev: asyncio.Event,
+            wake: asyncio.Event,
         ) -> None:
             try:
                 async for ch in executor(c):
                     if ev.is_set():
                         break
                     await q.put(("chunk", idx, ch))
+                    wake.set()
                 await q.put(("done", idx, None))
+                wake.set()
             except asyncio.CancelledError:
                 try:
                     await q.put(("cancel", idx, None))
+                    wake.set()
                 except Exception:
                     pass
             except Exception as e:
                 try:
                     await q.put(("err", idx, str(e)))
+                    wake.set()
                 except Exception:
                     pass
 
-        for i, c in enumerate(cands):
+        wake = asyncio.Event()
+        for idx, c in enumerate(cands):
             q: "asyncio.Queue[Any]" = asyncio.Queue()
             ev = asyncio.Event()
-            task = asyncio.ensure_future(_worker(i, c, q, ev))
+            task = asyncio.ensure_future(_worker(idx, c, q, ev, wake))
             infos.append({
-                "idx": i,
+                "idx": idx,
                 "cand": c,
                 "q": q,
                 "ev": ev,
@@ -186,55 +192,62 @@ class TaskDispatcher:
 
         winner: Optional[Dict[str, Any]] = None
         try:
-            # 等待首个达到 min_tok 的候选
             while winner is None:
-                if all(i["done"] or i["err"] for i in infos):
+                if all(info["done"] or info["err"] for info in infos):
                     break
                 for info in infos:
                     if info["done"] or info["err"]:
                         continue
-                    try:
-                        tp, _, data = info["q"].get_nowait()
-                    except asyncio.QueueEmpty:
-                        continue
-                    if tp == "chunk":
-                        info["buf"].append(data)
-                        if isinstance(data, str):
-                            info["tok"] += 1
-                            info["ct"] += len(data) // 3
-                            if info["ft"] is None:
-                                info["ft"] = time.monotonic()
-                        elif isinstance(data, dict) and "usage" in data:
-                            info["ct"] = data["usage"].get("completion_tokens", info["ct"])
-                        if info["tok"] >= min_tok:
-                            winner = info
+                    while True:
+                        try:
+                            tp, _, data = info["q"].get_nowait()
+                        except asyncio.QueueEmpty:
                             break
-                    elif tp == "done":
-                        info["done"] = True
-                    elif tp in ("err", "cancel"):
-                        info["err"] = True
-                        if data:
-                            info["err_msg"] = str(data)
+                        if tp == "chunk":
+                            info["buf"].append(data)
+                            if isinstance(data, str):
+                                info["tok"] += 1
+                                info["ct"] += len(data) // 3
+                                if info["ft"] is None:
+                                    info["ft"] = time.monotonic()
+                            elif isinstance(data, dict) and "usage" in data:
+                                info["ct"] = data["usage"].get(
+                                    "completion_tokens", info["ct"]
+                                )
+                            if info["tok"] >= min_tok:
+                                winner = info
+                                break
+                        elif tp == "done":
+                            info["done"] = True
+                        elif tp in ("err", "cancel"):
+                            info["err"] = True
+                            if data:
+                                info["err_msg"] = str(data)
+                    if winner is not None:
+                        break
                 if winner is None:
-                    await asyncio.sleep(0.02)
+                    if all(info["done"] or info["err"] for info in infos):
+                        break
+                    wake.clear()
+                    await wake.wait()
 
             # 无胜者：选择产出最多的
             if winner is None:
-                valid = [i for i in infos if i["buf"] and not i["err"]]
+                valid = [info for info in infos if info["buf"] and not info["err"]]
                 if valid:
                     winner = max(valid, key=lambda x: x["tok"])
                 else:
-                    for i in infos:
-                        await self._rec(i, False)
+                    for info in infos:
+                        await self._rec(info, False)
                     raise NoCandidateError("All race candidates failed")
 
             # 取消败者，记录部分成功
-            for i in infos:
-                if i is not winner:
-                    i["ev"].set()
-                    if not i["task"].done():
-                        i["task"].cancel()
-                    await self._rec(i, i["tok"] > 0)
+            for info in infos:
+                if info is not winner:
+                    info["ev"].set()
+                    if not info["task"].done():
+                        info["task"].cancel()
+                    await self._rec(info, info["tok"] > 0)
 
             # 产出胜者缓冲
             for ch in winner["buf"]:
@@ -264,10 +277,10 @@ class TaskDispatcher:
         except NoCandidateError:
             raise
         except Exception:
-            for i in infos:
-                i["ev"].set()
-                if not i["task"].done():
-                    i["task"].cancel()
+            for info in infos:
+                info["ev"].set()
+                if not info["task"].done():
+                    info["task"].cancel()
             raise
 
     async def _rec(self, info: Dict[str, Any], ok: bool) -> None:

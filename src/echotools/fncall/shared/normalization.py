@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, List
 
 _LT = chr(60)
 _GT = chr(62)

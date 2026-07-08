@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import re
 import ssl
-from typing import Any, Dict, List, Optional, Pattern, Tuple
+from typing import Any, Dict, List, Optional, Pattern
 
 from echotools.logger.manager import get_logger
 
@@ -217,7 +217,6 @@ class ProxyManager:
         支持 HTTP/HTTPS/SOCKS5 等协议。SOCKS 需要 aiohttp-socks 库。
         """
         try:
-            import aiohttp as _a  # type: ignore[import]
             from aiohttp import ClientSession  # type: ignore[import]
         except ImportError:
             return

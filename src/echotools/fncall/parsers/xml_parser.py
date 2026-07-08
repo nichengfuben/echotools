@@ -10,9 +10,11 @@ import re
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from echotools.fncall.shared.coercion import _build_param_schema_index, _coerce_param_value
+from echotools.fncall.shared.coercion import (
+    _build_param_schema_index,
+    _coerce_param_value,
+)
 from echotools.fncall.shared.xml_helpers import (
-    _CDATA_RE,
     _PROVIDER_BLOCK_RE,
     _PROVIDER_INVOKE_RE,
     _PROVIDER_PARAM_RE,

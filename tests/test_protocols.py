@@ -4,11 +4,11 @@ from echotools.fncall import get_protocol, inject_fncall
 
 
 def test_xml_protocol_parse() -> None:
-    """xml 协议解析工具调用。"""
+    """antml 协议解析工具调用。"""
     proto = get_protocol("antml")
     text = (
-        '<function_calls><invoke name="f">'
-        '<parameters>{"x":1}</parameters></invoke></function_calls>'
+        '<antml:function_calls><antml:invoke name="f">'
+        '<antml:parameters>{"x":1}</antml:parameters></antml:invoke></antml:function_calls>'
     )
     clean, calls = proto.parse(text)
     assert calls

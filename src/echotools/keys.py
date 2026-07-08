@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from typing import List, Optional, TypeVar, Generic
+from dataclasses import dataclass
+from typing import Generic, List, Optional, TypeVar
 
 T = TypeVar('T')
 

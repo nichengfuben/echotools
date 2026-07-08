@@ -10,14 +10,16 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from echotools.protocol.base import ToolProtocol
 from echotools.fncall.prompt.templates import (
     _HISTORY_CLARIFY_EN,
     _HISTORY_CLARIFY_ZH,
 )
-from echotools.fncall.shared.coercion import _build_param_schema_index, _coerce_param_value
-from echotools.fncall.shared.normalization import format_tool_descs
+from echotools.fncall.shared.coercion import (
+    _build_param_schema_index,
+    _coerce_param_value,
+)
 from echotools.logger.manager import get_logger
+from echotools.protocol.base import ToolProtocol
 
 logger = get_logger(__name__)
 

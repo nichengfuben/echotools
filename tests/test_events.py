@@ -33,3 +33,24 @@ def test_publish_sync() -> None:
     bus.subscribe(Ping, lambda e: got.append(e.msg))  # type: ignore[attr-defined]
     bus.publish_sync(Ping(msg="x"))
     assert got == ["x"]
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe() -> None:
+    bus = EventBus()
+    got = []
+
+    async def handler(e: Event) -> None:
+        got.append(e.msg)  # type: ignore[attr-defined]
+
+    bus.subscribe(Ping, handler)
+    bus.unsubscribe(Ping, handler)
+    await bus.publish(Ping(msg="nope"))
+    assert got == []
+
+
+def test_clear_subscribers() -> None:
+    bus = EventBus()
+    bus.subscribe(Ping, lambda e: None)
+    bus.clear()
+    bus.publish_sync(Ping(msg="x"))

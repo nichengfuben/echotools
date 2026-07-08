@@ -12,15 +12,18 @@ from __future__ import annotations
 汤普森采样的期望选择 = 后验均值 + 与后验方差成比例的探索奖励
 """
 
+import asyncio
+import atexit
 import json
 import math
-import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from echotools.dispatch.candidate import TaskCandidate
+from echotools.io.io_utils import atomic_write_text
 from echotools.logger.manager import get_logger
 
 __all__ = ["AdaptiveSelector", "TASRecord"]
@@ -155,28 +158,64 @@ class AdaptiveSelector:
         self,
         persist_dir: str = "persist/dispatch",
         group_attr: str = "group",
+        *,
+        flush_debounce: float = 1.0,
     ) -> None:
         self._pool: Dict[str, TASRecord] = {}
         self._persist_dir = Path(persist_dir)
         self._ga = group_attr
+        self._dirty: Set[str] = set()
+        self._flush_debounce = flush_debounce
+        self._flush_task: Optional[asyncio.Task[None]] = None
         self._load()
+        atexit.register(self._flush_dirty_sync)
 
     def _load(self) -> None:
         if not self._persist_dir.exists():
             self._persist_dir.mkdir(parents=True, exist_ok=True)
             return
+        files = [
+            f
+            for f in self._persist_dir.glob("*.json")
+            if not f.name.startswith("_")
+        ]
+        if not files:
+            return
+        if len(files) > 50:
+            loaded = self._load_parallel(files)
+            self._pool.update(loaded)
+            logger.debug("Loaded %d records (parallel)", len(loaded))
+            return
         count = 0
-        for f in self._persist_dir.glob("*.json"):
-            if f.name.startswith("_"):
-                continue
-            try:
-                data = json.loads(f.read_text(encoding="utf-8"))
-                self._pool[f.stem] = TASRecord.from_dict(data)
+        for f in files:
+            record = self._read_record_file(f)
+            if record is not None:
+                self._pool[f.stem] = record
                 count += 1
-            except Exception:
-                pass
         if count:
             logger.debug("Loaded %d records", count)
+
+    @staticmethod
+    def _read_record_file(path: Path) -> Optional[TASRecord]:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return TASRecord.from_dict(data)
+        except Exception:
+            return None
+
+    def _load_parallel(self, files: List[Path]) -> Dict[str, TASRecord]:
+        pool: Dict[str, TASRecord] = {}
+        with ThreadPoolExecutor() as executor:
+            results: List[Tuple[Path, Optional[TASRecord]]] = list(
+                executor.map(
+                    lambda f: (f, self._read_record_file(f)),
+                    files,
+                )
+            )
+        for path, record in results:
+            if record is not None:
+                pool[path.stem] = record
+        return pool
 
     def _ensure(self, key: str, group: str = "") -> TASRecord:
         if key not in self._pool:
@@ -184,13 +223,45 @@ class AdaptiveSelector:
         return self._pool[key]
 
     def _save_record(self, key: str, r: TASRecord) -> None:
-        f = self._persist_dir / "{}.json".format(key)
-        tmp = str(f) + ".tmp"
+        f = self._persist_dir / f"{key}.json"
         try:
-            Path(tmp).write_text(json.dumps(r.to_dict(), indent=2), encoding="utf-8")
-            os.replace(tmp, str(f))
+            atomic_write_text(f, json.dumps(r.to_dict(), indent=2))
         except Exception as e:
             logger.warning("Save record [%s] failed: %s", key, e)
+
+    def _schedule_flush(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._flush_dirty_sync()
+            return
+        if self._flush_task is not None and not self._flush_task.done():
+            return
+        self._flush_task = loop.create_task(self._debounced_flush())
+
+    async def _debounced_flush(self) -> None:
+        await asyncio.sleep(self._flush_debounce)
+        self._flush_dirty_sync()
+
+    def _flush_dirty_sync(self) -> None:
+        if not self._dirty:
+            return
+        dirty = list(self._dirty)
+        self._dirty.clear()
+        for cid in dirty:
+            record = self._pool.get(cid)
+            if record is not None:
+                self._save_record(cid, record)
+
+    async def flush(self) -> None:
+        """Immediately persist all pending records."""
+        if self._flush_task is not None and not self._flush_task.done():
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+        self._flush_dirty_sync()
 
     def _is_cooling(self, cid: str) -> bool:
         r = self._pool.get(cid)
@@ -320,7 +391,8 @@ class AdaptiveSelector:
             r.n_fails += 1
             r.error_time = now
 
-        self._save_record(cid, r)
+        self._dirty.add(cid)
+        self._schedule_flush()
 
     async def get_stats(self) -> Dict[str, Any]:
         return {k: v.to_dict() for k, v in self._pool.items()}

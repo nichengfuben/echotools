@@ -1,16 +1,37 @@
 from __future__ import annotations
 
-"""web 模块导出。"""
+"""Web module exports."""
 
-from echotools.web.application import WebApplication
-from echotools.web.utils import clean_fncall, json_body, safe_flush
+from typing import Any
+
 from echotools.web.stats import RequestStats, get_stats
-from echotools.web.broker import RequestBroker, request_broker
-from echotools.web.middleware import create_stats_middleware
+from echotools.web.utils import clean_fncall, json_body, safe_flush
 
 __all__ = [
-    "WebApplication", "json_body", "safe_flush", "clean_fncall",
-    "RequestStats", "get_stats",
-    "RequestBroker", "request_broker",
+    "WebApplication",
+    "json_body",
+    "safe_flush",
+    "clean_fncall",
+    "RequestStats",
+    "get_stats",
+    "RequestBroker",
+    "request_broker",
     "create_stats_middleware",
 ]
+
+_LAZY_EXPORTS = {
+    "WebApplication": ("echotools.web.application", "WebApplication"),
+    "RequestBroker": ("echotools.web.broker", "RequestBroker"),
+    "request_broker": ("echotools.web.broker", "request_broker"),
+    "create_stats_middleware": ("echotools.web.middleware", "create_stats_middleware"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_EXPORTS:
+        module_path, attr = _LAZY_EXPORTS[name]
+        import importlib
+
+        module = importlib.import_module(module_path)
+        return getattr(module, attr)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

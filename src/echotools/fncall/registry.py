@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
-from echotools.protocol.base import (
-    ToolProtocol,
-    _PROTOCOL_REGISTRY,
-    get_protocol_by_id,
-    register_protocol,
-)
 from echotools.logger.manager import get_logger
+from echotools.protocol.base import (
+    _PROTOCOL_REGISTRY,
+    ToolProtocol,
+    get_protocol_by_id,
+)
 
 __all__ = ["get_protocol", "list_protocols"]
 

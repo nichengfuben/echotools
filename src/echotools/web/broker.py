@@ -1,12 +1,14 @@
-"""请求日志存储 + WebSocket 广播。"""
+"""Request log storage and WebSocket broadcast."""
+
+from __future__ import annotations
 
 import asyncio
 import json
-import time
 from collections import deque
-from typing import Any, Deque, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any, Deque, Dict, Optional, Set
 
-import aiohttp.web
+if TYPE_CHECKING:
+    from aiohttp import web as aiohttp_web
 
 __all__ = ["RequestBroker", "request_broker"]
 
@@ -14,14 +16,13 @@ MAX_BUFFER = 100
 
 
 class RequestBroker:
-    """请求事件广播器 + 环形缓冲。"""
+    """Request event broadcaster with ring buffer."""
 
     def __init__(self) -> None:
-        self._sockets: Set[aiohttp.web.WebSocketResponse] = set()
+        self._sockets: Set[Any] = set()
         self._lock = asyncio.Lock()
         self._buffer: Deque[Dict[str, Any]] = deque(maxlen=MAX_BUFFER)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
-        # Track in-progress requests: id -> accumulated data
         self._active: Dict[str, Dict[str, Any]] = {}
 
     def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -31,15 +32,15 @@ class RequestBroker:
     def has_listeners(self) -> bool:
         return bool(self._sockets)
 
-    async def register(self, ws: aiohttp.web.WebSocketResponse) -> None:
+    async def register(self, ws: "aiohttp_web.WebSocketResponse") -> None:
         async with self._lock:
             self._sockets.add(ws)
 
-    async def unregister(self, ws: aiohttp.web.WebSocketResponse) -> None:
+    async def unregister(self, ws: "aiohttp_web.WebSocketResponse") -> None:
         async with self._lock:
             self._sockets.discard(ws)
 
-    async def send_history(self, ws: aiohttp.web.WebSocketResponse) -> int:
+    async def send_history(self, ws: "aiohttp_web.WebSocketResponse") -> int:
         async with self._lock:
             history = list(self._buffer)
             count = 0
@@ -49,7 +50,6 @@ class RequestBroker:
                     count += 1
                 except Exception:
                     break
-            # Also send active requests
             for req_id, data in self._active.items():
                 try:
                     await ws.send_json({"type": "request_start", **data})
@@ -59,7 +59,6 @@ class RequestBroker:
             return count
 
     async def broadcast(self, payload: Dict[str, Any]) -> None:
-        # Store completed requests in buffer
         if payload.get("type") == "request_end":
             self._buffer.append(payload)
             req_id = payload.get("id", "")
@@ -72,7 +71,7 @@ class RequestBroker:
             return
 
         message = json.dumps(payload, ensure_ascii=False)
-        stale: Set[aiohttp.web.WebSocketResponse] = set()
+        stale: Set[Any] = set()
         async with self._lock:
             for ws in self._sockets:
                 try:

@@ -1,48 +1,61 @@
 from __future__ import annotations
 
-"""请求统计中间件 — 自动记录每次 API 请求的指标 + 请求日志广播。"""
+"""Request stats middleware with API metrics and request log broadcast."""
 
 import json
 import time
 import uuid
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple
 
-import aiohttp.web
-
-from echotools.web.stats import RequestStats
 from echotools.web.broker import RequestBroker
+from echotools.web.stats import RequestStats
+
+if TYPE_CHECKING:
+    from aiohttp import web as aiohttp_web
 
 __all__ = ["create_stats_middleware"]
 
-
-_DEFAULT_API_PREFIXES = ("/v1/chat/", "/v1/completions", "/v1/messages", "/v1/models", "/v1/embeddings")
+_DEFAULT_API_PREFIXES = (
+    "/v1/chat/",
+    "/v1/completions",
+    "/v1/messages",
+    "/v1/models",
+    "/v1/embeddings",
+)
 
 
 def create_stats_middleware(
     stats: RequestStats,
     broker: RequestBroker,
-    api_prefixes: tuple = _DEFAULT_API_PREFIXES,
-):
-    """创建请求统计中间件（依赖注入）。
+    api_prefixes: Tuple[str, ...] = _DEFAULT_API_PREFIXES,
+) -> Any:
+    """Create request stats middleware (dependency injection).
 
     Args:
-        stats: RequestStats 实例
-        broker: RequestBroker 实例
-        api_prefixes: 需要统计的 API 路径前缀
+        stats: RequestStats instance.
+        broker: RequestBroker instance.
+        api_prefixes: API path prefixes to track.
+
+    Raises:
+        ImportError: aiohttp is not installed.
     """
+    try:
+        import aiohttp.web
+    except ImportError as exc:
+        raise ImportError(
+            "create_stats_middleware requires aiohttp: pip install echotools[http]"
+        ) from exc
 
     @aiohttp.web.middleware
     async def stats_middleware(
-        request: aiohttp.web.Request,
+        request: "aiohttp_web.Request",
         handler: Callable,
-    ) -> aiohttp.web.StreamResponse:
-        """记录 API 请求统计 + 广播请求事件。"""
+    ) -> "aiohttp_web.StreamResponse":
         path = request.path
 
         if not any(path.startswith(p) for p in api_prefixes):
             return await handler(request)
 
-        # Only capture POST requests (skip GET /v1/models etc.)
         if request.method != "POST":
             return await handler(request)
 
@@ -51,7 +64,7 @@ def create_stats_middleware(
         platform = ""
         model = ""
         req_id = uuid.uuid4().hex[:16]
-        body_info = {}
+        body_info: Dict[str, Any] = {}
 
         try:
             if request.content_type == "application/json":
@@ -59,7 +72,6 @@ def create_stats_middleware(
                     body = await request.json()
                     model = body.get("model", "")
                     messages = body.get("messages", [])
-                    # Truncate messages for display (keep first 500 chars per message)
                     display_messages = []
                     for msg in messages:
                         m = dict(msg)
@@ -67,7 +79,10 @@ def create_stats_middleware(
                         if isinstance(content, str) and len(content) > 500:
                             m["content"] = content[:500] + "...(truncated)"
                         elif isinstance(content, list):
-                            m["content"] = str(content)[:500] + ("...(truncated)" if len(str(content)) > 500 else "")
+                            text = str(content)
+                            m["content"] = text[:500] + (
+                                "...(truncated)" if len(text) > 500 else ""
+                            )
                         display_messages.append(m)
                     body_info = {
                         "model": model,
@@ -81,7 +96,6 @@ def create_stats_middleware(
         except Exception:
             pass
 
-        # Broadcast request_start
         broker.push_event({
             "type": "request_start",
             "id": req_id,
@@ -89,7 +103,6 @@ def create_stats_middleware(
             **body_info,
         })
 
-        # Attach chunk collector to request for route handlers to push content
         request["_req_log_id"] = req_id
         request["_req_log_chunks"] = []
 
@@ -99,10 +112,13 @@ def create_stats_middleware(
             if hasattr(response, "_platform"):
                 platform = response._platform
 
-            # Non-streaming: capture response body
-            if not body_info.get("stream") and hasattr(response, 'body') and response.body:
+            if not body_info.get("stream") and hasattr(response, "body") and response.body:
                 try:
-                    body_bytes = response.body if isinstance(response.body, bytes) else response.body.encode("utf-8")
+                    body_bytes = (
+                        response.body
+                        if isinstance(response.body, bytes)
+                        else response.body.encode("utf-8")
+                    )
                     text = body_bytes.decode("utf-8", errors="replace")
                     resp_data = json.loads(text)
                     choices = resp_data.get("choices", [])
@@ -130,7 +146,6 @@ def create_stats_middleware(
                 status=status,
                 latency_ms=latency_ms,
             )
-            # Broadcast collected chunks
             chunks = request.get("_req_log_chunks", [])
             for chunk_text in chunks:
                 broker.push_event({
@@ -138,7 +153,6 @@ def create_stats_middleware(
                     "id": req_id,
                     "delta": chunk_text,
                 })
-            # Broadcast request_end
             broker.push_event({
                 "type": "request_end",
                 "id": req_id,

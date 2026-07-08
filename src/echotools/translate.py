@@ -63,10 +63,10 @@ def split_text_chunks(text: str, max_chunk: int = 5000) -> List[str]:
     if len(text) <= max_chunk:
         # Even short text benefits from sentence splitting for streaming
         parts = re.split(r'(?<=[.!?。！？\n])', text)
-        chunks = [p for p in parts if p]
-        if len(chunks) <= 1:
+        short_chunks = [p for p in parts if p]
+        if len(short_chunks) <= 1:
             return [text]
-        return chunks
+        return short_chunks
 
     chunks: List[str] = []
     current = ""

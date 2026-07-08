@@ -3,7 +3,7 @@ from __future__ import annotations
 """异步重试工具。"""
 
 import asyncio
-from typing import Any, AsyncGenerator, Callable, Optional, Tuple, Type, TypeVar
+from typing import Any, AsyncGenerator, Callable, Optional, Tuple, Type
 
 from echotools.logger.manager import get_logger
 

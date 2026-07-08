@@ -5,99 +5,25 @@ from __future__ import annotations
 完全项目无关，支持调用链，覆盖 Python 3.8-3.14。
 """
 
-from echotools.cache import ListCache, MemoryCache
-from echotools.config import ConfigBase, ConfigCenter
-from echotools.dispatch import (
-    AdaptiveSelector,
-    ProxyRecord,
-    ProxySelector,
-    TaskCandidate,
-    TaskDispatcher,
-    make_id,
-)
-from echotools.errors import (
-    ConfigError,
-    EchoError,
-    NetworkError,
-    NoCandidateError,
-    NotSupportedError,
-    PluginError,
-    ProtocolError,
-    TimeoutError,
-    ValidationError,
-    classify_http_error,
-)
-from echotools.events import Event, EventBus
-from echotools.files import FileUtil
-from echotools.ids import short_id, span_id, trace_id, uuid7
-from echotools.io import (
-    atomic_write_text,
-    ensure_directory,
-    read_text_if_exists,
-)
-from echotools.keys import KeyPool, KeyState
-from echotools.lifecycle import AutoUpdater, LifecycleManager
-from echotools.logger import LoggerManager, configure, get_logger, set_color
-from echotools.plugin import Plugin, PluginRegistry, discover_plugins
-from echotools.process import PortReleaseResult, ensure_port_available
-from echotools.protocol.base import (
-    ToolProtocol,
-    get_protocol_by_id,
-    list_protocols,
-    register_protocol,
-)
-from echotools.proxy import ProxyManager
-from echotools.retry import (
-    retry_async_generator,
-    retry_on_empty,
-    retry_on_exception,
-    retry_with_backoff,
-)
-from echotools.runtime import RuntimeCollector
-from echotools.scheduler import TaskScheduler
-from echotools.sdk import EchoTools
-from echotools.tracing import (
-    Span,
-    Trace,
-    Tracer,
-    get_current_span_id,
-    get_current_trace_id,
-    get_request_id,
-    set_current_span_id,
-    set_current_trace_id,
-    set_request_id,
-)
-from echotools.terminal import (
-    LocalTerminal,
-    SSHTerminal,
-    TerminalCallback,
-    TerminalSession,
-)
-from echotools.translate import (
-    extract_text_from_messages,
-    format_translation_response,
-    split_text_chunks,
-)
-from echotools.web import WebApplication, json_body, safe_flush
+import importlib
+from typing import Any
 
-__version__ = "1.0.34"
+from echotools._version import get_version
+from echotools.sdk import EchoTools
+
+__version__ = get_version()
 
 __all__ = [
     "__version__",
-    # SDK 门面
     "EchoTools",
-    # 配置
     "ConfigBase",
     "ConfigCenter",
-    # 日志
     "LoggerManager",
     "get_logger",
     "set_color",
     "configure",
-    # 事件
     "Event",
     "EventBus",
-    # 调用链
     "Tracer",
     "Trace",
     "Span",
@@ -107,41 +33,32 @@ __all__ = [
     "set_current_span_id",
     "get_request_id",
     "set_request_id",
-    # 缓存
     "ListCache",
     "MemoryCache",
-    # 调度
     "TaskCandidate",
     "make_id",
     "AdaptiveSelector",
     "TaskDispatcher",
     "TaskScheduler",
-    # 代理选择
     "ProxySelector",
     "ProxyRecord",
-    # 插件
     "Plugin",
     "PluginRegistry",
     "discover_plugins",
-    # 协议
     "ToolProtocol",
     "register_protocol",
     "get_protocol_by_id",
+    "get_protocol",
     "list_protocols",
-    # 生命周期
     "LifecycleManager",
     "AutoUpdater",
-    # 网络/代理/进程
     "ProxyManager",
     "PortReleaseResult",
     "ensure_port_available",
-    # 运行时
     "RuntimeCollector",
-    # Web
     "WebApplication",
     "json_body",
     "safe_flush",
-    # 工具
     "FileUtil",
     "uuid7",
     "short_id",
@@ -154,19 +71,19 @@ __all__ = [
     "retry_on_empty",
     "retry_on_exception",
     "retry_async_generator",
-    # Key 管理
     "KeyState",
     "KeyPool",
-    # 翻译
     "extract_text_from_messages",
     "split_text_chunks",
     "format_translation_response",
-    # 终端
     "TerminalSession",
     "TerminalCallback",
     "LocalTerminal",
     "SSHTerminal",
-    # 错误
+    "inject_fncall",
+    "FncallStreamParser",
+    "detect_tool_loop",
+    "LoopDetectionResult",
     "EchoError",
     "ConfigError",
     "ValidationError",
@@ -178,3 +95,96 @@ __all__ = [
     "ProtocolError",
     "classify_http_error",
 ]
+
+_EXPORTS: dict[str, tuple[str, str]] = {
+    "ConfigBase": ("echotools.config", "ConfigBase"),
+    "ConfigCenter": ("echotools.config", "ConfigCenter"),
+    "LoggerManager": ("echotools.logger", "LoggerManager"),
+    "get_logger": ("echotools.logger", "get_logger"),
+    "set_color": ("echotools.logger", "set_color"),
+    "configure": ("echotools.logger", "configure"),
+    "Event": ("echotools.events", "Event"),
+    "EventBus": ("echotools.events", "EventBus"),
+    "Tracer": ("echotools.tracing", "Tracer"),
+    "Trace": ("echotools.tracing", "Trace"),
+    "Span": ("echotools.tracing", "Span"),
+    "get_current_trace_id": ("echotools.tracing", "get_current_trace_id"),
+    "set_current_trace_id": ("echotools.tracing", "set_current_trace_id"),
+    "get_current_span_id": ("echotools.tracing", "get_current_span_id"),
+    "set_current_span_id": ("echotools.tracing", "set_current_span_id"),
+    "get_request_id": ("echotools.tracing", "get_request_id"),
+    "set_request_id": ("echotools.tracing", "set_request_id"),
+    "ListCache": ("echotools.cache", "ListCache"),
+    "MemoryCache": ("echotools.cache", "MemoryCache"),
+    "TaskCandidate": ("echotools.dispatch", "TaskCandidate"),
+    "make_id": ("echotools.dispatch", "make_id"),
+    "AdaptiveSelector": ("echotools.dispatch", "AdaptiveSelector"),
+    "TaskDispatcher": ("echotools.dispatch", "TaskDispatcher"),
+    "TaskScheduler": ("echotools.scheduler", "TaskScheduler"),
+    "ProxySelector": ("echotools.dispatch", "ProxySelector"),
+    "ProxyRecord": ("echotools.dispatch", "ProxyRecord"),
+    "Plugin": ("echotools.plugin", "Plugin"),
+    "PluginRegistry": ("echotools.plugin", "PluginRegistry"),
+    "discover_plugins": ("echotools.plugin", "discover_plugins"),
+    "ToolProtocol": ("echotools.protocol.base", "ToolProtocol"),
+    "register_protocol": ("echotools.protocol.base", "register_protocol"),
+    "get_protocol_by_id": ("echotools.protocol.base", "get_protocol_by_id"),
+    "get_protocol": ("echotools.fncall.registry", "get_protocol"),
+    "list_protocols": ("echotools.fncall.registry", "list_protocols"),
+    "LifecycleManager": ("echotools.lifecycle", "LifecycleManager"),
+    "AutoUpdater": ("echotools.lifecycle", "AutoUpdater"),
+    "ProxyManager": ("echotools.proxy", "ProxyManager"),
+    "PortReleaseResult": ("echotools.process", "PortReleaseResult"),
+    "ensure_port_available": ("echotools.process", "ensure_port_available"),
+    "RuntimeCollector": ("echotools.runtime", "RuntimeCollector"),
+    "WebApplication": ("echotools.web.application", "WebApplication"),
+    "json_body": ("echotools.web.utils", "json_body"),
+    "safe_flush": ("echotools.web.utils", "safe_flush"),
+    "FileUtil": ("echotools.files", "FileUtil"),
+    "uuid7": ("echotools.ids", "uuid7"),
+    "short_id": ("echotools.ids", "short_id"),
+    "trace_id": ("echotools.ids", "trace_id"),
+    "span_id": ("echotools.ids", "span_id"),
+    "atomic_write_text": ("echotools.io", "atomic_write_text"),
+    "ensure_directory": ("echotools.io", "ensure_directory"),
+    "read_text_if_exists": ("echotools.io", "read_text_if_exists"),
+    "retry_with_backoff": ("echotools.retry", "retry_with_backoff"),
+    "retry_on_empty": ("echotools.retry", "retry_on_empty"),
+    "retry_on_exception": ("echotools.retry", "retry_on_exception"),
+    "retry_async_generator": ("echotools.retry", "retry_async_generator"),
+    "KeyState": ("echotools.keys", "KeyState"),
+    "KeyPool": ("echotools.keys", "KeyPool"),
+    "extract_text_from_messages": ("echotools.translate", "extract_text_from_messages"),
+    "split_text_chunks": ("echotools.translate", "split_text_chunks"),
+    "format_translation_response": ("echotools.translate", "format_translation_response"),
+    "TerminalSession": ("echotools.terminal.session", "TerminalSession"),
+    "TerminalCallback": ("echotools.terminal.session", "TerminalCallback"),
+    "LocalTerminal": ("echotools.terminal.local", "LocalTerminal"),
+    "SSHTerminal": ("echotools.terminal.ssh", "SSHTerminal"),
+    "inject_fncall": ("echotools.fncall.prompt.inject", "inject_fncall"),
+    "FncallStreamParser": ("echotools.fncall.parsers.stream", "FncallStreamParser"),
+    "detect_tool_loop": ("echotools.fncall.shared.loop_detect", "detect_tool_loop"),
+    "LoopDetectionResult": ("echotools.fncall.shared.loop_detect", "LoopDetectionResult"),
+    "EchoError": ("echotools.errors", "EchoError"),
+    "ConfigError": ("echotools.errors", "ConfigError"),
+    "ValidationError": ("echotools.errors", "ValidationError"),
+    "NetworkError": ("echotools.errors", "NetworkError"),
+    "TimeoutError": ("echotools.errors", "TimeoutError"),
+    "NotSupportedError": ("echotools.errors", "NotSupportedError"),
+    "NoCandidateError": ("echotools.errors", "NoCandidateError"),
+    "PluginError": ("echotools.errors", "PluginError"),
+    "ProtocolError": ("echotools.errors", "ProtocolError"),
+    "classify_http_error": ("echotools.errors", "classify_http_error"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _EXPORTS:
+        module_path, attr = _EXPORTS[name]
+        module = importlib.import_module(module_path)
+        return getattr(module, attr)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

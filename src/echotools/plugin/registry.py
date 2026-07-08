@@ -275,7 +275,6 @@ class PluginRegistry:
         Returns:
             去重后的项目字典列表。
         """
-        import time
 
         out: List[Dict[str, Any]] = []
         seen: set = set()

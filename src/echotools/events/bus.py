@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections import defaultdict
-from typing import Any, Awaitable, Callable, DefaultDict, List, Type, Union
+from typing import Awaitable, Callable, DefaultDict, List, Type, Union
 
 from echotools.events.event import Event
 from echotools.logger.manager import get_logger

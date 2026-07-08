@@ -2,8 +2,8 @@ from __future__ import annotations
 
 """请求统计收集器 — 内存环形缓冲，零外部依赖。"""
 
-import time
 import threading
+import time
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 

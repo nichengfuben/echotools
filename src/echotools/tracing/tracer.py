@@ -3,7 +3,7 @@ from __future__ import annotations
 """Tracer：调用链入口，集成 contextvars。"""
 
 import contextlib
-from typing import Any, Callable, Iterator, List, Optional
+from typing import Callable, Iterator, List, Optional
 
 from echotools.tracing.context import (
     set_current_span_id,

@@ -111,6 +111,7 @@ def error_middleware(
         aiohttp middleware 工厂。
     """
     import aiohttp.web
+
     from echotools.logger.manager import get_logger
 
     _logger = get_logger(__name__)

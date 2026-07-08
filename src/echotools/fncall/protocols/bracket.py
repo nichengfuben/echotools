@@ -1,14 +1,17 @@
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Tuple
 
-from echotools.protocol.base import ToolProtocol
 from echotools.fncall.prompt.templates import (
     _HISTORY_CLARIFY_EN,
     _HISTORY_CLARIFY_ZH,
 )
-from echotools.fncall.shared.coercion import _build_param_schema_index, _coerce_param_value
-from echotools.fncall.shared.normalization import format_tool_descs
+from echotools.fncall.shared.coercion import (
+    _build_param_schema_index,
+    _coerce_param_value,
+)
+from echotools.protocol.base import ToolProtocol
+
 
 class BracketProtocol(ToolProtocol):
     @property
@@ -148,7 +151,8 @@ Tool results will be provided in a corresponding result block."""
         for tc in tool_calls:
             fn = tc.get("function", {})
             calls.append(f"[call:{fn.get('name', '')}]{fn.get('arguments', '{}')}[/call]")
-        return f"[function_calls]\n{'\n'.join(calls)}\n[/function_calls]"
+        joined = "\n".join(calls)
+        return f"[function_calls]\n{joined}\n[/function_calls]"
 
     def supports_streaming(self):
         return True

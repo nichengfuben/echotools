@@ -1,6 +1,7 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Tuple
 
 from echotools.protocol.base import ToolProtocol
+
 
 class CustomProtocol(ToolProtocol):
     """用户自定义 prompt 协议。

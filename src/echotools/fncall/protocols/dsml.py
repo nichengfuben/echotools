@@ -9,14 +9,16 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from echotools.protocol.base import ToolProtocol
 from echotools.fncall.prompt.templates import (
     _HISTORY_CLARIFY_EN,
     _HISTORY_CLARIFY_ZH,
 )
-from echotools.fncall.shared.coercion import _build_param_schema_index, _coerce_param_value
+from echotools.fncall.shared.coercion import (
+    _build_param_schema_index,
+    _coerce_param_value,
+)
 from echotools.fncall.shared.xml_helpers import escape_xml_attr
-
+from echotools.protocol.base import ToolProtocol
 
 # ---------------------------------------------------------------------------
 # DSML 协议
