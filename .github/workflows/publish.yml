@@ -25,12 +25,18 @@ jobs:
         run: python -m build
 
       - name: Publish to PyPI (token)
-        if: ${{ secrets.PYPI_API_TOKEN != '' }}
+        id: token_publish
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/* --disable-progress-bar
+        run: |
+          if [ -n "$TWINE_PASSWORD" ]; then
+            twine upload dist/* --disable-progress-bar
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish to PyPI (trusted publishing)
-        if: ${{ secrets.PYPI_API_TOKEN == '' }}
+        if: steps.token_publish.outputs.published != 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
