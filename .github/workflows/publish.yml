@@ -38,5 +38,19 @@ jobs:
           fi
 
       - name: Publish to PyPI (trusted publishing)
+        id: trusted_publish
         if: steps.token_publish.outputs.published != 'true'
+        continue-on-error: true
         uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Verify PyPI release
+        if: steps.token_publish.outputs.published != 'true' && steps.trusted_publish.outcome != 'success'
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/echotools/${VERSION}/json")
+          if [ "$CODE" = "200" ]; then
+            echo "::notice::echotools ${VERSION} already on PyPI."
+          else
+            echo "::error::Publish failed and echotools ${VERSION} not found on PyPI."
+            exit 1
+          fi
