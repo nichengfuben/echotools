@@ -1,7 +1,7 @@
-"""Anthropic ML (antml) 协议实现。
+"""Entropy ML (entml) (entml) 协议实现。
 
-使用 <antml:function_calls> 作为触发标记，
-<antml:invoke name="..."> 作为调用格式。
+使用 <entml:function_calls> 作为触发标记，
+<entml:invoke name="..."> 作为调用格式。
 """
 
 from __future__ import annotations
@@ -36,13 +36,13 @@ All functions are defined inside a `<functions>` wrapper block. Each function is
 
 When calling tools, respond with ONLY the following XML block format:
 
-<antml:function_calls>
-<antml:invoke name="tool_name">
-<antml:parameters>{"param_name": "value"}</antml:parameters>
-</antml:invoke>
-</antml:function_calls>
+<entml:function_calls>
+<entml:invoke name="tool_name">
+<entml:parameters>{"param_name": "value"}</entml:parameters>
+</entml:invoke>
+</entml:function_calls>
 
-Multiple invocations can be stacked inside one `<antml:function_calls>` block for parallel execution.
+Multiple invocations can be stacked inside one `<entml:function_calls>` block for parallel execution.
 
 ## Function Call Instructions
 
@@ -58,40 +58,40 @@ If you intend to call multiple tools and there are no dependencies between the c
 # ---------------------------------------------------------------------------
 
 _BLOCK_RE = re.compile(
-    r"<antml:function_calls\b[^>]*>([\s\S]*?)</antml:function_calls>",
+    r"<entml:function_calls\b[^>]*>([\s\S]*?)</entml:function_calls>",
     re.DOTALL,
 )
 _INVOKE_RE = re.compile(
-    r'<antml:invoke\s+name="([^"]+)">\s*([\s\S]*?)\s*</antml:invoke>',
+    r'<entml:invoke\s+name="([^"]+)">\s*([\s\S]*?)\s*</entml:invoke>',
     re.DOTALL,
 )
 _PARAM_RE = re.compile(
-    r'<antml:parameter\s+name="([^"]+)">\s*([\s\S]*?)\s*</antml:parameter>',
+    r'<entml:parameter\s+name="([^"]+)">\s*([\s\S]*?)\s*</entml:parameter>',
     re.DOTALL,
 )
 _PARAMETERS_RE = re.compile(
-    r'<antml:parameters>([\s\S]*?)</antml:parameters>',
+    r'<entml:parameters>([\s\S]*?)</entml:parameters>',
     re.DOTALL,
 )
 
 # ---------------------------------------------------------------------------
-# Antml 协议
+# Entml 协议
 # ---------------------------------------------------------------------------
 
 
-class AntmlProtocol(ToolProtocol):
-    """Anthropic ML 格式工具调用协议适配器。
+class EntmlProtocol(ToolProtocol):
+    """Entropy ML (entml) 格式工具调用协议适配器。
 
-    使用 <antml:function_calls><antml:invoke name="...">...</antml:invoke>
+    使用 <entml:function_calls><entml:invoke name="...">...</entml:invoke>
     作为触发标记和调用格式。
     """
 
     @property
     def id(self) -> str:
-        return "antml"
+        return "entml"
 
-    _TRIGGER = "<antml:function_calls>"
-    _END_TAG = "</antml:function_calls>"
+    _TRIGGER = "<entml:function_calls>"
+    _END_TAG = "</entml:function_calls>"
 
     def get_trigger_tags(self) -> List[str]:
         return [self._TRIGGER]
@@ -134,13 +134,13 @@ class AntmlProtocol(ToolProtocol):
 
         return prompt
 
-    _TRIGGER_PREFIX = "<antml:function_calls"
+    _TRIGGER_PREFIX = "<entml:function_calls"
 
     def detect_start(self, buffer: str) -> Tuple[bool, int]:
-        """检测 buffer 中是否包含 ``<antml:function_calls...>`` 触发标记。
+        """检测 buffer 中是否包含 ``<entml:function_calls...>`` 触发标记。
 
-        容忍变体（如 ``<antml:function_calls >`` 或带属性），只要前缀
-        ``<antml:function_calls`` 后跟任意字符并以 ``>`` 闭合即视为触发。
+        容忍变体（如 ``<entml:function_calls >`` 或带属性），只要前缀
+        ``<entml:function_calls`` 后跟任意字符并以 ``>`` 闭合即视为触发。
         """
         pos = buffer.find(self._TRIGGER_PREFIX)
         if pos < 0:
@@ -171,10 +171,10 @@ class AntmlProtocol(ToolProtocol):
                 name = invoke_m.group(1).strip()
                 body = invoke_m.group(2)
 
-                # Extract parameters - support both <antml:parameter> and <antml:parameters>
+                # Extract parameters - support both <entml:parameter> and <entml:parameters>
                 args: Dict[str, Any] = {}
 
-                # Try <antml:parameters>{json}</antml:parameters> format first
+                # Try <entml:parameters>{json}</entml:parameters> format first
                 params_m = _PARAMETERS_RE.search(body)
                 if params_m:
                     params_json = params_m.group(1).strip()
@@ -183,7 +183,7 @@ class AntmlProtocol(ToolProtocol):
                     except json.JSONDecodeError:
                         args = {"value": params_json}
                 else:
-                    # Try <antml:parameter name="...">value</antml:parameter> format
+                    # Try <entml:parameter name="...">value</entml:parameter> format
                     for param_m in _PARAM_RE.finditer(body):
                         pname = param_m.group(1).strip()
                         pval = param_m.group(2).strip()
@@ -220,19 +220,19 @@ class AntmlProtocol(ToolProtocol):
         fragment: str,
         tools: Optional[List[Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
-        """将已知的完整 antml 片段直接解析为 tool_calls 列表。"""
+        """将已知的完整 entml 片段直接解析为 tool_calls 列表。"""
         _, tool_calls = self.parse(fragment, tools)
         return tool_calls
 
     def clean_tags(self, content: str) -> str:
-        """从响应文本中移除 <antml:function_calls> 标签残留。"""
+        """从响应文本中移除 <entml:function_calls> 标签残留。"""
         return _BLOCK_RE.sub("", content).strip()
 
     def format_assistant_tool_calls(
         self,
         tool_calls: List[Dict[str, Any]],
     ) -> str:
-        """将 tool_call 对象列表渲染为 antml 格式。"""
+        """将 tool_call 对象列表渲染为 entml 格式。"""
         if not tool_calls:
             return ""
 
@@ -242,12 +242,12 @@ class AntmlProtocol(ToolProtocol):
             name = fn.get("name", "")
             args = fn.get("arguments", "{}")
             parts.append(
-                f'<antml:invoke name="{name}">'
-                f"<antml:parameters>{args}</antml:parameters>"
-                f"</antml:invoke>"
+                f'<entml:invoke name="{name}">'
+                f"<entml:parameters>{args}</entml:parameters>"
+                f"</entml:invoke>"
             )
-        return f"<antml:function_calls>{''.join(parts)}</antml:function_calls>"
+        return f"<entml:function_calls>{''.join(parts)}</entml:function_calls>"
 
     def supports_streaming(self) -> bool:
-        """antml 协议支持流式检测。"""
+        """entml 协议支持流式检测。"""
         return True

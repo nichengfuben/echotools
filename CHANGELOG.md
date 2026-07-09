@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.0] - 2026-07-09
+
+### Changed
+- **Breaking**: 内置 fncall 协议仅保留 `entml`；`antml`/`xml`/`bracket`/`nous`/`dsml`/`original` 移至 Provider-Fncall-Util 插件
+- `get_protocol` 默认协议改为 `entml`
+- `custom` 协议需通过 `set_custom_protocol_factory()` 由 fncall 插件注入
+
+### Added
+- `EntmlProtocol`：使用 `<entml:*>` 标签的熵标记语言协议
+
+## [2.0.0] - 2026-07-09
+
+### Changed
+- 主版本号升至 2.x，与 provider-v2 依赖对齐
+
 ## [1.0.36] - 2026-07-08
 
 ### Added

@@ -9,21 +9,16 @@ from echotools.fncall import get_protocol, inject_fncall, list_protocols
     "protocol_id,sample,expected_name",
     [
         (
-            "antml",
-            '<antml:function_calls><antml:invoke name="tool_a">'
-            '<antml:parameters>{"x":1}</antml:parameters></antml:invoke></antml:function_calls>',
+            "entml",
+            '<entml:function_calls><entml:invoke name="tool_a">'
+            '<entml:parameters>{"x":1}</entml:parameters></entml:invoke></entml:function_calls>',
             "tool_a",
         ),
         (
-            "xml",
-            '<function_calls><invoke name="tool_x">'
-            '<parameter name="x">1</parameter></invoke></function_calls>',
+            "entml",
+            '<entml:function_calls><entml:invoke name="tool_x">'
+            '<entml:parameter name="x">1</entml:parameter></entml:invoke></entml:function_calls>',
             "tool_x",
-        ),
-        (
-            "bracket",
-            "[function_calls][call:tool_b]{\"y\":2}[/call][/function_calls]",
-            "tool_b",
         ),
     ],
 )
@@ -35,23 +30,21 @@ def test_protocol_parse(protocol_id: str, sample: str, expected_name: str) -> No
 
 
 def test_list_protocols_includes_builtins() -> None:
-    ids = list_protocols()
-    for expected in ("xml", "antml", "original", "bracket", "nous", "dsml"):
-        assert expected in ids
+    assert list_protocols() == ["entml"]
 
 
-def test_custom_protocol_lazy_create() -> None:
-    proto = get_protocol("custom", custom_prompt_en="Use tools")
-    assert proto.id == "custom"
+def test_custom_protocol_requires_plugin() -> None:
+    with pytest.raises(ValueError, match="Provider-Fncall-Util"):
+        get_protocol("custom", custom_prompt_en="Use tools")
 
 
 def test_get_protocol_platform_mapping() -> None:
-    proto = get_protocol(platform_id="p1", mapping={"p1": "xml"})
-    assert proto.id == "xml"
+    proto = get_protocol(platform_id="p1", mapping={"p1": "entml"})
+    assert proto.id == "entml"
 
 
 def test_inject_with_tools_and_dump(tmp_path) -> None:
-    proto = get_protocol("xml")
+    proto = get_protocol("entml")
     tools = [
         {
             "type": "function",

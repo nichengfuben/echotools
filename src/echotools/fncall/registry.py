@@ -20,19 +20,28 @@ _registered = False
 _mapping_logged: set = set()
 
 
+_custom_factory = None
+
+
+def set_custom_protocol_factory(factory) -> None:
+    """由 Provider-Fncall-Util 等插件注入 custom 协议工厂。"""
+    global _custom_factory
+    _custom_factory = factory
+
+
 def _get_custom_protocol(
     prompt_en: str = "", prompt_zh: str = ""
 ) -> ToolProtocol:
-    """获取或创建 custom 协议。"""
+    """获取或创建 custom 协议（由 fncall 插件提供）。"""
     global _custom_instance
     if _custom_instance is not None:
         return _custom_instance
-    from echotools.fncall.protocols.custom import CustomProtocol
-
-    _custom_instance = CustomProtocol(
-        prompt_en=prompt_en, prompt_zh=prompt_zh
+    if _custom_factory is not None:
+        _custom_instance = _custom_factory(prompt_en, prompt_zh)
+        return _custom_instance
+    raise ValueError(
+        "custom 协议需要 Provider-Fncall-Util 插件；请安装并启用 fncall 插件"
     )
-    return _custom_instance
 
 
 def _ensure_registered() -> None:
@@ -49,7 +58,7 @@ def _ensure_registered() -> None:
 def get_protocol(
     protocol_id: str = "",
     *,
-    default_protocol: str = "xml",
+    default_protocol: str = "entml",
     custom_prompt_en: str = "",
     custom_prompt_zh: str = "",
     platform_id: str = "",

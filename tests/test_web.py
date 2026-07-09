@@ -12,7 +12,7 @@ def test_json_body_roundtrip() -> None:
 def test_safe_flush_splits_buffer() -> None:
     from echotools.fncall import get_protocol
 
-    proto = get_protocol("xml")
+    proto = get_protocol("entml")
     flushed_safe, flushed_remain = safe_flush("hello", proto)
     assert flushed_safe == "hello"
     assert flushed_remain == ""
@@ -42,7 +42,7 @@ def test_clean_fncall() -> None:
     from echotools.fncall import get_protocol
     from echotools.web.utils import clean_fncall
 
-    proto = get_protocol("antml")
-    text = '<antml:function_calls></antml:function_calls>hello'
+    proto = get_protocol("entml")
+    text = '<entml:function_calls></entml:function_calls>hello'
     cleaned = clean_fncall(text, proto)
     assert "hello" in cleaned

@@ -18,12 +18,7 @@ __all__ = [
 logger = get_logger(__name__)
 
 VALID_PROTOCOL_IDS = (
-    "xml",
-    "antml",
-    "original",
-    "bracket",
-    "nous",
-    "dsml",
+    "entml",
     "custom",
 )
 
