@@ -196,6 +196,7 @@ class SSHTerminal(TerminalSession):
         loop = asyncio.get_event_loop()
         try:
             while self.alive and self._ssh_channel is not None:
+                await self._wait_if_output_paused()
                 data = await loop.run_in_executor(None, self._read_ssh_chunk)
                 if data is None:
                     break

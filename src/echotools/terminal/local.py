@@ -136,23 +136,47 @@ class LocalTerminal(TerminalSession):
 
     async def write(self, data: str) -> None:
         """Write input data to the terminal process."""
+        if not data:
+            return
         try:
-            if self._conpty is not None:
-                await self._conpty.write(data)
-            elif self._async_process is not None and self._async_process.stdin is not None:
-                encoded = data.encode("utf-8")
-                self._async_process.stdin.write(encoded)
-                await self._async_process.stdin.drain()
-            elif self._fd is not None:
-                encoded = data.encode("utf-8")
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, os.write, self._fd, encoded)
-            elif self._process is not None and self._process.stdin is not None:
-                encoded = data.encode("utf-8")
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, self._write_stdin_sync, encoded)
+            if sys.platform == "darwin" and self._needs_chunked_write(data):
+                await self._write_chunked(data)
+                return
+            await self._write_raw(data)
         except Exception:
             logger.debug("write failed (session %s)", self.session_id, exc_info=True)
+
+    @staticmethod
+    def _needs_chunked_write(data: str) -> bool:
+        if len(data.encode("utf-8")) <= 512:
+            return False
+        return "\n" in data or "\r" in data
+
+    async def _write_chunked(self, data: str) -> None:
+        """macOS cooked-mode PTY: chunk multiline paste to avoid ~1KB corruption."""
+        encoded = data.encode("utf-8")
+        chunk_size = 512
+        for offset in range(0, len(encoded), chunk_size):
+            piece = encoded[offset : offset + chunk_size].decode("utf-8", errors="replace")
+            await self._write_raw(piece)
+            if offset + chunk_size < len(encoded):
+                await asyncio.sleep(0.005)
+
+    async def _write_raw(self, data: str) -> None:
+        if self._conpty is not None:
+            await self._conpty.write(data)
+        elif self._async_process is not None and self._async_process.stdin is not None:
+            encoded = data.encode("utf-8")
+            self._async_process.stdin.write(encoded)
+            await self._async_process.stdin.drain()
+        elif self._fd is not None:
+            encoded = data.encode("utf-8")
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, os.write, self._fd, encoded)
+        elif self._process is not None and self._process.stdin is not None:
+            encoded = data.encode("utf-8")
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._write_stdin_sync, encoded)
 
     async def resize(self, cols: int, rows: int) -> None:
         """Resize the terminal.
@@ -488,6 +512,7 @@ class LocalTerminal(TerminalSession):
             return
         try:
             while self.alive and handle.is_alive:
+                await self._wait_if_output_paused()
                 text = await handle.read()
                 if text is None:
                     # Check if still alive -- may have exited cleanly.
@@ -563,6 +588,7 @@ class LocalTerminal(TerminalSession):
             return
         try:
             while self.alive and proc.returncode is None:
+                await self._wait_if_output_paused()
                 try:
                     data = await asyncio.wait_for(proc.stdout.read(4096), timeout=0.5)
                 except asyncio.TimeoutError:
@@ -676,11 +702,59 @@ class LocalTerminal(TerminalSession):
         logger.debug("Unix PTY terminal started (pid=%s, shell=%s)", proc.pid, shell_path)
         return True
 
+    async def _start_unix_pty_command(
+        self,
+        command: List[str],
+        cols: int,
+        rows: int,
+    ) -> bool:
+        """Start an arbitrary command attached to a Unix PTY."""
+        loop = asyncio.get_event_loop()
+
+        def _spawn() -> tuple[int, subprocess.Popen[bytes], str]:
+            import pty
+
+            master_fd, slave_fd = pty.openpty()
+            env = os.environ.copy()
+            env["TERM"] = "xterm-256color"
+            env["COLUMNS"] = str(cols)
+            env["LINES"] = str(rows)
+            try:
+                proc = subprocess.Popen(
+                    command,
+                    stdin=slave_fd,
+                    stdout=slave_fd,
+                    stderr=slave_fd,
+                    env=env,
+                    preexec_fn=os.setsid,
+                    bufsize=0,
+                )
+            finally:
+                os.close(slave_fd)
+            return master_fd, proc, " ".join(command)
+
+        try:
+            master_fd, proc, label = await loop.run_in_executor(None, _spawn)
+        except Exception as exc:
+            await self._fire_error(f"Failed to start PTY command: {exc}")
+            return False
+
+        self._fd = master_fd
+        self._process = proc
+        self._pid = proc.pid
+        self.alive = True
+        self._set_pty_size(cols, rows)
+        self._reader_task = loop.create_task(self._read_pty())
+        await self._start_subprocess_monitor()
+        logger.debug("Unix PTY command started (pid=%s, cmd=%s)", proc.pid, label)
+        return True
+
     async def _read_pty(self) -> None:
         """Read from pty master fd and fire output callbacks."""
         loop = asyncio.get_event_loop()
         try:
             while self.alive and self._fd is not None:
+                await self._wait_if_output_paused()
                 data = await loop.run_in_executor(None, self._read_pty_chunk)
                 if data is None:
                     break

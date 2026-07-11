@@ -11,7 +11,7 @@ from echotools.protocol.base import (
     get_protocol_by_id,
 )
 
-__all__ = ["get_protocol", "list_protocols"]
+__all__ = ["get_protocol", "list_protocols", "set_custom_protocol_factory", "clear_custom_protocol_factory"]
 
 logger = get_logger(__name__)
 
@@ -27,6 +27,13 @@ def set_custom_protocol_factory(factory) -> None:
     """由 Provider-Fncall-Util 等插件注入 custom 协议工厂。"""
     global _custom_factory
     _custom_factory = factory
+
+
+def clear_custom_protocol_factory() -> None:
+    """清除 custom 协议工厂与缓存实例（插件 on_unload 时调用）。"""
+    global _custom_factory, _custom_instance
+    _custom_factory = None
+    _custom_instance = None
 
 
 def _get_custom_protocol(

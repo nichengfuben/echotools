@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.0] - 2026-07-10
+
+### Added
+- **PrintStream**: 动态速度打印流系统，提供有序队列管理和自适应输出速度控制
+  - `PrintStream` 类：支持可配置的最小/最大速度、衰减因子和平滑因子
+  - `print_stream()`: 替代内置 `print()` 的动态速度输出函数
+  - `configure_print_stream()`: 配置打印流参数
+  - `set_print_speed()`: 动态调整打印速度范围
+  - `flush_print_stream()`: 立即输出所有缓冲内容
+  - 状态查询函数：`get_buffer_size()`, `get_queue_length()`, `is_print_stream_running()`
+  - 自动清理：程序退出时自动刷新和停止打印流
+
 ## [2.1.0] - 2026-07-09
 
 ### Changed

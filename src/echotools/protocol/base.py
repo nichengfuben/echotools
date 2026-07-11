@@ -10,6 +10,7 @@ from echotools.logger.manager import get_logger
 __all__ = [
     "ToolProtocol",
     "register_protocol",
+    "unregister_protocol",
     "get_protocol_by_id",
     "list_protocols",
     "VALID_PROTOCOL_IDS",
@@ -102,6 +103,15 @@ def register_protocol(protocol: ToolProtocol) -> None:
     """注册协议实现。"""
     _PROTOCOL_REGISTRY[protocol.id] = protocol
     logger.debug("已注册协议: %s", protocol.id)
+
+
+def unregister_protocol(protocol_id: str) -> bool:
+    """注销协议实现；内置 entml 等 Host 保留协议不应移除。"""
+    if protocol_id not in _PROTOCOL_REGISTRY:
+        return False
+    del _PROTOCOL_REGISTRY[protocol_id]
+    logger.debug("已注销协议: %s", protocol_id)
+    return True
 
 
 def get_protocol_by_id(protocol_id: str) -> ToolProtocol:

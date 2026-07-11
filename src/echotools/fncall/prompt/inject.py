@@ -71,7 +71,7 @@ def inject_fncall(
     if loop_detection_threshold > 0:
         result = detect_tool_loop(normalized, loop_detection_threshold)
         if result.is_looping:
-            logger.warning(
+            logger.debug(
                 "检测到工具循环（%d 次）", result.repeat_count
             )
             loop_warning = result.suggestion

@@ -147,12 +147,7 @@ def create_stats_middleware(
                 latency_ms=latency_ms,
             )
             chunks = request.get("_req_log_chunks", [])
-            for chunk_text in chunks:
-                broker.push_event({
-                    "type": "request_chunk",
-                    "id": req_id,
-                    "delta": chunk_text,
-                })
+            response_text = "".join(str(chunk) for chunk in chunks)
             broker.push_event({
                 "type": "request_end",
                 "id": req_id,
@@ -160,6 +155,7 @@ def create_stats_middleware(
                 "latency_ms": round(latency_ms, 1),
                 "platform": platform,
                 "model": model,
+                "response": response_text,
             })
 
     return stats_middleware

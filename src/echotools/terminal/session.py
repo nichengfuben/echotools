@@ -10,13 +10,17 @@ client disconnections.
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Deque, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # Maximum offline buffer size (5 MB).
 MAX_OFFLINE_BUFFER_BYTES: int = 5 * 1024 * 1024
+
+# In-memory seq ring for hot reconnect replay (256 KB).
+MAX_SEQ_RING_BYTES: int = 256 * 1024
 
 # Maximum history lines (5000 lines, same as T3 Code).
 MAX_HISTORY_LINES: int = 5000
@@ -102,6 +106,14 @@ class TerminalSession(ABC):
         self._child_command_label: Optional[str] = None
         self._subprocess_monitor_task: Optional[asyncio.Task[None]] = None
 
+        # Seq ring + reader backpressure
+        self._output_seq: int = 0
+        self._seq_chunks: Deque[Tuple[int, str]] = deque()
+        self._seq_ring_bytes: int = 0
+        self._output_paused: bool = False
+        self._pause_event: asyncio.Event = asyncio.Event()
+        self._pause_event.set()
+
     # ------------------------------------------------------------------
     # Abstract interface
     # ------------------------------------------------------------------
@@ -183,6 +195,56 @@ class TerminalSession(ABC):
     def history_lines(self) -> int:
         """Number of lines in history."""
         return self._history_lines
+
+    @property
+    def output_seq(self) -> int:
+        """Monotonic sequence number of the last emitted output chunk."""
+        return self._output_seq
+
+    def pause_output(self) -> None:
+        """Pause PTY reader until :meth:`resume_output` (client backpressure)."""
+        self._output_paused = True
+        self._pause_event.clear()
+
+    def resume_output(self) -> None:
+        """Resume PTY reader after backpressure clears."""
+        self._output_paused = False
+        self._pause_event.set()
+
+    @property
+    def output_paused(self) -> bool:
+        return self._output_paused
+
+    async def _wait_if_output_paused(self) -> None:
+        await self._pause_event.wait()
+
+    def _record_seq_chunk(self, data: str) -> int:
+        """Append *data* to the in-memory seq ring; return assigned seq."""
+        if not data:
+            return self._output_seq
+        self._output_seq += 1
+        seq = self._output_seq
+        encoded_len = len(data.encode("utf-8", errors="replace"))
+        self._seq_chunks.append((seq, data))
+        self._seq_ring_bytes += encoded_len
+        while self._seq_ring_bytes > MAX_SEQ_RING_BYTES and self._seq_chunks:
+            _old_seq, old_data = self._seq_chunks.popleft()
+            self._seq_ring_bytes -= len(
+                old_data.encode("utf-8", errors="replace")
+            )
+        return seq
+
+    def replay_from(self, since_seq: int) -> Tuple[int, str]:
+        """Return ``(effective_from_seq, concatenated_data)`` for seq > *since_seq*."""
+        parts: List[str] = []
+        effective = since_seq + 1
+        for seq, chunk in self._seq_chunks:
+            if seq <= since_seq:
+                continue
+            if not parts:
+                effective = seq
+            parts.append(chunk)
+        return effective, "".join(parts)
 
     def _append_history(self, text: str) -> None:
         """Append text to history, capping at MAX_HISTORY_LINES.
@@ -377,6 +439,8 @@ class TerminalSession(ABC):
         When no clients are attached, buffer the output for later
         delivery. Also appends to history for persistence.
         """
+        if data:
+            self._record_seq_chunk(data)
         # Always append to history (even when detached)
         self._append_history(data)
 

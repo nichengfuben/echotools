@@ -14,17 +14,22 @@ from .sanitize import sanitize_terminal_history_chunk
 from .session import (
     MAX_HISTORY_LINES,
     MAX_OFFLINE_BUFFER_BYTES,
+    MAX_SEQ_RING_BYTES,
     TerminalCallback,
     TerminalSession,
 )
 from .ssh import SSHTerminal
+from .tmux import TmuxTerminal, tmux_available
 
 __all__ = [
     "TerminalSession",
     "TerminalCallback",
     "LocalTerminal",
     "SSHTerminal",
+    "TmuxTerminal",
+    "tmux_available",
     "MAX_OFFLINE_BUFFER_BYTES",
+    "MAX_SEQ_RING_BYTES",
     "MAX_HISTORY_LINES",
     "sanitize_terminal_history_chunk",
 ]
