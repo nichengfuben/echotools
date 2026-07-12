@@ -38,7 +38,9 @@ When calling tools, respond with ONLY the following XML block format:
 
 <entml:function_calls>
 <entml:invoke name="tool_name">
-<entml:parameters>{"param_name": "value"}</entml:parameters>
+<entml:parameters>
+<param_name>value</param_name>
+</entml:parameters>
 </entml:invoke>
 </entml:function_calls>
 
