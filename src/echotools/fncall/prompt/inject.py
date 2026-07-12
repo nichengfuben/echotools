@@ -50,7 +50,9 @@ def inject_fncall(
     dump_dir: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """注入工具定义为单条 user 消息。
-
+    
+    无论是否有 tools，都构建包含历史的 prompt 返回单条 user 消息。
+    
     Args:
         messages: 消息列表。
         tools: 工具定义。
@@ -64,26 +66,18 @@ def inject_fncall(
     Returns:
         单条 user 消息列表。
     """
-    if not tools:
-        return list(messages)
     normalized = _normalize_messages(list(messages))
-    loop_warning = ""
-    if loop_detection_threshold > 0:
-        result = detect_tool_loop(normalized, loop_detection_threshold)
-        if result.is_looping:
-            logger.debug(
-                "检测到工具循环（%d 次）", result.repeat_count
-            )
-            loop_warning = result.suggestion
+    
+    # 提取最后一条 user 消息和历史
     last_user_idx: Optional[int] = None
     for i in range(len(normalized) - 1, -1, -1):
         if (normalized[i].get("role") or "user") == "user":
             last_user_idx = i
             break
+    
     if last_user_idx is not None:
         history_messages = (
-            normalized[:last_user_idx]
-            + normalized[last_user_idx + 1 :]
+            normalized[:last_user_idx] + normalized[last_user_idx + 1:]
         )
         current_user_message = normalize_content(
             normalized[last_user_idx].get("content", "")
@@ -91,13 +85,30 @@ def inject_fncall(
     else:
         history_messages = normalized
         current_user_message = ""
+
+    # 构建历史文本
+    history_text = _format_conversation_history(
+        history_messages, protocol=protocol
+    ).strip()
+
+    # 如果没有 tools，直接拼历史 + 当前消息，不注入工具定义
+    if not tools:
+        prompt = f"<conversation_history>\n{history_text}\n</conversation_history>\n\n<current_user_message>\n{current_user_message}\n</current_user_message>"
+        return [{"role": "user", "content": prompt}]
+
+    # 有 tools：走原有逻辑
+    loop_warning = ""
+    if loop_detection_threshold > 0:
+        result = detect_tool_loop(normalized, loop_detection_threshold)
+        if result.is_looping:
+            logger.debug("检测到工具循环（%d 次）", result.repeat_count)
+            loop_warning = result.suggestion
+
     if hasattr(protocol, 'format_tool_descs'):
         tool_descs = protocol.format_tool_descs(tools)
     else:
         tool_descs = format_tool_descs(tools)
-    history_text = _format_conversation_history(
-        history_messages, protocol=protocol
-    ).strip()
+
     prompt = protocol.render_prompt(
         tool_descs=tool_descs,
         lang=lang,
@@ -106,6 +117,8 @@ def inject_fncall(
         loop_warning=loop_warning,
         current_user_message=current_user_message,
     )
+
     if dump_prompt:
         _maybe_dump_prompt(prompt, dump_dir)
+
     return [{"role": "user", "content": prompt}]

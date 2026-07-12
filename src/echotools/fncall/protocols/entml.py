@@ -75,6 +75,29 @@ _PARAMETERS_RE = re.compile(
     r'<entml:parameters>([\s\S]*?)</entml:parameters>',
     re.DOTALL,
 )
+# 用于解析 <entml:parameters> 内的子标签
+_SUB_TAG_RE = re.compile(
+    r'<([^>]+)>([\s\S]*?)</\1>',
+    re.DOTALL,
+)
+
+
+def _parse_sub_tags(content: str, schema_index: Optional[Dict[str, Any]] = None, func_name: str = "") -> Dict[str, Any]:
+    """解析 <entml:parameters> 内的子标签，返回参数字典。"""
+    args: Dict[str, Any] = {}
+    for m in _SUB_TAG_RE.finditer(content):
+        pname = m.group(1).strip()
+        pval = m.group(2).strip()
+        pschema = schema_index.get(func_name, {}).get(pname, {}) if schema_index else {}
+        if pschema:
+            args[pname] = _coerce_param_value(pval, pschema)
+        else:
+            try:
+                args[pname] = json.loads(pval)
+            except json.JSONDecodeError:
+                args[pname] = pval
+    return args
+
 
 # ---------------------------------------------------------------------------
 # Entml 协议
@@ -179,11 +202,18 @@ class EntmlProtocol(ToolProtocol):
                 # Try <entml:parameters>{json}</entml:parameters> format first
                 params_m = _PARAMETERS_RE.search(body)
                 if params_m:
-                    params_json = params_m.group(1).strip()
+                    params_content = params_m.group(1).strip()
                     try:
-                        args = json.loads(params_json)
+                        # 尝试 JSON 解析
+                        args = json.loads(params_content)
+                        if not isinstance(args, dict):
+                            args = {"value": args}
                     except json.JSONDecodeError:
-                        args = {"value": params_json}
+                        # 不是 JSON，尝试解析子标签
+                        args = _parse_sub_tags(params_content, schema_index, name)
+                        # 如果子标签解析也没结果，整个当作值
+                        if not args:
+                            args = {"value": params_content}
                 else:
                     # Try <entml:parameter name="...">value</entml:parameter> format
                     for param_m in _PARAM_RE.finditer(body):
