@@ -36,6 +36,45 @@ _TOOL_CALL_MARKER_RE = re.compile(
     r"|<invoke\s+name=",
 )
 
+# entml 标签清理正则
+_ENTML_FNCALL_BLOCK_RE = re.compile(
+    r"<entml:function_calls\b[^>]*>.*?</entml:function_calls>",
+    re.DOTALL,
+)
+_ENTML_INVOKE_RE = re.compile(
+    r'<entml:invoke\s+name="[^"]+"\s*>.*?</entml:invoke>',
+    re.DOTALL,
+)
+_ENTML_PARAMETERS_RE = re.compile(
+    r'<entml:parameters>.*?</entml:parameters>',
+    re.DOTALL,
+)
+_ENTML_PARAM_RE = re.compile(
+    r'<entml:parameter\s+name="[^"]+"\s*>.*?</entml:parameter>',
+    re.DOTALL,
+)
+# 清理任意 entml:* 标签
+_ENTML_ANY_TAG_RE = re.compile(
+    r'<entml:[a-zA-Z_][\w]*\b[^>]*>.*?</entml:[a-zA-Z_][\w]*>',
+    re.DOTALL,
+)
+
+
+def _clean_entml_tags(content: str) -> str:
+    """移除内容中的所有 entml 标签及其内部内容。"""
+    if not content:
+        return content
+    cleaned = content
+    cleaned = _ENTML_FNCALL_BLOCK_RE.sub("", cleaned)
+    cleaned = _ENTML_INVOKE_RE.sub("", cleaned)
+    cleaned = _ENTML_PARAMETERS_RE.sub("", cleaned)
+    cleaned = _ENTML_PARAM_RE.sub("", cleaned)
+    cleaned = _ENTML_ANY_TAG_RE.sub("", cleaned)
+    # 清理多余空行
+    lines = [line for line in cleaned.splitlines() if line.strip()]
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # 渲染工具调用 / 工具结果
 # ---------------------------------------------------------------------------
@@ -335,6 +374,7 @@ def _format_conversation_history(
         protocol: 可选的 ToolProtocol 实例。提供时使用
             protocol.format_assistant_tool_calls() 渲染工具调用，
             确保历史中的工具调用格式与 LLM 指令中的格式一致。
+            同时使用 protocol.clean_tags() 清理 user 消息中的 entml 标签。
 
     始终渲染所有消息角色（包括 assistant tool_calls 和 tool results），
     不区分客户端类型。
@@ -346,11 +386,19 @@ def _format_conversation_history(
     seen_assistant_keys: Set[Tuple[str, Tuple[Tuple[str, str], ...]]] = set()
     parts: List[Tuple[str, bool]] = []
 
+    # 获取清理函数
+    clean_fn = None
+    if protocol and hasattr(protocol, 'clean_tags'):
+        clean_fn = protocol.clean_tags
+
     for m in messages:
         role: str = m.get("role") or "user"
         content_str = normalize_content(m.get("content", ""))
 
         if role == "user":
+            # 清理用户消息中的 entml 标签
+            if clean_fn:
+                content_str = clean_fn(content_str)
             parts.append((f"<user>\n{content_str}\n</user>", False))
 
         elif role == "assistant":
@@ -371,7 +419,7 @@ def _format_conversation_history(
                     content_str and _TOOL_CALL_MARKER_RE.search(content_str)
                 )
                 if not content_has_markers:
-                    if protocol is not None:
+                    if protocol is not None and hasattr(protocol, 'format_assistant_tool_calls'):
                         blocks.append(protocol.format_assistant_tool_calls(tcs))
                     else:
                         for tc in tcs:

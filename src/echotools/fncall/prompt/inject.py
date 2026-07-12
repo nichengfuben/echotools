@@ -86,7 +86,11 @@ def inject_fncall(
         history_messages = normalized
         current_user_message = ""
 
-    # 构建历史文本
+    # 清理当前用户消息中的 entml 标签
+    if hasattr(protocol, 'clean_tags'):
+        current_user_message = protocol.clean_tags(current_user_message)
+
+    # 构建历史文本（传入 protocol 以便清理 user 消息中的 entml 标签）
     history_text = _format_conversation_history(
         history_messages, protocol=protocol
     ).strip()
