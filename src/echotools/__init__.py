@@ -104,6 +104,7 @@ __all__ = [
     "PluginError",
     "ProtocolError",
     "classify_http_error",
+    "Spinner",
 ]
 
 _EXPORTS: dict[str, tuple[str, str]] = {
@@ -195,6 +196,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "PluginError": ("echotools.errors", "PluginError"),
     "ProtocolError": ("echotools.errors", "ProtocolError"),
     "classify_http_error": ("echotools.errors", "classify_http_error"),
+    "Spinner": ("echotools.spinner", "Spinner"),
 }
 
 
