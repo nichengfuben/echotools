@@ -16,7 +16,10 @@ def test_entml_protocol_parse() -> None:
 
 
 def test_inject_no_tools() -> None:
-    """无工具时原样返回。"""
+    """无工具时仍包裹历史/当前消息模板，但不注入工具定义。"""
     proto = get_protocol("entml")
     msgs = [{"role": "user", "content": "hi"}]
-    assert inject_fncall(msgs, [], proto) == msgs
+    result = inject_fncall(msgs, [], proto)
+    assert len(result) == 1
+    assert result[0]["role"] == "user"
+    assert "<current_user_message>\nhi\n</current_user_message>" in result[0]["content"]

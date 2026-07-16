@@ -291,21 +291,23 @@ class TestPrintStreamIntegration:
         stream.start()
 
         messages = ["First", "Second", "Third"]
-        for msg in messages:
-            stream.add_to_buffer(msg)
-
-        # Give time for processing
-        time.sleep(0.5)
-
-        # Flush and check order
         with patch.object(sys.stdout, "write") as mock_write:
+            for msg in messages:
+                stream.add_to_buffer(msg)
+
+            # Give time for processing
+            time.sleep(0.5)
             stream.flush_remaining()
+
             # Check that messages were written in order
-            calls = [call[0][0] for call in mock_write.call_args_list]
-            # The order should be preserved
-            assert "First" in calls
-            assert "Second" in calls
-            assert "Third" in calls
+            written = "".join(call[0][0] for call in mock_write.call_args_list)
+            first_idx = written.find("First")
+            second_idx = written.find("Second")
+            third_idx = written.find("Third")
+            assert first_idx != -1
+            assert second_idx != -1
+            assert third_idx != -1
+            assert first_idx < second_idx < third_idx
 
         stream.stop()
 
