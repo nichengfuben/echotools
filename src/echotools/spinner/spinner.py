@@ -30,10 +30,10 @@ def get_default_characters() -> List[str]:
 def hue_to_rgb(hue: float) -> Tuple[int, int, int]:
     h = ((hue % 360) + 360) % 360
     s = 0.7
-    l = 0.6
-    c = (1 - abs(2 * l - 1)) * s
+    lightness = 0.6
+    c = (1 - abs(2 * lightness - 1)) * s
     x = c * (1 - abs((h / 60) % 2 - 1))
-    m = l - c / 2
+    m = lightness - c / 2
     r = g = b = 0.0
     if h < 60:
         r = c

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import sys
 import time
-from io import StringIO
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from echotools.io.printstream import (
     PrintStream,
