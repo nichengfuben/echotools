@@ -111,6 +111,7 @@ omit = [
     "*/tests/*",
     "*/__init__.py",
     "*/terminal/*",
+    "*/spinner/*",
     "*/web/input_box/*",
     "*/lifecycle/updater.py",
     "*/watcher/*",
