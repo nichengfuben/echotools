@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.6] - 2026-07-20
+
+### Changed
+
+- `web/input_box` 子模块目录由 kebab-case 重命名为 snake_case（`file_zone/`、`motion_kit/` 等），与 setuptools `package-data` 路径一致，避免部分环境下静态资源打包缺失
+
 ## [2.3.0] - 2026-07-10
 
 ### Added
