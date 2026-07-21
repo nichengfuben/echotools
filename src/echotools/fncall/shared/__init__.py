@@ -11,12 +11,16 @@ from echotools.fncall.shared.loop_detect import (
 from echotools.fncall.shared.normalization import (
     format_tool_descs,
     normalize_content,
+    normalize_tool_call,
+    normalize_tool_calls,
 )
 from echotools.ids.generator import uuid7
 
 __all__ = [
     "normalize_content",
     "format_tool_descs",
+    "normalize_tool_call",
+    "normalize_tool_calls",
     "detect_tool_loop",
     "LoopDetectionResult",
     "uuid7",

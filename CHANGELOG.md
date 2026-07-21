@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.7] - 2026-07-21
+
+### Added
+
+- `normalize_tool_call` / `normalize_tool_calls`：将 tool call arguments 中的 Python 字面量字符串（如 `"['a','b']"`）还原为合法 JSON 结构；`parse_fncall`、`parse_fncall_xml` 与 `entml` 协议解析出口自动应用
+
 ## [2.3.6] - 2026-07-20
 
 ### Changed

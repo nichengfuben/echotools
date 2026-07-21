@@ -14,6 +14,7 @@ from echotools.fncall.shared.coercion import (
     _build_param_schema_index,
     _coerce_param_value,
 )
+from echotools.fncall.shared.normalization import normalize_tool_calls
 from echotools.fncall.shared.xml_helpers import (
     _PROVIDER_BLOCK_RE,
     _PROVIDER_INVOKE_RE,
@@ -208,7 +209,7 @@ def parse_fncall(
         clean = _FUNC_RE.sub("", clean)
         clean = clean.strip()
 
-    return clean, calls
+    return clean, normalize_tool_calls(calls, tools)
 
 def parse_fncall_xml(
     xml: str,
@@ -262,7 +263,7 @@ def parse_fncall_xml(
     except Exception as exc:
         logger.warning("parse_fncall_xml 解析失败: %s", exc)
 
-    return tool_calls
+    return normalize_tool_calls(tool_calls, tools)
 
 
 def parse_fncall_managed_xml(
@@ -319,4 +320,4 @@ def parse_fncall_managed_xml(
     except Exception as exc:
         logger.warning("parse_fncall_managed_xml 解析失败: %s", exc)
 
-    return tool_calls
+    return normalize_tool_calls(tool_calls, tools)

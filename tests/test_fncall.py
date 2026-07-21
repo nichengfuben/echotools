@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from echotools.fncall import get_protocol, inject_fncall, list_protocols
+from echotools.fncall.shared.normalization import normalize_tool_call
 
 
 @pytest.mark.parametrize(
@@ -41,6 +44,34 @@ def test_custom_protocol_requires_plugin() -> None:
 def test_get_protocol_platform_mapping() -> None:
     proto = get_protocol(platform_id="p1", mapping={"p1": "entml"})
     assert proto.id == "entml"
+
+
+def test_normalize_tool_call_python_literal() -> None:
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "run",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "items": {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+            },
+        }
+    ]
+    tc = {
+        "id": "call_0001",
+        "type": "function",
+        "function": {
+            "name": "run",
+            "arguments": json.dumps({"items": "['a', 'b']"}),
+        },
+    }
+    out = normalize_tool_call(tc, tools)
+    args = json.loads(out["function"]["arguments"])
+    assert args["items"] == ["a", "b"]
 
 
 def test_inject_with_tools_and_dump(tmp_path) -> None:
