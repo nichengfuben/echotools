@@ -108,6 +108,74 @@ def test_coerce_entml_parameter_value(raw, schema, expected) -> None:
     assert coerce_entml_parameter_value(raw, schema) == expected
 
 
+def test_entml_instruction_matches_spec_format() -> None:
+    """示范格式：<entml:function_calls> + <entml:invoke> + <entml:parameter>."""
+    proto = get_protocol("entml")
+    from echotools.exec.fncall.shared.normalization import format_tool_descs
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "ask_user_input_v0",
+                "description": "Ask user",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "question": {"type": "string"},
+                        "options": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    },
+                    "required": ["question"],
+                },
+            },
+        }
+    ]
+    prompt = proto.render_prompt(
+        tool_descs=format_tool_descs(tools),
+        lang="en",
+        current_user_message="pick one",
+    )
+    assert "<entml:function_calls>" in prompt
+    assert '<entml:invoke name="' in prompt
+    assert '<entml:parameter name="' in prompt
+    assert "String and scalar parameters should be specified as-is" in prompt
+    assert "<entml:conversation_history>" not in prompt
+    assert "<entml:history>" not in prompt
+    assert "<entml:thinking_mode>" not in prompt
+
+
+def test_entml_roundtrip_parameter_format() -> None:
+    """渲染与解析均使用 <entml:parameter name=\"...\">。"""
+    from echotools.exec.fncall.protocols.entml_invoke import format_entml_tool_calls
+
+    sample_calls = [
+        {
+            "id": "call_0000",
+            "type": "function",
+            "function": {
+                "name": "search",
+                "arguments": json.dumps(
+                    {"query": "hello", "limit": 3, "tags": ["a", "b"]}
+                ),
+            },
+        }
+    ]
+    rendered = format_entml_tool_calls(sample_calls)
+    assert '<entml:parameter name="query">hello</entml:parameter>' in rendered
+    assert '<entml:parameter name="limit">3</entml:parameter>' in rendered
+    assert '<entml:parameter name="tags">["a", "b"]</entml:parameter>' in rendered
+    assert "<parameter name=" not in rendered
+
+    parsed = parse_entml_tool_calls(rendered, None, None)
+    args = json.loads(parsed[0]["function"]["arguments"])
+    assert args["query"] == "hello"
+    assert args["limit"] == 3
+    assert args["tags"] == ["a", "b"]
+
+
 def test_entml_parse_schema_coercion() -> None:
     tools = [
         {

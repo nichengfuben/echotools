@@ -28,6 +28,8 @@ from echotools.base.logger.manager import get_logger
 
 __all__ = ["AdaptiveSelector", "TASRecord"]
 
+_DEFAULT_DISPATCH_PERSIST = str(Path.home() / ".echotools" / "dispatch")
+
 logger = get_logger(__name__)
 
 
@@ -156,7 +158,7 @@ class AdaptiveSelector:
 
     def __init__(
         self,
-        persist_dir: str = "persist/dispatch",
+        persist_dir: str = _DEFAULT_DISPATCH_PERSIST,
         group_attr: str = "group",
         *,
         flush_debounce: float = 1.0,

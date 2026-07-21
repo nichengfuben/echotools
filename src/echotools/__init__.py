@@ -10,6 +10,9 @@ from typing import Any
 
 from echotools.version import get_version
 from echotools.plat.sdk import EchoTools
+from echotools.compat import install_compat_aliases
+
+install_compat_aliases()
 
 __version__ = get_version()
 

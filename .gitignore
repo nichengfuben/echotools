@@ -5,6 +5,7 @@ __pycache__/
 *.egg
 dist/
 build/
+persist/
 .eggs/
 *.whl
 .pytest_cache/
