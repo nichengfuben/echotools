@@ -81,3 +81,7 @@ class _AliasFinder(importlib.abc.MetaPathFinder):
 def install_compat_aliases() -> None:
     if not any(isinstance(finder, _AliasFinder) for finder in sys.meta_path):
         sys.meta_path.insert(0, _AliasFinder())
+
+
+# 确保 ``from echotools.config...`` 等旧路径在未显式 ``import echotools`` 时也可用。
+install_compat_aliases()
