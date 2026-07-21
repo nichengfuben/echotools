@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "echotools"
-version = "2.3.7"
+version = "2.3.8"
 description = "通用基础设施 SDK：配置、日志、事件、调度、插件、协议、调用链"
-readme = "README.md"
+readme = "docs/README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
 authors = [{ name = "nichengfuben" }]
@@ -59,7 +59,7 @@ Issues = "https://github.com/nichengfuben/echotools/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-echotools = ["py.typed", "web/input_box/**/*"]
+echotools = ["py.typed", "media/web/input_box/**/*"]
 
 [tool.ruff]
 line-length = 88
@@ -91,11 +91,11 @@ disable_error_code = [
 ]
 
 [[tool.mypy.overrides]]
-module = "echotools.terminal.*"
+module = "echotools.exec.terminal.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["src/tests"]
 asyncio_mode = "auto"
 addopts = ["--strict-markers", "--tb=short"]
 markers = [
@@ -112,7 +112,7 @@ omit = [
     "*/__init__.py",
     "*/terminal/*",
     "*/spinner/*",
-    "*/web/input_box/*",
+    "*/media/web/input_box/*",
     "*/lifecycle/updater.py",
     "*/watcher/*",
     "*/process/*",
