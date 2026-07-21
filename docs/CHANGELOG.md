@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.9] - 2026-07-21
+
+### Changed
+
+- 全量 achecker 合规：模块重组为 `base`/`exec`/`media`/`plat` 四层 meta-package，拆分超长文件与函数，重命名 web 静态资源
+
 ## [2.3.7] - 2026-07-21
 
 ### Added
