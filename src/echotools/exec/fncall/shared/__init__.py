@@ -1,5 +1,6 @@
 """共享工具导出。"""
 
+from echotools.base.ids.generator import uuid7
 from echotools.exec.fncall.shared.coercion import (
     _build_param_schema_index,
     _coerce_param_value,
@@ -14,7 +15,6 @@ from echotools.exec.fncall.shared.normalization import (
     normalize_tool_call,
     normalize_tool_calls,
 )
-from echotools.base.ids.generator import uuid7
 
 __all__ = [
     "normalize_content",

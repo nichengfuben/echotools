@@ -9,10 +9,7 @@ from __future__ import annotations
 import math
 import os
 import platform
-import sys
-import threading
-import time
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Tuple
 
 SPEED_MULTIPLIER = 1.5
 FRAME_INTERVAL_MS = 16

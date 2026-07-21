@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional
 
+from echotools.base.ids.generator import uuid7
+from echotools.base.logger.manager import get_logger
 from echotools.exec.fncall.prompt.history import (
     _normalize_messages,
 )
@@ -22,8 +24,6 @@ from echotools.exec.fncall.protocols.entml import (
 from echotools.exec.fncall.shared.loop_detect import detect_tool_loop
 from echotools.exec.fncall.shared.normalization import format_tool_descs
 from echotools.exec.protocol.base import ToolProtocol
-from echotools.base.ids.generator import uuid7
-from echotools.base.logger.manager import get_logger
 
 __all__ = ["inject_fncall"]
 

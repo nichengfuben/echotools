@@ -7,8 +7,11 @@ import uuid
 from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple
 
 from echotools.media.web.broker import RequestBroker
-from echotools.media.web.stats import RequestStats
-from echotools.media.web.stats import build_body_info, extract_response_text
+from echotools.media.web.stats import (
+    RequestStats,
+    build_body_info,
+    extract_response_text,
+)
 
 if TYPE_CHECKING:
     from aiohttp import web as aiohttp_web

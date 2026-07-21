@@ -1,16 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-import signal
 import subprocess
-import sys
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
-
-from ..session import TerminalCallback
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 

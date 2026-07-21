@@ -29,9 +29,9 @@ def parse_invoke_args(
                 return coerce_entml_arguments(parsed, name, schema_index)
             return {"value": parsed}
         except json.JSONDecodeError:
-            args = parse_sub_tags(params_content, schema_index, name)
-            if args:
-                return coerce_entml_arguments(args, name, schema_index)
+            sub_args = parse_sub_tags(params_content, schema_index, name)
+            if sub_args:
+                return coerce_entml_arguments(sub_args, name, schema_index)
             return {"value": params_content}
 
     args: Dict[str, Any] = {}

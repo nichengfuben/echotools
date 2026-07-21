@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import math
+import platform
+import sys
+import threading
+import time
+from typing import Callable, Dict, Optional, Tuple
+
 from .spinner_color import (
+    FRAME_INTERVAL_MS,
+    SPEED_MULTIPLIER,
+    STATUS_ICONS,
+    THEMES,
     get_default_characters,
-    hue_to_rgb,
     to_rgb_color_str,
-    _lerp,
-    _theme_gradient,
-    _theme_rainbow,
-    _theme_static,
 )
+
 
 class Clock:
     def __init__(self, tick_interval_ms: int = FRAME_INTERVAL_MS):

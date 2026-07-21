@@ -19,8 +19,7 @@ import os
 import signal
 import subprocess
 import sys
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Optional
 
 from ..session import TerminalCallback, TerminalSession
 
@@ -72,9 +71,9 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-from .win import LocalTerminalWindowsMixin
-from .unix import LocalTerminalUnixMixin
 from .proc import LocalTerminalProcMixin
+from .unix import LocalTerminalUnixMixin
+from .win import LocalTerminalWindowsMixin
 
 
 class LocalTerminal(

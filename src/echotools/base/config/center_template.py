@@ -6,7 +6,12 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict
 
-from echotools.base.config.loader import find_config, find_template, load_file, write_toml
+from echotools.base.config.loader import (
+    find_config,
+    find_template,
+    load_file,
+    write_toml,
+)
 from echotools.base.config.merge import merge_dicts
 from echotools.base.errors.common import ConfigError
 from echotools.base.logger.manager import get_logger

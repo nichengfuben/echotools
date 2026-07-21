@@ -7,15 +7,10 @@ from typing import Any, Dict, List, Optional
 from echotools.exec.fncall.shared.normalization import normalize_content
 
 from .prompt_helpers import (
-    build_no_tools_prompt,
-    convert_assistant_messages,
-    convert_user_tool_results,
     format_assistant_block,
     format_tool_block,
     format_user_block,
-    inject_orphan_tool_results,
     join_history_parts,
-    split_last_user_message,
 )
 
 

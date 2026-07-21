@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from echotools.base.errors import NoCandidateError
 from echotools.exec.dispatch import TaskCandidate, TaskDispatcher, make_id
 from echotools.exec.dispatch.selector import AdaptiveSelector
-from echotools.base.errors import NoCandidateError
 
 
 @pytest.mark.asyncio

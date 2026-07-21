@@ -22,9 +22,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from echotools.exec.dispatch.candidate import TaskCandidate
 from echotools.base.io.io_utils import atomic_write_text
 from echotools.base.logger.manager import get_logger
+from echotools.exec.dispatch.candidate import TaskCandidate
 
 __all__ = ["AdaptiveSelector", "TASRecord"]
 

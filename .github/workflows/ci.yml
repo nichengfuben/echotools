@@ -29,7 +29,7 @@ jobs:
           pip install -e ".[dev,all]"
 
       - name: Ruff
-        run: ruff check src tests
+        run: ruff check src
 
       - name: Mypy
         run: mypy src/echotools

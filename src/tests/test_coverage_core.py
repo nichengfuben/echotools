@@ -11,17 +11,9 @@ from unittest.mock import patch
 
 import pytest
 
-from echotools.version import get_version
 from echotools.base.cache import ListCache, MemoryCache
-from echotools.exec.dispatch import TaskCandidate, TaskDispatcher
-from echotools.exec.dispatch.proxy_selector import ProxyRecord, ProxySelector
-from echotools.exec.dispatch.selector import AdaptiveSelector, TASRecord
-from echotools.exec.dispatch.usage import fallback_usage, normalize_usage
 from echotools.base.errors.http import ForbiddenError, StreamError
-from echotools.media.events import Event, EventBus
 from echotools.base.io import atomic_write_text, read_text_if_exists
-from echotools.exec.keys import KeyPool, KeyState
-from echotools.exec.lifecycle import LifecycleManager
 from echotools.base.logger.manager import LoggerManager, _LogFormatter, _supports_color
 from echotools.base.retry import (
     retry_async_generator,
@@ -29,7 +21,13 @@ from echotools.base.retry import (
     retry_on_exception,
     retry_with_backoff,
 )
-from echotools.plat.scheduler import TaskScheduler
+from echotools.exec.dispatch import TaskCandidate, TaskDispatcher
+from echotools.exec.dispatch.proxy_selector import ProxyRecord, ProxySelector
+from echotools.exec.dispatch.selector import AdaptiveSelector, TASRecord
+from echotools.exec.dispatch.usage import fallback_usage, normalize_usage
+from echotools.exec.keys import KeyPool, KeyState
+from echotools.exec.lifecycle import LifecycleManager
+from echotools.media.events import Event, EventBus
 from echotools.media.tracing.context import (
     get_current_span_id,
     get_current_trace_id,
@@ -44,6 +42,8 @@ from echotools.media.tracing.tracer import Tracer
 from echotools.media.web import stats as stats_mod
 from echotools.media.web.broker import RequestBroker, request_broker
 from echotools.media.web.stats import RequestStats
+from echotools.plat.scheduler import TaskScheduler
+from echotools.version import get_version
 
 
 class _MockWS:

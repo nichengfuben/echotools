@@ -7,7 +7,7 @@ import importlib.abc
 import importlib.util
 import sys
 from types import ModuleType
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 
 _MODULE_ALIASES: Dict[str, str] = {
     "echotools.cache": "echotools.base.cache",
@@ -66,7 +66,7 @@ class _AliasFinder(importlib.abc.MetaPathFinder):
     def find_spec(
         self,
         fullname: str,
-        path: Optional[list[str]],
+        path: Optional[Sequence[str]],
         target: Optional[ModuleType] = None,
     ) -> Optional[importlib.machinery.ModuleSpec]:
         mapped = _map_name(fullname)

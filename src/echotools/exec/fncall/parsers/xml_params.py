@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from echotools.exec.fncall.shared.coercion import _coerce_param_value
-from echotools.exec.fncall.shared.normalization import normalize_tool_calls
 
 
 def parse_param_xml(

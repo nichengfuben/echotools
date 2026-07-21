@@ -9,9 +9,14 @@ import ast
 import json
 from typing import Any, Dict, List, Optional
 
-from echotools.exec.fncall.shared.coercion import _build_param_schema_index
-from echotools.exec.fncall.shared.schema_render import _render_schema_prop, _tag, _ctag, _DQ
 from echotools.base.logger.manager import get_logger
+from echotools.exec.fncall.shared.coercion import _build_param_schema_index
+from echotools.exec.fncall.shared.schema_render import (
+    _DQ,
+    _ctag,
+    _render_schema_prop,
+    _tag,
+)
 
 logger = get_logger(__name__)
 

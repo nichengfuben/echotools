@@ -7,7 +7,6 @@ from echotools.exec.fncall.shared.normalization import normalize_content
 
 from .history import (
     _TOOL_CALL_MARKER_RE,
-    _collect_tool_call_ids,
     _convert_assistant_pseudo_calls,
     _make_assistant_dedup_key,
     _render_tool_call,

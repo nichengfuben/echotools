@@ -3,14 +3,12 @@ from __future__ import annotations
 """插件注册表：发现、注册、启停、热重载。"""
 
 import asyncio
-import sys
 from typing import Any, Dict, List, Optional, Type
 
 from echotools.base.logger.manager import get_logger
 from echotools.plat.plugin.base import Plugin
 from echotools.plat.plugin.discovery import discover_plugins
 from echotools.plat.plugin.registry_ops import (
-    find_plugin_instance,
     init_discovered_plugin,
     purge_package_modules,
     reload_plugin,

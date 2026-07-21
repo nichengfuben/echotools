@@ -7,8 +7,8 @@ import inspect
 from collections import defaultdict
 from typing import Awaitable, Callable, DefaultDict, List, Type, Union
 
-from echotools.media.events.event import Event
 from echotools.base.logger.manager import get_logger
+from echotools.media.events.event import Event
 
 __all__ = ["EventBus"]
 

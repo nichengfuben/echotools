@@ -21,6 +21,8 @@ from typing import (
     Union,
 )
 
+from echotools.base.errors.common import NoCandidateError
+from echotools.base.logger.manager import get_logger
 from echotools.exec.dispatch.candidate import TaskCandidate
 from echotools.exec.dispatch.race import (
     apply_queue_event,
@@ -31,8 +33,6 @@ from echotools.exec.dispatch.race import (
     race_worker,
 )
 from echotools.exec.dispatch.selector import AdaptiveSelector
-from echotools.base.errors.common import NoCandidateError
-from echotools.base.logger.manager import get_logger
 
 __all__ = ["TaskDispatcher"]
 

@@ -8,9 +8,9 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from echotools.version import get_version
-from echotools.plat.sdk import EchoTools
 from echotools.compat import install_compat_aliases
+from echotools.plat.sdk import EchoTools
+from echotools.version import get_version
 
 install_compat_aliases()
 

@@ -4,13 +4,14 @@ import asyncio
 import json
 import logging
 import os
-import signal
-import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ..session import TerminalCallback
+
+if TYPE_CHECKING:
+    from .core import LocalTerminal
 
 logger = logging.getLogger(__name__)
 
@@ -276,7 +277,7 @@ class LocalTerminalProcMixin:
         dict
             Mapping of ``session_id`` to ``LocalTerminal`` instances.
         """
-        recovered: Dict[str, LocalTerminal] = {}
+        recovered: Dict[str, "LocalTerminal"] = {}
         if not persist_dir.exists():
             return recovered
 

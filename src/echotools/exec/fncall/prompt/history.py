@@ -8,10 +8,10 @@ from __future__ import annotations
 import json
 import re
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from echotools.exec.fncall.shared.normalization import normalize_content
 from echotools.base.logger.manager import get_logger
+from echotools.exec.fncall.shared.normalization import normalize_content
 
 logger = get_logger(__name__)
 

@@ -10,6 +10,7 @@ import re
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
+from echotools.base.logger.manager import get_logger
 from echotools.exec.fncall.parsers.xml_params import make_tool_call, parse_param_xml
 from echotools.exec.fncall.shared.coercion import (
     _build_param_schema_index,
@@ -22,7 +23,6 @@ from echotools.exec.fncall.shared.xml_helpers import (
     _PROVIDER_PARAM_RE,
     extract_cdata,
 )
-from echotools.base.logger.manager import get_logger
 
 logger = get_logger(__name__)
 

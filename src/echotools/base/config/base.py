@@ -3,7 +3,16 @@ from __future__ import annotations
 """配置数据类基类，提供自动 from_dict 反序列化。"""
 
 from dataclasses import MISSING, fields, is_dataclass
-from typing import Any, Literal, Type, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import (
+    Any,
+    Literal,
+    Type,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 __all__ = ["ConfigBase"]
 
