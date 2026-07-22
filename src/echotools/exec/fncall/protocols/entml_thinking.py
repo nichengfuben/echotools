@@ -44,10 +44,9 @@ def build_entml_thinking_section(
                 "<entml:thinking>",
                 "...thinking about results",
                 "</entml:thinking>",
-                "Whenever you have the result of a function call, think carefully "
-                "about whether an `<entml:thinking>` `</entml:thinking>` block "
-                "would be appropriate and strongly prefer to output a thinking "
-                "block if you are uncertain.",
+                "At the very start of your response, think carefully about whether "
+                "an `<entml:thinking>` `</entml:thinking>` block would be appropriate "
+                "and strongly prefer to output a thinking block if you are uncertain.",
             ]
         )
 

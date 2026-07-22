@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.16] - 2026-07-22
+
+### Added
+
+- `entml_thinking_parse`：解析/流式拆分 `<entml:thinking>` 块
+
+### Changed
+
+- thinking 说明改回 “At the very start of your response...”
+
 ## [2.3.15] - 2026-07-22
 
 ### Fixed
