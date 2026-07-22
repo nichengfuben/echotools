@@ -50,7 +50,7 @@ _ENTML_PARAMETERS_RE = re.compile(
     re.DOTALL,
 )
 _ENTML_PARAM_RE = re.compile(
-    r'<entml:parameter\s+name="[^"]+"\s*>.*?</entml:parameter>',
+    r'<entml:parameter\s+name="[^"]+"[^>]*>.*?</entml:parameter>',
     re.DOTALL,
 )
 # 清理任意 entml:* 标签

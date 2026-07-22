@@ -8,6 +8,7 @@ from .entml_patterns import (
     INVOKE_RE,
     PARAM_RE,
     PARAMETERS_RE,
+    extract_parameter_type_attr,
     parse_sub_tags,
 )
 from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value
@@ -37,9 +38,15 @@ def parse_invoke_args(
     args: Dict[str, Any] = {}
     for param_m in PARAM_RE.finditer(body):
         pname = param_m.group(1).strip()
-        pval = param_m.group(2)
+        attrs = param_m.group(2) or ""
+        pval = param_m.group(3)
+        type_hint = extract_parameter_type_attr(attrs)
         pschema = func_props.get(pname) or {}
-        args[pname] = coerce_entml_parameter_value(pval, pschema or None)
+        args[pname] = coerce_entml_parameter_value(
+            pval,
+            pschema or None,
+            type_hint=type_hint if not pschema else None,
+        )
 
     return coerce_entml_arguments(args, name, schema_index)
 

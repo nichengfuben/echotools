@@ -14,9 +14,10 @@ INVOKE_RE = re.compile(
     re.DOTALL,
 )
 PARAM_RE = re.compile(
-    r'<entml:parameter\s+name="([^"]+)">\s*([\s\S]*?)\s*</entml:parameter>',
+    r'<entml:parameter\s+name="([^"]+)"([^>]*)>\s*([\s\S]*?)\s*</entml:parameter>',
     re.DOTALL,
 )
+_PARAM_TYPE_ATTR_RE = re.compile(r'\btype="([^"]+)"')
 PARAMETERS_RE = re.compile(
     r'<entml:parameters>([\s\S]*?)</entml:parameters>',
     re.DOTALL,
@@ -25,6 +26,14 @@ SUB_TAG_RE = re.compile(
     r'<([^>]+)>([\s\S]*?)</\1>',
     re.DOTALL,
 )
+
+
+def extract_parameter_type_attr(attrs: str) -> Optional[str]:
+    """从 parameter 开标签属性中提取 type=\"...\"。"""
+    match = _PARAM_TYPE_ATTR_RE.search(attrs or "")
+    if not match:
+        return None
+    return match.group(1).strip()
 
 
 def parse_sub_tags(

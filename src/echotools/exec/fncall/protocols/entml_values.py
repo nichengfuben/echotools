@@ -5,14 +5,45 @@ from typing import Any, Dict, Optional
 
 from echotools.exec.fncall.shared.coercion import _coerce_param_value
 
+_TYPE_HINT_TO_JSON_TYPE = {
+    "str": "string",
+    "string": "string",
+    "int": "integer",
+    "integer": "integer",
+    "float": "number",
+    "number": "number",
+    "double": "number",
+    "bool": "boolean",
+    "boolean": "boolean",
+    "array": "array",
+    "list": "array",
+    "object": "object",
+    "dict": "object",
+}
+
+
+def _schema_from_type_hint(type_hint: str) -> Optional[Dict[str, Any]]:
+    json_type = _TYPE_HINT_TO_JSON_TYPE.get((type_hint or "").strip().lower())
+    if not json_type:
+        return None
+    schema: Dict[str, Any] = {"type": json_type}
+    if json_type == "array":
+        schema["items"] = {}
+    return schema
+
 
 def coerce_entml_parameter_value(
     raw: str,
     schema: Optional[Dict[str, Any]] = None,
+    type_hint: Optional[str] = None,
 ) -> Any:
-    """将 entml 参数文本按 schema（若有）或边界规则转为 Python 值。"""
+    """将 entml 参数文本按 schema、type 属性或默认 str 规则转为 Python 值。"""
     if schema:
         return _coerce_param_value(raw, schema)
+
+    hint_schema = _schema_from_type_hint(type_hint) if type_hint else None
+    if hint_schema:
+        return _coerce_param_value(raw, hint_schema)
 
     stripped = (raw or "").strip()
     if not stripped:
@@ -22,34 +53,9 @@ def coerce_entml_parameter_value(
         try:
             return json.loads(stripped)
         except json.JSONDecodeError:
-            return raw
+            return stripped
 
-    lowered = stripped.lower()
-    if lowered == "null":
-        return None
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-
-    if stripped.isdigit() or (
-        stripped.startswith("-") and stripped[1:].isdigit()
-    ):
-        try:
-            return int(stripped)
-        except ValueError:
-            pass
-
-    try:
-        if any(ch in stripped for ch in ".eE"):
-            fval = float(stripped)
-            if fval.is_integer() and "." not in stripped and "e" not in lowered:
-                return int(fval)
-            return fval
-    except ValueError:
-        pass
-
-    return raw
+    return stripped
 
 
 def coerce_entml_arguments(

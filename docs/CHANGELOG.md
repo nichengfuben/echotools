@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.13] - 2026-07-22
+
+### Fixed
+
+- entml 解析：`<entml:parameter>` 支持 `type="str"` 等额外属性；无 `type=` 时标量默认按 `str` 处理
+
+### Changed
+
+- entml 工具块 JSON Schema 自动排版（字段排序、多行 description 展开）
+- `</entml:current_user_message>` 闭标签改为 `</current_user_message>`
+
 ## [2.3.12] - 2026-07-22
 
 ### Changed

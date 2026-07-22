@@ -28,7 +28,7 @@ def test_inject_no_tools_entml_tags() -> None:
     result = inject_fncall(msgs, [], proto)
     assert len(result) == 1
     content = result[0]["content"]
-    assert "<entml:current_user_message>\nhi\n</entml:current_user_message>" in content
+    assert "<entml:current_user_message>\nhi\n</current_user_message>" in content
     assert "<entml:thinking_mode>" not in content
     assert "<entml:max_thinking_length>" not in content
 
@@ -88,7 +88,7 @@ def test_inject_with_history_entml_tags() -> None:
     out = inject_fncall(msgs, tools, proto)
     content = out[0]["content"]
     assert "<entml:conversation_history>" in content
-    assert "<entml:current_user_message>\nnew\n</entml:current_user_message>" in content
+    assert "<entml:current_user_message>\nnew\n</current_user_message>" in content
 
 
 def test_entml_history_clarify_always_english() -> None:
@@ -120,14 +120,22 @@ def test_entml_history_clarify_always_english() -> None:
         ("false", {"type": "boolean"}, False),
         ("42", {"type": "integer"}, 42),
         ("3.14", {"type": "number"}, 3.14),
-        ("null", None, None),
+        ("null", None, "null"),
         ('["a","b"]', {"type": "array", "items": {"type": "string"}}, ["a", "b"]),
+        ('["a","b"]', None, ["a", "b"]),
         ("plain text", {"type": "string"}, "plain text"),
         ("plain text", None, "plain text"),
+        ("42", None, "42"),
+        ("42", "int", 42),
+        ("true", None, "true"),
+        ("true", "bool", True),
     ],
 )
 def test_coerce_entml_parameter_value(raw, schema, expected) -> None:
-    assert coerce_entml_parameter_value(raw, schema) == expected
+    if isinstance(schema, str):
+        assert coerce_entml_parameter_value(raw, type_hint=schema) == expected
+    else:
+        assert coerce_entml_parameter_value(raw, schema) == expected
 
 
 def test_entml_instruction_matches_spec_format() -> None:
@@ -203,8 +211,88 @@ def test_entml_roundtrip_parameter_format() -> None:
     parsed = parse_entml_tool_calls(rendered, None, None)
     args = json.loads(parsed[0]["function"]["arguments"])
     assert args["query"] == "hello"
-    assert args["limit"] == 3
+    assert args["limit"] == "3"
     assert args["tags"] == ["a", "b"]
+
+
+def test_entml_parse_parameter_type_attribute() -> None:
+    """模型可能在 parameter 标签上附带 type 属性（如 type=\"str\"）。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string"},
+                        "units": {"type": "string"},
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_web",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer"},
+                    },
+                },
+            },
+        },
+    ]
+    schema_index = _build_param_schema_index(tools)
+    sample = (
+        '<entml:function_calls>'
+        '<entml:invoke name="get_weather">'
+        '<entml:parameter name="city" type="str">Shanghai</entml:parameter>'
+        '<entml:parameter name="units" type="str">celsius</entml:parameter>'
+        "</entml:invoke>"
+        '<entml:invoke name="search_web">'
+        '<entml:parameter name="query" type="str">上海 明天 降雨 2026-07-23</entml:parameter>'
+        '<entml:parameter name="limit" type="int">3</entml:parameter>'
+        "</entml:invoke>"
+        "</entml:function_calls>"
+    )
+    calls = parse_entml_tool_calls(sample, tools, schema_index)
+    assert len(calls) == 2
+
+    weather = json.loads(calls[0]["function"]["arguments"])
+    assert weather == {"city": "Shanghai", "units": "celsius"}
+
+    search = json.loads(calls[1]["function"]["arguments"])
+    assert search["query"] == "上海 明天 降雨 2026-07-23"
+    assert search["limit"] == 3
+    assert isinstance(search["limit"], int)
+
+
+def test_entml_parse_parameter_default_str_without_type_attr() -> None:
+    """无 type= 且无 schema 时，标量默认按 str 处理。"""
+    sample = (
+        '<entml:function_calls><entml:invoke name="echo">'
+        '<entml:parameter name="count">42</entml:parameter>'
+        '<entml:parameter name="flag">true</entml:parameter>'
+        "</entml:invoke></entml:function_calls>"
+    )
+    calls = parse_entml_tool_calls(sample, None, None)
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert args == {"count": "42", "flag": "true"}
+
+
+def test_entml_parse_parameter_type_hint_without_schema() -> None:
+    sample = (
+        '<entml:function_calls><entml:invoke name="echo">'
+        '<entml:parameter name="count" type="int">42</entml:parameter>'
+        '<entml:parameter name="flag" type="bool">true</entml:parameter>'
+        "</entml:invoke></entml:function_calls>"
+    )
+    calls = parse_entml_tool_calls(sample, None, None)
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert args == {"count": 42, "flag": True}
 
 
 def test_entml_parse_schema_coercion() -> None:

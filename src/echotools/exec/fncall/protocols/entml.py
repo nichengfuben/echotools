@@ -59,7 +59,7 @@ def format_entml_conversation_history(
 def format_entml_current_user_message(message: str) -> str:
     """将当前用户消息包裹为 <entml:current_user_message> 块。"""
     text = (message or "").strip()
-    return f"<entml:current_user_message>\n{text}\n</entml:current_user_message>"
+    return f"<entml:current_user_message>\n{text}\n</current_user_message>"
 
 
 class EntmlProtocol(ToolProtocol):
