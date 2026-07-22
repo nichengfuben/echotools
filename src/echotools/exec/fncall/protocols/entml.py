@@ -2,7 +2,7 @@
 
 - 工具调用：<entml:function_calls> / <entml:invoke> / <entml:parameter>
 - 对话历史：<entml:conversation_history>
-- 当前用户消息：<entml:current_user_message>
+- 当前用户消息：<current_user_message>
 """
 
 from __future__ import annotations
@@ -57,9 +57,9 @@ def format_entml_conversation_history(
 
 
 def format_entml_current_user_message(message: str) -> str:
-    """将当前用户消息包裹为 <entml:current_user_message> 块。"""
+    """将当前用户消息包裹为 <current_user_message> 块。"""
     text = (message or "").strip()
-    return f"<entml:current_user_message>\n{text}\n</current_user_message>"
+    return f"<current_user_message>\n{text}\n</current_user_message>"
 
 
 class EntmlProtocol(ToolProtocol):

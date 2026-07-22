@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.14] - 2026-07-22
+
+### Changed
+
+- entml `<current_user_message>` / `</current_user_message>` 开闭标签统一（去掉 `entml:` 前缀）
+- thinking 示范与说明改为 `<thinking>` `</thinking>`，并更新为 “At the very start of your response...” 文案
+
 ## [2.3.13] - 2026-07-22
 
 ### Fixed

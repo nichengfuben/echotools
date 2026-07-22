@@ -22,4 +22,4 @@ def test_inject_no_tools() -> None:
     result = inject_fncall(msgs, [], proto)
     assert len(result) == 1
     assert result[0]["role"] == "user"
-    assert "<entml:current_user_message>\nhi\n</current_user_message>" in result[0]["content"]
+    assert "<current_user_message>\nhi\n</current_user_message>" in result[0]["content"]

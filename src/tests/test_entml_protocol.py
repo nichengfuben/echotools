@@ -28,7 +28,7 @@ def test_inject_no_tools_entml_tags() -> None:
     result = inject_fncall(msgs, [], proto)
     assert len(result) == 1
     content = result[0]["content"]
-    assert "<entml:current_user_message>\nhi\n</current_user_message>" in content
+    assert "<current_user_message>\nhi\n</current_user_message>" in content
     assert "<entml:thinking_mode>" not in content
     assert "<entml:max_thinking_length>" not in content
 
@@ -60,7 +60,9 @@ def test_inject_with_thinking_options_only_when_declared() -> None:
     )[0]["content"]
     assert "<entml:thinking_mode>interleaved</entml:thinking_mode>" in with_opts
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in with_opts
-    assert "<entml:thinking>" in with_opts
+    assert "<thinking>" in with_opts
+    assert "At the very start of your response" in with_opts
+    assert "<entml:thinking>" not in with_opts
 
 
 def test_build_entml_thinking_section_empty_without_options() -> None:
@@ -88,7 +90,7 @@ def test_inject_with_history_entml_tags() -> None:
     out = inject_fncall(msgs, tools, proto)
     content = out[0]["content"]
     assert "<entml:conversation_history>" in content
-    assert "<entml:current_user_message>\nnew\n</current_user_message>" in content
+    assert "<current_user_message>\nnew\n</current_user_message>" in content
 
 
 def test_entml_history_clarify_always_english() -> None:
