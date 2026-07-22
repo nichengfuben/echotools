@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.21] - 2026-07-22
+
+### Changed
+
+- 新增 `parse_max_thinking_length()`：未显式传入正整数时不注入 `<entml:max_thinking_length>`
+- `thinking_mode=off` 时仍不注入任何 thinking 相关标签
+
+## [2.3.20] - 2026-07-22
+
+### Changed
+
+- `thinking_mode=off` 时不再向 prompt 注入任何 thinking 标签或引导文案（含 `max_thinking_length`）
+
 ## [2.3.19] - 2026-07-22
 
 ### Added

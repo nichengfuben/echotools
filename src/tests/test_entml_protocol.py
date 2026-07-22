@@ -72,6 +72,17 @@ def test_build_entml_thinking_section_empty_without_options() -> None:
     assert build_entml_thinking_section({}) == ""
 
 
+def test_parse_max_thinking_length() -> None:
+    from echotools.exec.fncall.protocols.entml_thinking import parse_max_thinking_length
+
+    assert parse_max_thinking_length(None) is None
+    assert parse_max_thinking_length("") is None
+    assert parse_max_thinking_length("  ") is None
+    assert parse_max_thinking_length(0) is None
+    assert parse_max_thinking_length(22000) == 22000
+    assert parse_max_thinking_length("22000") == 22000
+
+
 @pytest.mark.parametrize(
     "raw,expected",
     [
@@ -90,11 +101,16 @@ def test_normalize_thinking_mode(raw, expected) -> None:
 
 
 def test_thinking_prompt_off() -> None:
-    section = build_entml_thinking_section({"thinking_mode": "off"})
-    assert "<entml:thinking_mode>off</entml:thinking_mode>" in section
-    assert "forced no thinking" in section
-    assert "You must NOT output any thinking blocks" in section
-    assert "MUST output a thinking block" not in section
+    assert build_entml_thinking_section({"thinking_mode": "off"}) == ""
+    assert build_entml_thinking_section(
+        {"thinking_mode": "off", "max_thinking_length": 22000}
+    ) == ""
+
+
+def test_thinking_prompt_on_without_max_length() -> None:
+    section = build_entml_thinking_section({"thinking_mode": "on"})
+    assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
+    assert "<entml:max_thinking_length>" not in section
 
 
 def test_thinking_prompt_on() -> None:
@@ -124,8 +140,9 @@ def test_inject_no_tools_with_thinking_off() -> None:
         proto,
         protocol_options={"thinking_mode": "off"},
     )[0]["content"]
-    assert "<entml:thinking_mode>off</entml:thinking_mode>" in result
-    assert "You must NOT output any thinking blocks" in result
+    assert "<entml:thinking_mode>" not in result
+    assert "<entml:max_thinking_length>" not in result
+    assert "You must NOT output any thinking blocks" not in result
     assert "<current_user_message>\nhi\n</current_user_message>" in result
 
 

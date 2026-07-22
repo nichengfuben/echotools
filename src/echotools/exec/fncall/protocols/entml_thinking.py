@@ -47,9 +47,23 @@ def normalize_thinking_mode(mode: Any) -> Optional[str]:
     return None
 
 
+def parse_max_thinking_length(value: Any) -> Optional[int]:
+    """仅当显式传入正整数时返回长度；否则为 None（不注入标签）。"""
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
 def _policy_header(mode: str) -> str:
     labels = {
-        "off": "off (forced no thinking)",
         "on": "on (forced thinking)",
         "auto": "auto (model decides)",
     }
@@ -57,17 +71,6 @@ def _policy_header(mode: str) -> str:
         f"The thinking_mode for this request is {labels[mode]}. "
         f"Follow the rules below exactly."
     )
-
-
-def _prompt_off() -> list[str]:
-    return [
-        _policy_header("off"),
-        "",
-        "You must NOT output any thinking blocks in this response.",
-        f"Do not write `{_THINKING_BLOCK_OPEN}` or `{_THINKING_BLOCK_CLOSE}`.",
-        "Respond with only the visible answer text and any "
-        "`<entml:function_calls>` blocks if tools are needed.",
-    ]
 
 
 def _prompt_on() -> list[str]:
@@ -115,10 +118,13 @@ def _prompt_auto() -> list[str]:
 def build_entml_thinking_section(
     protocol_options: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """按 thinking_mode 构建思考链指令块（off / on / auto 三套 prompt）。"""
+    """按 thinking_mode 构建思考链指令块（on / auto）；off 时不注入任何内容。"""
     opts = protocol_options or {}
     mode = normalize_thinking_mode(opts.get("thinking_mode"))
-    max_thinking_length = opts.get("max_thinking_length")
+    max_thinking_length = parse_max_thinking_length(opts.get("max_thinking_length"))
+
+    if mode == "off":
+        return ""
 
     if mode is None and max_thinking_length is None:
         return ""
@@ -128,12 +134,10 @@ def build_entml_thinking_section(
         lines.append(f"<entml:thinking_mode>{mode}</entml:thinking_mode>")
     if max_thinking_length is not None:
         lines.append(
-            f"<entml:max_thinking_length>{int(max_thinking_length)}</entml:max_thinking_length>"
+            f"<entml:max_thinking_length>{max_thinking_length}</entml:max_thinking_length>"
         )
 
-    if mode == "off":
-        lines.extend([""] + _prompt_off())
-    elif mode == "on":
+    if mode == "on":
         lines.extend([""] + _prompt_on())
     elif mode == "auto":
         lines.extend([""] + _prompt_auto())
