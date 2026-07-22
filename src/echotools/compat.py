@@ -29,6 +29,7 @@ _MODULE_ALIASES: Dict[str, str] = {
     "echotools.web": "echotools.media.web",
     "echotools.events": "echotools.media.events",
     "echotools.spinner": "echotools.media.spinner",
+    "echotools.console": "echotools.media.console",
     "echotools.tracing": "echotools.media.tracing",
     "echotools.translate": "echotools.media.translate",
     "echotools.watcher": "echotools.media.watcher",
