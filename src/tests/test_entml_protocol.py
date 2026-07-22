@@ -91,6 +91,28 @@ def test_inject_with_history_entml_tags() -> None:
     assert "<entml:current_user_message>\nnew\n</entml:current_user_message>" in content
 
 
+def test_entml_history_clarify_always_english() -> None:
+    proto = get_protocol("entml")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search",
+                "description": "Search",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+    msgs = [
+        {"role": "user", "content": "old"},
+        {"role": "assistant", "content": "ok"},
+        {"role": "user", "content": "new"},
+    ]
+    content = inject_fncall(msgs, tools, proto, lang="zh")[0]["content"]
+    assert "The following is a transcript of completed interactions." in content
+    assert "以下是已完成的交互记录" not in content
+
+
 @pytest.mark.parametrize(
     "raw,schema,expected",
     [
@@ -109,10 +131,8 @@ def test_coerce_entml_parameter_value(raw, schema, expected) -> None:
 
 
 def test_entml_instruction_matches_spec_format() -> None:
-    """示范格式：<entml:function_calls> + <entml:invoke> + <entml:parameter>."""
+    """示范格式：环境说明 + JSONSchema 工具块 + entml 调用标签。"""
     proto = get_protocol("entml")
-    from echotools.exec.fncall.shared.normalization import format_tool_descs
-
     tools = [
         {
             "type": "function",
@@ -134,17 +154,28 @@ def test_entml_instruction_matches_spec_format() -> None:
         }
     ]
     prompt = proto.render_prompt(
-        tool_descs=format_tool_descs(tools),
+        tool_descs=proto.format_tool_descs(tools),
         lang="en",
         current_user_message="pick one",
+        protocol_options={
+            "thinking_mode": "interleaved",
+            "max_thinking_length": 22000,
+        },
     )
+    assert "In this environment you have access to a set of tools" in prompt
+    assert "Here are the functions available in JSONSchema format:" in prompt
+    assert "**ask_user_input_v0**" in prompt
+    assert '"name": "ask_user_input_v0"' in prompt
     assert "<entml:function_calls>" in prompt
-    assert '<entml:invoke name="' in prompt
-    assert '<entml:parameter name="' in prompt
-    assert "String and scalar parameters should be specified as-is" in prompt
+    assert '<entml:invoke name="$FUNCTION_NAME">' in prompt
+    assert '<entml:parameter name="$PARAMETER_NAME">' in prompt
+    assert "String and scalar parameters should be specified as is" in prompt
+    assert "<entml:thinking_mode>interleaved</entml:thinking_mode>" in prompt
+    assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in prompt
+    assert "<function_results>" in prompt
     assert "<entml:conversation_history>" not in prompt
     assert "<entml:history>" not in prompt
-    assert "<entml:thinking_mode>" not in prompt
+    assert "<functions>" not in prompt
 
 
 def test_entml_roundtrip_parameter_format() -> None:

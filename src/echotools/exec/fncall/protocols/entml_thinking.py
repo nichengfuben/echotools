@@ -14,7 +14,7 @@ def build_entml_thinking_section(
     if thinking_mode is None and max_thinking_length is None:
         return ""
 
-    lines = ["## Thinking", ""]
+    lines: list[str] = []
     if thinking_mode is not None:
         mode = str(thinking_mode).strip()
         if mode:
@@ -30,12 +30,24 @@ def build_entml_thinking_section(
             [
                 "",
                 "If the thinking_mode is interleaved or auto, then after function "
-                "results you should strongly consider outputting a thinking block "
-                "before continuing:",
+                "results you should strongly consider outputting a thinking block. "
+                "Here is an example:",
+                "",
+                "<entml:function_calls>",
+                "...",
+                "</entml:function_calls>",
+                "",
+                "<function_results>",
+                "...",
+                "</function_results>",
                 "",
                 "<entml:thinking>",
-                "...thinking about results...",
+                "...thinking about results",
                 "</entml:thinking>",
+                "Whenever you have the result of a function call, think carefully "
+                "about whether an `<entml:thinking>` `</entml:thinking>` block "
+                "would be appropriate and strongly prefer to output a thinking "
+                "block if you are uncertain.",
             ]
         )
 

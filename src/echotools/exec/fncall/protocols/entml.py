@@ -9,44 +9,35 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from echotools.exec.fncall.prompt.templates import (
-    _HISTORY_CLARIFY_EN,
-    _HISTORY_CLARIFY_ZH,
-)
+from echotools.exec.fncall.prompt.templates import _HISTORY_CLARIFY_EN
 from echotools.exec.fncall.protocols.entml_invoke import (
     format_entml_tool_calls,
     parse_entml_tool_calls,
 )
 from echotools.exec.fncall.protocols.entml_patterns import BLOCK_RE
 from echotools.exec.fncall.protocols.entml_thinking import build_entml_thinking_section
+from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 from echotools.exec.fncall.shared.normalization import normalize_tool_calls
 from echotools.exec.protocol.base import ToolProtocol
 
 _ENTML_INSTRUCTION = """\
-## Function Definitions
-
-All functions are defined inside a `<functions>` wrapper block. Each function is a JSON object inside a `<function>` tag containing `description`, `name`, and `parameters` (JSON Schema).
-
-**Function Invocation Syntax:**
-
-When calling tools, respond with ONLY the following XML block format:
+In this environment you have access to a set of tools you can use to answer the user's question.
+You can invoke functions by writing a "<entml:function_calls>" block like the following as part of your reply to the user:
 
 <entml:function_calls>
-<entml:invoke name="tool_name">
-<entml:parameter name="param_name">value</entml:parameter>
+<entml:invoke name="$FUNCTION_NAME">
+<entml:parameter name="$PARAMETER_NAME">$PARAMETER_VALUE</entml:parameter>
+...
+</entml:invoke>
+<entml:invoke name="$FUNCTION_NAME2">
+...
 </entml:invoke>
 </entml:function_calls>
 
-String and scalar parameters should be specified as-is, while lists and objects should use JSON format.
+String and scalar parameters should be specified as is, while lists and objects should use JSON format.
 
-Multiple invocations can be stacked inside one `<entml:function_calls>` block for parallel execution.
-
-## Function Call Instructions
-
-Answer the user's request using the relevant tool(s), if they are available. Check that all required parameters are provided or can reasonably be inferred from context. If there are no relevant tools or missing required parameter values, ask the user. If the user provides a specific value for a parameter (e.g., in quotes), use that value EXACTLY. Do NOT make up values for or ask about optional parameters.
-
-If you intend to call multiple tools and there are no dependencies between the calls, make all independent calls in the same function_calls block. Otherwise, wait for previous calls to finish to determine dependent values (do NOT use placeholders or guess missing parameters).
+Here are the functions available in JSONSchema format:
 """
 
 
@@ -84,6 +75,10 @@ class EntmlProtocol(ToolProtocol):
     def get_trigger_tags(self) -> List[str]:
         return [self._TRIGGER]
 
+    @staticmethod
+    def format_tool_descs(tools: List[Dict[str, Any]]) -> str:
+        return format_entml_tool_descs(tools)
+
     def render_prompt(
         self,
         tool_descs: str,
@@ -94,11 +89,11 @@ class EntmlProtocol(ToolProtocol):
         current_user_message: str = "",
         protocol_options: Optional[Dict[str, Any]] = None,
     ) -> str:
-        sections: List[str] = [_ENTML_INSTRUCTION]
+        sections: List[str] = [_ENTML_INSTRUCTION + tool_descs]
+
         thinking_section = build_entml_thinking_section(protocol_options)
         if thinking_section:
             sections.append(thinking_section)
-        sections.append("<functions>\n" + tool_descs + "\n</functions>")
 
         if user_system_prompt and user_system_prompt.strip():
             sections.append(
@@ -106,9 +101,8 @@ class EntmlProtocol(ToolProtocol):
             )
 
         if history_text:
-            clarify = _HISTORY_CLARIFY_ZH if lang == "zh" else _HISTORY_CLARIFY_EN
             sections.append(
-                format_entml_conversation_history(history_text, clarify)
+                format_entml_conversation_history(history_text, _HISTORY_CLARIFY_EN)
             )
 
         if loop_warning:

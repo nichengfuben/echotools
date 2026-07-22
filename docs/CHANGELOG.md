@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.12] - 2026-07-22
+
+### Changed
+
+- entml prompt 对齐 antml 示范：环境说明 + `**name**` JSONSchema 工具块；thinking 置于工具列表之后；移除 `<functions>` 包裹
+
 ## [2.3.9] - 2026-07-21
 
 ### Changed
