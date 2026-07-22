@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.22] - 2026-07-22
+
+### Added
+
+- `entml_thinking_history`：`parse_interleaved_history()`、`apply_thinking_history_policy()`、`extract_reasoning_text()`
+- 支持 Entropy/Anthropic 内容块（`type: thinking`）的历史交错开关：开则保留思考+回复，关则仅保留可见回复
+
 ## [2.3.21] - 2026-07-22
 
 ### Changed
