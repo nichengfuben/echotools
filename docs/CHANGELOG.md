@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.15] - 2026-07-22
+
+### Fixed
+
+- 回滚 2.3.14 误改的 thinking 标签与文案，仅保留 `<current_user_message>` 开闭标签调整
+
 ## [2.3.14] - 2026-07-22
 
 ### Changed
