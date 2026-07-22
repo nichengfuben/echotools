@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-_CANONICAL_MODES = frozenset({"off", "on", "auto", "interleaved"})
+_CANONICAL_MODES = frozenset({"off", "on", "auto"})
 
 _OFF_ALIASES = frozenset(
     {"off", "disabled", "disable", "false", "none", "no", "never"}
@@ -21,15 +21,16 @@ _ON_ALIASES = frozenset(
         "thinking",
     }
 )
-_AUTO_ALIASES = frozenset({"auto", "automatic"})
-_INTERLEAVED_ALIASES = frozenset({"interleaved", "adaptive"})
+_AUTO_ALIASES = frozenset(
+    {"auto", "automatic", "adaptive", "interleaved"}
+)
 
 _THINKING_BLOCK_OPEN = "<entml:thinking>"
 _THINKING_BLOCK_CLOSE = "</entml:thinking>"
 
 
 def normalize_thinking_mode(mode: Any) -> Optional[str]:
-    """将外界声明归一化为 off | on | auto | interleaved；无法识别时返回 None。"""
+    """将外界声明归一化为 off | on | auto；无法识别时返回 None。"""
     if mode is None:
         return None
     key = str(mode).strip().lower()
@@ -41,8 +42,6 @@ def normalize_thinking_mode(mode: Any) -> Optional[str]:
         return "on"
     if key in _AUTO_ALIASES:
         return "auto"
-    if key in _INTERLEAVED_ALIASES:
-        return "interleaved"
     if key in _CANONICAL_MODES:
         return key
     return None
@@ -53,7 +52,6 @@ def _policy_header(mode: str) -> str:
         "off": "off (forced no thinking)",
         "on": "on (forced thinking)",
         "auto": "auto (model decides)",
-        "interleaved": "interleaved (thinking after tool results)",
     }
     return (
         f"The thinking_mode for this request is {labels[mode]}. "
@@ -96,16 +94,9 @@ def _prompt_auto() -> list[str]:
         "At the very start of your response, think carefully about whether "
         f"a `{_THINKING_BLOCK_OPEN}` `{_THINKING_BLOCK_CLOSE}` block would be "
         "appropriate and strongly prefer to output one if you are uncertain.",
-    ]
-
-
-def _prompt_interleaved() -> list[str]:
-    return [
-        _policy_header("interleaved"),
         "",
-        "Thinking blocks are optional at the start, but after function results "
-        "you should strongly consider outputting a thinking block before continuing.",
-        "Example:",
+        "After function results, you should strongly consider outputting a "
+        "thinking block before continuing. Example:",
         "",
         "<entml:function_calls>",
         "...",
@@ -118,17 +109,13 @@ def _prompt_interleaved() -> list[str]:
         _THINKING_BLOCK_OPEN,
         "...thinking about results...",
         _THINKING_BLOCK_CLOSE,
-        "",
-        "At the very start of your response, think carefully about whether "
-        f"a `{_THINKING_BLOCK_OPEN}` `{_THINKING_BLOCK_CLOSE}` block would be "
-        "appropriate and strongly prefer to output one if you are uncertain.",
     ]
 
 
 def build_entml_thinking_section(
     protocol_options: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """按 thinking_mode 构建思考链指令块（off / on / auto / interleaved）。"""
+    """按 thinking_mode 构建思考链指令块（off / on / auto 三套 prompt）。"""
     opts = protocol_options or {}
     mode = normalize_thinking_mode(opts.get("thinking_mode"))
     max_thinking_length = opts.get("max_thinking_length")
@@ -150,7 +137,5 @@ def build_entml_thinking_section(
         lines.extend([""] + _prompt_on())
     elif mode == "auto":
         lines.extend([""] + _prompt_auto())
-    elif mode == "interleaved":
-        lines.extend([""] + _prompt_interleaved())
 
     return "\n".join(lines)

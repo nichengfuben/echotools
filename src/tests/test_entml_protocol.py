@@ -79,9 +79,9 @@ def test_build_entml_thinking_section_empty_without_options() -> None:
         ("disabled", "off"),
         ("on", "on"),
         ("enabled", "on"),
-        ("interleaved", "interleaved"),
+        ("interleaved", "auto"),
         ("auto", "auto"),
-        ("adaptive", "interleaved"),
+        ("adaptive", "auto"),
         ("bogus", None),
     ],
 )
@@ -110,15 +110,9 @@ def test_thinking_prompt_auto() -> None:
     section = build_entml_thinking_section({"thinking_mode": "auto"})
     assert "<entml:thinking_mode>auto</entml:thinking_mode>" in section
     assert "model decides" in section
+    assert "<function_results>" in section
     assert "strongly prefer to output one if you are uncertain" in section
     assert "MUST output a thinking block" not in section
-
-
-def test_thinking_prompt_interleaved() -> None:
-    section = build_entml_thinking_section({"thinking_mode": "interleaved"})
-    assert "<entml:thinking_mode>interleaved</entml:thinking_mode>" in section
-    assert "<function_results>" in section
-    assert "after function results" in section
 
 
 def test_inject_no_tools_with_thinking_off() -> None:

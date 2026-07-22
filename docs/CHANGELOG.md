@@ -8,12 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `thinking_mode=interleaved` 独立模式（工具结果后鼓励 thinking）
-- `adaptive` 别名映射到 `interleaved`（不再映射为 `auto`）
+- `normalize_thinking_mode()`：归一化为 `off` | `on` | `auto`
+- 三套 prompt：`off` 强制不思考、`on` 强制思考、`auto` 自动思考（含工具结果后示例）
+- 无 tools 的 entml 注入路径也会附带 thinking 指令块
 
 ### Changed
 
-- `auto` prompt 仅保留开篇可选思考说明；交错示例移至 `interleaved`
+- `adaptive` / `interleaved` 别名映射到 `auto`（非独立 mode）
 
 ## [2.3.18] - 2026-07-22
 
