@@ -6,7 +6,10 @@ import pytest
 
 from echotools.exec.fncall import get_protocol, inject_fncall
 from echotools.exec.fncall.protocols.entml_invoke import parse_entml_tool_calls
-from echotools.exec.fncall.protocols.entml_thinking import build_entml_thinking_section
+from echotools.exec.fncall.protocols.entml_thinking import (
+    build_entml_thinking_section,
+    normalize_thinking_mode,
+)
 from echotools.exec.fncall.protocols.entml_values import coerce_entml_parameter_value
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 
@@ -54,19 +57,95 @@ def test_inject_with_thinking_options_only_when_declared() -> None:
         tools,
         proto,
         protocol_options={
-            "thinking_mode": "interleaved",
+            "thinking_mode": "on",
             "max_thinking_length": 22000,
         },
     )[0]["content"]
-    assert "<entml:thinking_mode>interleaved</entml:thinking_mode>" in with_opts
+    assert "<entml:thinking_mode>on</entml:thinking_mode>" in with_opts
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in with_opts
-    assert "<entml:thinking>" in with_opts
+    assert "MUST output a thinking block" in with_opts
     assert "At the very start of your response" in with_opts
 
 
 def test_build_entml_thinking_section_empty_without_options() -> None:
     assert build_entml_thinking_section(None) == ""
     assert build_entml_thinking_section({}) == ""
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("off", "off"),
+        ("disabled", "off"),
+        ("on", "on"),
+        ("enabled", "on"),
+        ("interleaved", "interleaved"),
+        ("auto", "auto"),
+        ("adaptive", "interleaved"),
+        ("bogus", None),
+    ],
+)
+def test_normalize_thinking_mode(raw, expected) -> None:
+    assert normalize_thinking_mode(raw) == expected
+
+
+def test_thinking_prompt_off() -> None:
+    section = build_entml_thinking_section({"thinking_mode": "off"})
+    assert "<entml:thinking_mode>off</entml:thinking_mode>" in section
+    assert "forced no thinking" in section
+    assert "You must NOT output any thinking blocks" in section
+    assert "MUST output a thinking block" not in section
+
+
+def test_thinking_prompt_on() -> None:
+    section = build_entml_thinking_section({"thinking_mode": "on"})
+    assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
+    assert "forced thinking" in section
+    assert "MUST output a thinking block" in section
+    assert "<entml:thinking>" in section
+    assert "You must NOT output any thinking blocks" not in section
+
+
+def test_thinking_prompt_auto() -> None:
+    section = build_entml_thinking_section({"thinking_mode": "auto"})
+    assert "<entml:thinking_mode>auto</entml:thinking_mode>" in section
+    assert "model decides" in section
+    assert "strongly prefer to output one if you are uncertain" in section
+    assert "MUST output a thinking block" not in section
+
+
+def test_thinking_prompt_interleaved() -> None:
+    section = build_entml_thinking_section({"thinking_mode": "interleaved"})
+    assert "<entml:thinking_mode>interleaved</entml:thinking_mode>" in section
+    assert "<function_results>" in section
+    assert "after function results" in section
+
+
+def test_inject_no_tools_with_thinking_off() -> None:
+    proto = get_protocol("entml")
+    msgs = [{"role": "user", "content": "hi"}]
+    result = inject_fncall(
+        msgs,
+        [],
+        proto,
+        protocol_options={"thinking_mode": "off"},
+    )[0]["content"]
+    assert "<entml:thinking_mode>off</entml:thinking_mode>" in result
+    assert "You must NOT output any thinking blocks" in result
+    assert "<current_user_message>\nhi\n</current_user_message>" in result
+
+
+def test_inject_no_tools_with_thinking_on() -> None:
+    proto = get_protocol("entml")
+    msgs = [{"role": "user", "content": "hi"}]
+    result = inject_fncall(
+        msgs,
+        [],
+        proto,
+        protocol_options={"thinking_mode": "on"},
+    )[0]["content"]
+    assert "<entml:thinking_mode>on</entml:thinking_mode>" in result
+    assert "MUST output a thinking block" in result
 
 
 def test_inject_with_history_entml_tags() -> None:
@@ -167,7 +246,7 @@ def test_entml_instruction_matches_spec_format() -> None:
         lang="en",
         current_user_message="pick one",
         protocol_options={
-            "thinking_mode": "interleaved",
+            "thinking_mode": "on",
             "max_thinking_length": 22000,
         },
     )
@@ -179,9 +258,10 @@ def test_entml_instruction_matches_spec_format() -> None:
     assert '<entml:invoke name="$FUNCTION_NAME">' in prompt
     assert '<entml:parameter name="$PARAMETER_NAME">' in prompt
     assert "String and scalar parameters should be specified as is" in prompt
-    assert "<entml:thinking_mode>interleaved</entml:thinking_mode>" in prompt
+    assert "<entml:thinking_mode>on</entml:thinking_mode>" in prompt
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in prompt
-    assert "<function_results>" in prompt
+    assert "MUST output a thinking block" in prompt
+    assert "<function_results>" not in prompt
     assert "<entml:conversation_history>" not in prompt
     assert "<entml:history>" not in prompt
     assert "<functions>" not in prompt

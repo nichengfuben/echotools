@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.19] - 2026-07-22
+
+### Added
+
+- `thinking_mode=interleaved` 独立模式（工具结果后鼓励 thinking）
+- `adaptive` 别名映射到 `interleaved`（不再映射为 `auto`）
+
+### Changed
+
+- `auto` prompt 仅保留开篇可选思考说明；交错示例移至 `interleaved`
+
+## [2.3.18] - 2026-07-22
+
+### Changed
+
+- 强化 off/on/auto 三套 thinking prompt：含模式说明、MUST/NOT 规则与示例
+- 无 tools 的 entml 注入路径也会附带 thinking 指令块
+
+## [2.3.17] - 2026-07-22
+
+### Added
+
+- `normalize_thinking_mode()`：归一化思考模式为 `off` | `on` | `auto`
+- 三套 prompt：`off` 强制不思考、`on` 强制思考、`auto` 自动思考
+
+### Changed
+
+- `build_entml_thinking_section()` 按模式输出不同指令文案
+
 ## [2.3.16] - 2026-07-22
 
 ### Added

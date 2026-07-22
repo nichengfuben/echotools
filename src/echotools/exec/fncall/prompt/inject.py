@@ -21,6 +21,7 @@ from echotools.exec.fncall.protocols.entml import (
     format_entml_conversation_history,
     format_entml_current_user_message,
 )
+from echotools.exec.fncall.protocols.entml_thinking import build_entml_thinking_section
 from echotools.exec.fncall.shared.loop_detect import detect_tool_loop
 from echotools.exec.fncall.shared.normalization import format_tool_descs
 from echotools.exec.protocol.base import ToolProtocol
@@ -108,12 +109,17 @@ def inject_fncall(
     if not tools:
         if protocol.id == "entml":
             sections: List[str] = []
+            thinking_section = build_entml_thinking_section(protocol_options)
+            if thinking_section:
+                sections.append(thinking_section)
             if history_text.strip():
                 sections.append(format_entml_conversation_history(history_text))
             sections.append(format_entml_current_user_message(current_user_message))
             prompt = "\n\n".join(sections)
         else:
             prompt = build_no_tools_prompt(history_text, current_user_message)
+        if dump_prompt:
+            _maybe_dump_prompt(prompt, dump_dir)
         return [{"role": "user", "content": prompt}]
 
     prompt = build_tools_prompt(
