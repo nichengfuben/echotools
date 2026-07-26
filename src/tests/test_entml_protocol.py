@@ -119,6 +119,8 @@ def test_thinking_prompt_on() -> None:
     assert "forced thinking" in section
     assert "MUST output a thinking block" in section
     assert "<entml:thinking>" in section
+    assert "`<entml:invoke>`" in section
+    assert "<entml:function_calls>" not in section
     assert "You must NOT output any thinking blocks" not in section
 
 
@@ -126,7 +128,10 @@ def test_thinking_prompt_auto() -> None:
     section = build_entml_thinking_section({"thinking_mode": "auto"})
     assert "<entml:thinking_mode>auto</entml:thinking_mode>" in section
     assert "model decides" in section
-    assert "<function_results>" in section
+    assert "→ Result:" in section
+    assert "[tool_name(" in section
+    assert "<function_results>" not in section
+    assert "<entml:function_calls>" not in section
     assert "strongly prefer to output one if you are uncertain" in section
     assert "MUST output a thinking block" not in section
 
@@ -230,7 +235,7 @@ def test_coerce_entml_parameter_value(raw, schema, expected) -> None:
 
 
 def test_entml_instruction_matches_spec_format() -> None:
-    """示范格式：环境说明 + JSONSchema 工具块 + entml 调用标签。"""
+    """示范格式：```text 调用示例 + ### 工具名 + 外置 Description + parameters-only JSON。"""
     proto = get_protocol("entml")
     tools = [
         {
@@ -263,9 +268,12 @@ def test_entml_instruction_matches_spec_format() -> None:
     )
     assert "In this environment you have access to a set of tools" in prompt
     assert "Here are the functions available in JSONSchema format:" in prompt
-    assert "**ask_user_input_v0**" in prompt
-    assert '"name": "ask_user_input_v0"' in prompt
-    assert "<entml:function_calls>" in prompt
+    assert "```text" in prompt
+    assert "### ask_user_input_v0" in prompt
+    assert "**ask_user_input_v0**" not in prompt
+    assert 'Description: "Ask user"' in prompt
+    assert '"name": "ask_user_input_v0"' not in prompt
+    assert "<entml:function_calls>" not in prompt
     assert '<entml:invoke name="$FUNCTION_NAME">' in prompt
     assert '<entml:parameter name="$PARAMETER_NAME">' in prompt
     assert "String and scalar parameters should be specified as is" in prompt

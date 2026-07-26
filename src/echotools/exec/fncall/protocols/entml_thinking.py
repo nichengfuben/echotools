@@ -85,7 +85,7 @@ def _prompt_on() -> list[str]:
         _THINKING_BLOCK_CLOSE,
         "",
         "Only after that block, output your visible reply and/or "
-        "`<entml:function_calls>`. Never skip the thinking block.",
+        "`<entml:invoke>` tool call(s). Never skip the thinking block.",
     ]
 
 
@@ -98,16 +98,14 @@ def _prompt_auto() -> list[str]:
         f"a `{_THINKING_BLOCK_OPEN}` `{_THINKING_BLOCK_CLOSE}` block would be "
         "appropriate and strongly prefer to output one if you are uncertain.",
         "",
-        "After function results, you should strongly consider outputting a "
-        "thinking block before continuing. Example:",
+        "After tool results appear in conversation history, you should strongly "
+        "consider outputting a thinking block before continuing. Example of a "
+        "completed history turn (already executed — do NOT re-invoke):",
         "",
-        "<entml:function_calls>",
-        "...",
-        "</entml:function_calls>",
+        '[tool_name(param="value")]',
+        "→ Result: ...",
         "",
-        "<function_results>",
-        "...",
-        "</function_results>",
+        "Then at the start of your next reply:",
         "",
         _THINKING_BLOCK_OPEN,
         "...thinking about results...",

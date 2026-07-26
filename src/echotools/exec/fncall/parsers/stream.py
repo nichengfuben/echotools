@@ -92,16 +92,43 @@ class FncallStreamParser:
         buffer: str,
         tags: List[str],
     ) -> Tuple[str, str]:
-        """将 buffer 分为「可安全输出的前缀」和「需保留的尾部」。"""
+        """将 buffer 分为「可安全输出的前缀」和「需保留的尾部」。
+
+        除了「尾部是 trigger 的真前缀」外，还处理：
+        - trigger 已完整出现但尚未见到闭合 ``>``（例如 ``<entml:invoke name="x"``）
+        - trigger 声明带 ``>`` 时，其去尾 ``>`` 形式同样参与 holdback
+        """
         if not buffer:
             return "", ""
+        if not tags:
+            return buffer, ""
 
-        max_keep = max(len(t) - 1 for t in tags)
+        bases: List[str] = []
+        for tag in tags:
+            if not tag:
+                continue
+            bases.append(tag)
+            if tag.endswith(">") and len(tag) > 1:
+                bases.append(tag[:-1])
+
+        # 已匹配完整 base 但属性/闭合 ``>`` 尚未到齐：从 base 起点整体 hold
+        hold_from: Optional[int] = None
+        for base in bases:
+            pos = buffer.find(base)
+            if pos < 0:
+                continue
+            if ">" not in buffer[pos:]:
+                if hold_from is None or pos < hold_from:
+                    hold_from = pos
+        if hold_from is not None:
+            return buffer[:hold_from], buffer[hold_from:]
+
+        max_keep = max(len(t) - 1 for t in bases)
         check_len = min(len(buffer), max_keep)
 
         for length in range(check_len, 0, -1):
             suffix = buffer[-length:]
-            if any(tag.startswith(suffix) and suffix != tag for tag in tags):
+            if any(tag.startswith(suffix) and suffix != tag for tag in bases):
                 return buffer[:-length], buffer[-length:]
 
         return buffer, ""
@@ -165,7 +192,11 @@ class FncallStreamParser:
 
         self._state = self.DONE
 
-        # 刷新思考过滤器中的剩余缓冲
+        # 先把 holdback 尾部送入思考过滤器，再 finalize 过滤器
+        if self._waiting_tail:
+            self._emit_text(self._waiting_tail)
+            self._waiting_tail = ""
+
         if self._thinking_filter is not None:
             for kind, part in self._thinking_filter.finalize():
                 if kind == "thinking":
@@ -174,12 +205,21 @@ class FncallStreamParser:
                     self._text_parts.append(part)
 
         if not self._detected:
-            full_text = "".join(self._text_parts) + self._waiting_tail
-            result = self._protocol.parse(full_text, self._tools)
+            full_text = "".join(self._text_parts)
+            clean_text, tool_calls = self._protocol.parse(full_text, self._tools)
         else:
             clean_text = "".join(self._text_parts).strip()
             _, tool_calls = self._protocol.parse(self._fncall_buf, self._tools)
-            result = (clean_text, tool_calls)
+
+        # 兜底：剥离残留 <entml:thinking>（holdback 边界/分片异常时）
+        if self._thinking_filter is not None and clean_text:
+            from echotools.exec.fncall.protocols.entml_thinking_parse import split_entml_thinking
+            clean_text, more_thinking = split_entml_thinking(clean_text)
+            if more_thinking:
+                self._thinking_parts.append(more_thinking)
+
+        self._text_parts = [clean_text] if clean_text else []
+        result = (clean_text, tool_calls)
 
         self._finalized_result = result
         return result

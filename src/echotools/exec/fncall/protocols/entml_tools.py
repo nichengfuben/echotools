@@ -6,12 +6,11 @@ from typing import Any, Dict, List, Mapping
 
 __all__ = ["format_entml_tool_descs"]
 
+# 参数 schema 字段顺序：properties 优先，type 靠后（对齐示范排版）
 _SCHEMA_KEY_ORDER = (
-    "description",
-    "type",
-    "enum",
-    "items",
     "properties",
+    "items",
+    "enum",
     "required",
     "minItems",
     "maxItems",
@@ -22,6 +21,9 @@ _SCHEMA_KEY_ORDER = (
     "oneOf",
     "anyOf",
     "allOf",
+    "title",
+    "description",
+    "type",
 )
 
 _DESC_LINE_RE = re.compile(
@@ -85,14 +87,14 @@ def _expand_description_multiline(json_text: str) -> str:
     return _DESC_LINE_RE.sub(_repl, json_text)
 
 
-def _format_tool_json(payload: Mapping[str, Any]) -> str:
-    sorted_payload = _sort_schema_keys(dict(payload))
-    body = json.dumps(sorted_payload, ensure_ascii=False, indent=2)
+def _format_parameters_json(params: Mapping[str, Any]) -> str:
+    sorted_params = _sort_schema_keys(dict(params))
+    body = json.dumps(sorted_params, ensure_ascii=False, indent=2)
     return _expand_description_multiline(body)
 
 
 def format_entml_tool_descs(tools: List[Dict[str, Any]]) -> str:
-    """将工具列表格式化为 **name** + JSON Schema 代码块（对齐 entml/antml 示范）。"""
+    """将工具列表格式化为 ### name + Description + parameters JSON（对齐 entml 示范）。"""
     if not tools:
         return ""
 
@@ -100,11 +102,13 @@ def format_entml_tool_descs(tools: List[Dict[str, Any]]) -> str:
     for tool in tools:
         fn = tool.get("function", tool)
         name = str(fn.get("name") or "unknown")
-        payload = {
-            "description": fn.get("description") or "",
-            "name": name,
-            "parameters": _normalize_parameters(fn.get("parameters")),
-        }
-        body = _format_tool_json(payload)
-        blocks.append(f"**{name}**\n\n```json\n{body}\n```")
+        description = fn.get("description") or ""
+        # Description 外置为 JSON 字符串字面量（含转义），与示范一致
+        desc_literal = json.dumps(description, ensure_ascii=False)
+        params_body = _format_parameters_json(_normalize_parameters(fn.get("parameters")))
+        blocks.append(
+            f"### {name}\n\n"
+            f"Description: {desc_literal}\n\n"
+            f"```json\n{params_body}\n```"
+        )
     return "\n\n".join(blocks)

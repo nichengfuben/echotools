@@ -49,6 +49,7 @@ _ENTML_INSTRUCTION = """\
 In this environment you have access to a set of tools you can use to answer the user's question.
 You can invoke functions by writing a "<entml:invoke>" block like the following as part of your reply to the user:
 
+```text
 <entml:invoke name="$FUNCTION_NAME">
 <entml:parameter name="$PARAMETER_NAME">$PARAMETER_VALUE</entml:parameter>
 ...
@@ -56,6 +57,7 @@ You can invoke functions by writing a "<entml:invoke>" block like the following 
 <entml:invoke name="$FUNCTION_NAME2">
 ...
 </entml:invoke>
+```
 
 String and scalar parameters should be specified as is, while lists and objects should use JSON format.
 
@@ -95,7 +97,8 @@ class EntmlProtocol(ToolProtocol):
     _TRIGGER_PREFIX = "<entml:invoke"
 
     def get_trigger_tags(self) -> List[str]:
-        return [self._TRIGGER]
+        # 同时声明带/不带 ``>`` 的形式，便于流式 holdback 覆盖属性段
+        return [self._TRIGGER, self._TRIGGER_PREFIX]
 
     def get_stream_end_tags(self) -> List[str]:
         """新格式无外层 wrapper，不自动关闭流，由 finalize() 统一解析。"""
@@ -115,7 +118,12 @@ class EntmlProtocol(ToolProtocol):
         current_user_message: str = "",
         protocol_options: Optional[Dict[str, Any]] = None,
     ) -> str:
-        sections: List[str] = [_ENTML_INSTRUCTION + tool_descs]
+        if tool_descs:
+            sections: List[str] = [
+                _ENTML_INSTRUCTION.rstrip() + "\n\n" + tool_descs
+            ]
+        else:
+            sections = [_ENTML_INSTRUCTION.rstrip()]
 
         thinking_section = build_entml_thinking_section(protocol_options)
         if thinking_section:
