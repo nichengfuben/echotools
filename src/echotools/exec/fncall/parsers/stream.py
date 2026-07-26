@@ -40,12 +40,26 @@ class FncallStreamParser:
         self._state: str = self.WAITING_FOR_TAG
         self._finalized_result: Optional[Tuple[str, List[Dict[str, Any]]]] = None
 
-        # Precompute end tags from trigger tags (avoids per-chunk string parsing)
+        # 三种情况：
+        #   1. 协议实现了 get_stream_end_tags() 且返回非空列表  → 用声明的结束标记
+        #   2. 协议实现了 get_stream_end_tags() 且返回空列表   → 禁止自动关闭，等 finalize()
+        #   3. 协议未实现 get_stream_end_tags()               → 从 trigger tags 推断（旧协议兼容）
         self._end_tags: List[str] = []
+        self._no_auto_close: bool = False
+        if hasattr(protocol, "get_stream_end_tags"):
+            declared = list(protocol.get_stream_end_tags())
+            if declared:
+                self._end_tags = declared
+            else:
+                self._no_auto_close = True
+            return
+        # 旧协议兼容：从 trigger tags 推断结束标记
         for tag in protocol.get_trigger_tags():
             if tag.startswith("<") and not tag.startswith("</"):
                 tag_name = tag.lstrip("<").split(">")[0].split()[0]
-                self._end_tags.append(f"</{tag_name}>")
+                end = f"</{tag_name}>"
+                if end != tag.replace("<", "</"):
+                    self._end_tags.append(end)
             elif tag.startswith("[") and not tag.startswith("[/"):
                 inner = tag.lstrip("[").split("]")[0]
                 self._end_tags.append(f"[/{inner}]")
@@ -97,13 +111,12 @@ class FncallStreamParser:
 
     def _is_call_closed(self) -> bool:
         """检测 fncall 缓冲区中是否包含结束标记。"""
+        if self._no_auto_close:
+            return False
         buf = self._fncall_buf
         for end_tag in self._end_tags:
             if end_tag in buf:
                 return True
-        # Fallback only for protocols without recognizable end tags
-        if not self._end_tags:
-            return "</" in buf or "]" in buf or "}" in buf
         return False
 
     def feed(self, chunk: str) -> None:
