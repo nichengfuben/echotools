@@ -15,6 +15,17 @@ from .prompt_helpers import (
 )
 
 
+def history_contains_tool_calls(messages: List[Dict[str, Any]]) -> bool:
+    """历史消息中是否包含 assistant tool_calls 或 tool 结果。"""
+    for m in messages:
+        role = m.get("role") or "user"
+        if role == "assistant" and m.get("tool_calls"):
+            return True
+        if role == "tool":
+            return True
+    return False
+
+
 def _format_conversation_history(
     messages: List[Dict[str, Any]],
     protocol: Optional[Any] = None,

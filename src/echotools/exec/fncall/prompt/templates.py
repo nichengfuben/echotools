@@ -118,6 +118,15 @@ _HISTORY_CLARIFY_EN = (
     "The user's latest message follows below."
 )
 
+_HISTORY_TOOL_INVOKE_REMINDER_EN = (
+    "Reminder — tool notation in the conversation history above: prior tool "
+    "calls appear as compact pseudocode (e.g. `[function_name(arg=\"value\")]` "
+    "and optional `→ Result:` / `→ Error:` lines). That transcript is for "
+    "context only; it is not parsed and must not be copied. To invoke a tool "
+    "in your reply, output a valid `<entml:invoke>` block exactly as specified "
+    "in the tool instructions at the top of this prompt."
+)
+
 _HISTORY_CLARIFY_ZH = (
     "以下是已完成的交互记录。"
     "此处展示的所有工具调用及其结果均已执行完毕，请勿重复调用。"

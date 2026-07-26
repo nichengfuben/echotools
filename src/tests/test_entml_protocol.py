@@ -207,6 +207,49 @@ def test_entml_history_clarify_always_english() -> None:
     content = inject_fncall(msgs, tools, proto, lang="zh")[0]["content"]
     assert "The following is a transcript of completed interactions." in content
     assert "以下是已完成的交互记录" not in content
+    assert "Reminder — tool notation in the conversation history above" not in content
+
+
+def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
+    proto = get_protocol("entml")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search",
+                "description": "Search",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
+            },
+        }
+    ]
+    msgs = [
+        {"role": "user", "content": "find docs"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "search",
+                    "arguments": json.dumps({"query": "docs"}),
+                },
+            }],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": "found 3"},
+        {"role": "user", "content": "summarize"},
+    ]
+    content = inject_fncall(msgs, tools, proto)[0]["content"]
+    assert "[search(query=\"docs\")]" in content
+    assert "Reminder — tool notation in the conversation history above" in content
+    assert "output a valid `<entml:invoke>` block" in content
+    hist_idx = content.index("<entml:conversation_history>")
+    reminder_idx = content.index("Reminder — tool notation")
+    user_idx = content.index("<current_user_message>")
+    assert hist_idx < reminder_idx < user_idx
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,7 @@ from echotools.exec.fncall.prompt.history import (
 )
 from echotools.exec.fncall.prompt.history_format import (
     _format_conversation_history,
+    history_contains_tool_calls,
 )
 from echotools.exec.fncall.prompt.prompt_helpers import (
     build_no_tools_prompt,
@@ -61,6 +62,7 @@ def build_tools_prompt(
     current_user_message: str,
     loop_detection_threshold: int,
     protocol_options: Optional[Dict[str, Any]] = None,
+    history_has_tool_calls: bool = False,
 ) -> str:
     loop_warning = ""
     if loop_detection_threshold > 0:
@@ -77,6 +79,8 @@ def build_tools_prompt(
         if protocol_options is not None and protocol.id == "entml"
         else {}
     )
+    if protocol.id == "entml":
+        extra["history_has_tool_calls"] = history_has_tool_calls
     return protocol.render_prompt(
         tool_descs=tool_descs,
         lang=lang,
@@ -133,6 +137,7 @@ def inject_fncall(
     prompt = build_tools_prompt(
         protocol, tools, normalized, lang, user_system_prompt,
         history_text, current_user_message, loop_detection_threshold, protocol_options,
+        history_has_tool_calls=history_contains_tool_calls(history_messages),
     )
     if dump_prompt:
         _maybe_dump_prompt(prompt, dump_dir)

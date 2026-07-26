@@ -10,7 +10,10 @@ from __future__ import annotations
 import json as _json
 from typing import Any, Dict, List, Optional, Tuple
 
-from echotools.exec.fncall.prompt.templates import _HISTORY_CLARIFY_EN
+from echotools.exec.fncall.prompt.templates import (
+    _HISTORY_CLARIFY_EN,
+    _HISTORY_TOOL_INVOKE_REMINDER_EN,
+)
 from echotools.exec.fncall.protocols.entml_invoke import (
     format_entml_tool_calls,
     parse_entml_tool_calls,
@@ -117,6 +120,7 @@ class EntmlProtocol(ToolProtocol):
         loop_warning: str = "",
         current_user_message: str = "",
         protocol_options: Optional[Dict[str, Any]] = None,
+        history_has_tool_calls: bool = False,
     ) -> str:
         if tool_descs:
             sections: List[str] = [
@@ -138,6 +142,8 @@ class EntmlProtocol(ToolProtocol):
             sections.append(
                 format_entml_conversation_history(history_text, _HISTORY_CLARIFY_EN)
             )
+            if tool_descs and history_has_tool_calls:
+                sections.append(_HISTORY_TOOL_INVOKE_REMINDER_EN)
 
         if loop_warning:
             sections.append(f"<loop_warning>\n{loop_warning}\n</loop_warning>")
