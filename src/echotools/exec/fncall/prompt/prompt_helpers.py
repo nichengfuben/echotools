@@ -15,7 +15,35 @@ from .history import (
     _try_convert_user_to_tool,
 )
 
+from echotools.exec.fncall.protocols.entml_thinking_history import (
+    extract_reasoning_text,
+    format_entml_thinking_history_block,
+)
+
 logger = get_logger(__name__)
+
+
+def _assistant_history_content_blocks(
+    m: Dict[str, Any],
+    content_str: str,
+    protocol: Optional[Any],
+    include_thinking_in_history: bool,
+) -> List[str]:
+    """构建 assistant 历史块正文（可选前置 entml:thinking）。"""
+    blocks: List[str] = []
+    if (
+        include_thinking_in_history
+        and protocol is not None
+        and getattr(protocol, "id", None) == "entml"
+    ):
+        reasoning = extract_reasoning_text(m)
+        if reasoning:
+            thinking_block = format_entml_thinking_history_block(reasoning)
+            if thinking_block:
+                blocks.append(thinking_block)
+    if content_str:
+        blocks.append(content_str)
+    return blocks
 
 
 def split_last_user_message(
@@ -52,11 +80,13 @@ def format_assistant_block(
     protocol: Optional[Any],
     call_id_to_name: Dict[str, str],
     seen_assistant_keys: Set[Tuple[str, Tuple[Tuple[str, str], ...]]],
+    *,
+    include_thinking_in_history: bool = False,
 ) -> Optional[str]:
     tcs: List[Dict[str, Any]] = m.get("tool_calls") or []
-    blocks: List[str] = []
-    if content_str:
-        blocks.append(content_str)
+    blocks = _assistant_history_content_blocks(
+        m, content_str, protocol, include_thinking_in_history
+    )
     for tc in tcs:
         cid = tc.get("id") or ""
         fn_name = (tc.get("function") or {}).get("name") or ""
@@ -87,6 +117,8 @@ def format_assistant_block_with_results(
     protocol: Optional[Any],
     call_id_to_name: Dict[str, str],
     seen_assistant_keys: Set[Tuple[str, Tuple[Tuple[str, str], ...]]],
+    *,
+    include_thinking_in_history: bool = False,
 ) -> Optional[str]:
     tcs: List[Dict[str, Any]] = m.get("tool_calls") or []
     content_str = normalize_content(m.get("content", ""))
@@ -102,9 +134,9 @@ def format_assistant_block_with_results(
         for tmsg in tool_msgs
     }
 
-    blocks: List[str] = []
-    if content_str:
-        blocks.append(content_str)
+    blocks = _assistant_history_content_blocks(
+        m, content_str, protocol, include_thinking_in_history
+    )
 
     for tc in tcs:
         if protocol is not None and hasattr(protocol, "format_assistant_tool_calls"):

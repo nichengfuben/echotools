@@ -22,6 +22,10 @@ from echotools.exec.fncall.protocols.entml import (
     format_entml_current_user_message,
 )
 from echotools.exec.fncall.protocols.entml_thinking import build_entml_thinking_section
+from echotools.exec.fncall.protocols.entml_thinking_history import (
+    apply_thinking_history_policy,
+    parse_include_thinking_in_history,
+)
 from echotools.exec.fncall.shared.loop_detect import detect_tool_loop
 from echotools.exec.fncall.shared.normalization import format_tool_descs
 from echotools.exec.protocol.base import ToolProtocol
@@ -96,14 +100,18 @@ def inject_fncall(
     protocol_options: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """注入工具定义，返回单条 user 消息（含历史）。"""
-    normalized = _normalize_messages(list(messages))
+    include_history = parse_include_thinking_in_history(protocol_options)
+    prepared = apply_thinking_history_policy(list(messages), include_history)
+    normalized = _normalize_messages(prepared)
     history_messages, current_user_message = split_last_user_message(normalized)
 
     if hasattr(protocol, 'clean_tags'):
         current_user_message = protocol.clean_tags(current_user_message)
 
     history_text = _format_conversation_history(
-        history_messages, protocol=protocol
+        history_messages,
+        protocol=protocol,
+        include_thinking_in_history=include_history,
     ).strip()
 
     if not tools:

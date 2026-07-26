@@ -426,3 +426,43 @@ def test_entml_parse_schema_coercion() -> None:
     calls = parse_entml_tool_calls(sample, tools, schema_index)
     args = json.loads(calls[0]["function"]["arguments"])
     assert args == {"count": 7, "enabled": True, "tags": ["x", "y"]}
+
+
+def test_inject_include_thinking_in_history() -> None:
+    """protocol_options.include_thinking_in_history 应在历史中渲染 entml:thinking。"""
+    proto = get_protocol("entml")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            },
+        }
+    ]
+    msgs = [
+        {"role": "user", "content": "查北京天气"},
+        {
+            "role": "assistant",
+            "reasoning": "应先调用 get_weather 获取实时数据。",
+            "content": "我来查一下。",
+        },
+        {"role": "user", "content": "那上海呢？"},
+    ]
+    plain = inject_fncall(msgs, tools, proto)[0]["content"]
+    assert "应先调用 get_weather" not in plain
+
+    with_history = inject_fncall(
+        msgs,
+        tools,
+        proto,
+        protocol_options={"include_thinking_in_history": True},
+    )[0]["content"]
+    assert "<entml:thinking>" in with_history
+    assert "应先调用 get_weather 获取实时数据。" in with_history
+    assert "那上海呢？" in with_history

@@ -11,6 +11,29 @@ HISTORY_FLAG_KEYS = (
 )
 _THINKING_BLOCK_TYPES = frozenset({"thinking", "reasoning", "redacted_thinking"})
 
+_THINKING_BLOCK_OPEN = "<entml:thinking>"
+_THINKING_BLOCK_CLOSE = "</entml:thinking>"
+
+
+def format_entml_thinking_history_block(text: str) -> str:
+    """将历史 assistant 思考链格式化为 entml 块（供 conversation_history 使用）。"""
+    stripped = (text or "").strip()
+    if not stripped:
+        return ""
+    return f"{_THINKING_BLOCK_OPEN}\n{stripped}\n{_THINKING_BLOCK_CLOSE}"
+
+
+def parse_include_thinking_in_history(
+    protocol_options: Optional[Mapping[str, Any]],
+) -> bool:
+    """从 protocol_options 解析是否在历史中渲染 assistant 思考链。"""
+    if not protocol_options:
+        return False
+    for key in HISTORY_FLAG_KEYS:
+        if key in protocol_options:
+            return bool(protocol_options[key])
+    return False
+
 
 def parse_interleaved_history(
     body: Mapping[str, Any],

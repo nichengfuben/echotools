@@ -18,6 +18,8 @@ from .prompt_helpers import (
 def _format_conversation_history(
     messages: List[Dict[str, Any]],
     protocol: Optional[Any] = None,
+    *,
+    include_thinking_in_history: bool = False,
 ) -> str:
     if not messages:
         return ""
@@ -48,14 +50,16 @@ def _format_conversation_history(
                     tool_msgs.append(messages[j])
                     j += 1
                 block = format_assistant_block_with_results(
-                    m, tool_msgs, protocol, call_id_to_name, seen_assistant_keys
+                    m, tool_msgs, protocol, call_id_to_name, seen_assistant_keys,
+                    include_thinking_in_history=include_thinking_in_history,
                 )
                 if block:
                     parts.append((block, False))
                 i = j
             else:
                 block = format_assistant_block(
-                    m, content_str, protocol, call_id_to_name, seen_assistant_keys
+                    m, content_str, protocol, call_id_to_name, seen_assistant_keys,
+                    include_thinking_in_history=include_thinking_in_history,
                 )
                 if block:
                     parts.append((block, False))
