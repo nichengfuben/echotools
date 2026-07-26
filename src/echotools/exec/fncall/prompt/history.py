@@ -31,9 +31,11 @@ _TOOL_RESULT_LINE_RE = re.compile(
 )
 
 _TOOL_CALL_MARKER_RE = re.compile(
-    r"<function_calls|<entml:function_calls|<antml:function_calls|\[function_calls\]"
+    r"<function_calls|<entml:function_calls|<function_calls|\[function_calls\]"
     r'|<\|PROVIDER\|tool_calls|"type"\s*:\s*"function_call"'
-    r"|<invoke\s+name=|<entml:invoke\s+name=",
+    r"|<invoke\s+name=|<entml:invoke\s+name="
+    r"|^\[\w[\w.]*\(",
+    re.MULTILINE,
 )
 
 # entml 标签清理正则
@@ -131,6 +133,17 @@ def _render_tool_result(
     lines.append("</result>")
     lines.append("</function_results>")
     return "\n".join(lines)
+
+
+def _render_inline_call_result(
+    call_text: str,
+    content: Any,
+    is_error: bool = False,
+) -> str:
+    """将单个工具调用及结果渲染为内联格式：[call(...)]\n→ Result: ..."""
+    text = normalize_content(content).strip()
+    arrow = "→ Error:" if is_error else "→ Result:"
+    return f"{call_text}\n{arrow} {text}"
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 from .entml_values import coerce_entml_parameter_value
 
 BLOCK_RE = re.compile(
-    r"<entml:function_calls\b[^>]*>([\s\S]*?)</entml:function_calls>",
+    r'<entml:invoke\b[^>]*>[\s\S]*?</entml:invoke>',
     re.DOTALL,
 )
 INVOKE_RE = re.compile(

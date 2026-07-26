@@ -10,7 +10,10 @@ import json
 from typing import Any, Dict, List, Optional
 
 from echotools.base.logger.manager import get_logger
-from echotools.exec.fncall.shared.coercion import _build_param_schema_index
+from echotools.exec.fncall.shared.coercion import (
+    _build_param_schema_index,
+    _resolve_effective_type,
+)
 from echotools.exec.fncall.shared.schema_render import (
     _DQ,
     _ctag,
@@ -113,9 +116,10 @@ def _try_parse_relaxed_literal(text: str) -> Optional[Any]:
 
 def _normalize_value(value: Any, schema: Optional[Dict[str, Any]] = None) -> Any:
     if isinstance(value, str):
-        parsed = _try_parse_relaxed_literal(value)
-        if parsed is not None:
-            value = parsed
+        if _resolve_effective_type(schema) != "string":
+            parsed = _try_parse_relaxed_literal(value)
+            if parsed is not None:
+                value = parsed
     if isinstance(value, list):
         item_schema = (schema or {}).get("items") if schema else None
         if isinstance(item_schema, dict):

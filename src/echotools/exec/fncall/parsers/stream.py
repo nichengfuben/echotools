@@ -9,6 +9,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from echotools.exec.protocol.base import ToolProtocol
 
+# 懒导入：仅 entml 协议需要
+def _make_thinking_filter(protocol: ToolProtocol):
+    if getattr(protocol, "id", None) == "entml":
+        from echotools.exec.fncall.protocols.entml_thinking_parse import EntmlThinkingStreamFilter
+        return EntmlThinkingStreamFilter()
+    return None
+
 
 class FncallStreamParser:
     """协议感知的流式 fncall 检测与解析状态机。
@@ -39,6 +46,9 @@ class FncallStreamParser:
         self._detected: bool = False
         self._state: str = self.WAITING_FOR_TAG
         self._finalized_result: Optional[Tuple[str, List[Dict[str, Any]]]] = None
+        self._thinking_parts: List[str] = []
+        self._thinking_filter = _make_thinking_filter(protocol)
+        self._emitted_invoke_count: int = 0
 
         # 三种情况：
         #   1. 协议实现了 get_stream_end_tags() 且返回非空列表  → 用声明的结束标记
@@ -63,6 +73,19 @@ class FncallStreamParser:
             elif tag.startswith("[") and not tag.startswith("[/"):
                 inner = tag.lstrip("[").split("]")[0]
                 self._end_tags.append(f"[/{inner}]")
+
+    def _emit_text(self, text: str) -> None:
+        """将文本路由给思考过滤器（若启用）或直接追加到 _text_parts。"""
+        if not text:
+            return
+        if self._thinking_filter is not None:
+            for kind, part in self._thinking_filter.feed(text):
+                if kind == "thinking":
+                    self._thinking_parts.append(part)
+                else:
+                    self._text_parts.append(part)
+        else:
+            self._text_parts.append(text)
 
     @staticmethod
     def _split_safe_text(
@@ -93,12 +116,12 @@ class FncallStreamParser:
         if not found:
             safe, remain = self._split_safe_text(combined, trigger_tags)
             if safe:
-                self._text_parts.append(safe)
+                self._emit_text(safe)
             self._waiting_tail = remain
             return
 
         if pos > 0:
-            self._text_parts.append(combined[:pos])
+            self._emit_text(combined[:pos])
 
         self._fncall_buf = combined[pos:]
         self._waiting_tail = ""
@@ -142,6 +165,14 @@ class FncallStreamParser:
 
         self._state = self.DONE
 
+        # 刷新思考过滤器中的剩余缓冲
+        if self._thinking_filter is not None:
+            for kind, part in self._thinking_filter.finalize():
+                if kind == "thinking":
+                    self._thinking_parts.append(part)
+                else:
+                    self._text_parts.append(part)
+
         if not self._detected:
             full_text = "".join(self._text_parts) + self._waiting_tail
             result = self._protocol.parse(full_text, self._tools)
@@ -167,3 +198,25 @@ class FncallStreamParser:
     def partial_text(self) -> str:
         """已确认的非 fncall 文本片段（可用于流式 UI 实时展示）。"""
         return "".join(self._text_parts)
+
+    @property
+    def partial_thinking(self) -> str:
+        """已提取的 <entml:thinking> 思考链内容（累积，不含标签）。"""
+        return "".join(self._thinking_parts)
+
+    def get_ready_tool_calls(self) -> List[Dict[str, Any]]:
+        """返回新完成的 tool_calls（增量，每次调用只返回上次调用之后新增的）。
+
+        适用于在流式阶段实时发送已解析完毕的 tool call，无需等待整个 buffer 就绪。
+        """
+        if self._state not in (self.IN_FUNCTION_CALLS, self.DONE):
+            return []
+        try:
+            _, all_calls = self._protocol.parse(self._fncall_buf, self._tools)
+        except Exception:
+            return []
+        if len(all_calls) <= self._emitted_invoke_count:
+            return []
+        new_calls = all_calls[self._emitted_invoke_count:]
+        self._emitted_invoke_count = len(all_calls)
+        return new_calls

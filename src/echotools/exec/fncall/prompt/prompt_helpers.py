@@ -9,6 +9,7 @@ from .history import (
     _TOOL_CALL_MARKER_RE,
     _convert_assistant_pseudo_calls,
     _make_assistant_dedup_key,
+    _render_inline_call_result,
     _render_tool_call,
     _render_tool_result,
     _try_convert_user_to_tool,
@@ -71,6 +72,58 @@ def format_assistant_block(
     inner = "\n\n".join(blocks)
     if not inner:
         return None
+    rendered = f"<assistant>\n{inner}\n</assistant>"
+    dedup_key = _make_assistant_dedup_key(content_str, tcs)
+    if dedup_key in seen_assistant_keys:
+        logger.debug("跳过重复 assistant 消息（dedup_key 已见）")
+        return None
+    seen_assistant_keys.add(dedup_key)
+    return rendered
+
+
+def format_assistant_block_with_results(
+    m: Dict[str, Any],
+    tool_msgs: List[Dict[str, Any]],
+    protocol: Optional[Any],
+    call_id_to_name: Dict[str, str],
+    seen_assistant_keys: Set[Tuple[str, Tuple[Tuple[str, str], ...]]],
+) -> Optional[str]:
+    tcs: List[Dict[str, Any]] = m.get("tool_calls") or []
+    content_str = normalize_content(m.get("content", ""))
+
+    for tc in tcs:
+        cid = tc.get("id") or ""
+        fn_name = (tc.get("function") or {}).get("name") or ""
+        if cid and fn_name:
+            call_id_to_name[cid] = fn_name
+
+    tid_to_result: Dict[str, Dict[str, Any]] = {
+        (tmsg.get("tool_call_id") or ""): tmsg
+        for tmsg in tool_msgs
+    }
+
+    blocks: List[str] = []
+    if content_str:
+        blocks.append(content_str)
+
+    for tc in tcs:
+        if protocol is not None and hasattr(protocol, "format_assistant_tool_calls"):
+            call_text = protocol.format_assistant_tool_calls([tc])
+        else:
+            call_text = _render_tool_call(tc)
+        tid = tc.get("id") or ""
+        result_msg = tid_to_result.get(tid)
+        if result_msg is not None:
+            result_content = normalize_content(result_msg.get("content", ""))
+            is_error = bool(result_msg.get("is_error", False))
+            blocks.append(_render_inline_call_result(call_text, result_content, is_error))
+        else:
+            blocks.append(call_text)
+
+    inner = "\n\n".join(blocks)
+    if not inner:
+        return None
+
     rendered = f"<assistant>\n{inner}\n</assistant>"
     dedup_key = _make_assistant_dedup_key(content_str, tcs)
     if dedup_key in seen_assistant_keys:

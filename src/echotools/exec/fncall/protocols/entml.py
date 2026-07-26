@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json as _json
 from typing import Any, Dict, List, Optional, Tuple
 
 from echotools.exec.fncall.prompt.templates import _HISTORY_CLARIFY_EN
@@ -21,11 +22,33 @@ from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 from echotools.exec.fncall.shared.normalization import normalize_tool_calls
 from echotools.exec.protocol.base import ToolProtocol
 
+def _render_tool_calls_pseudocode(tool_calls: List[Dict[str, Any]]) -> str:
+    """将历史 tool_calls 渲染为紧凑伪代码 [name(k="v", ...)]，节省上下文。"""
+    lines: List[str] = []
+    for tc in tool_calls:
+        fn = tc.get("function") or {}
+        name = fn.get("name") or ""
+        args_str = fn.get("arguments") or "{}"
+        try:
+            args = _json.loads(args_str) if isinstance(args_str, str) else args_str
+            if not isinstance(args, dict):
+                args = {"value": args}
+        except (_json.JSONDecodeError, TypeError):
+            args = {"value": args_str}
+        params: List[str] = []
+        for k, v in args.items():
+            if isinstance(v, str):
+                params.append(f'{k}="{v}"')
+            else:
+                params.append(f"{k}={_json.dumps(v, ensure_ascii=False)}")
+        lines.append(f"[{name}({', '.join(params)})]")
+    return "\n".join(lines)
+
+
 _ENTML_INSTRUCTION = """\
 In this environment you have access to a set of tools you can use to answer the user's question.
-You can invoke functions by writing a "<entml:function_calls>" block like the following as part of your reply to the user:
+You can invoke functions by writing a "<entml:invoke>" block like the following as part of your reply to the user:
 
-<entml:function_calls>
 <entml:invoke name="$FUNCTION_NAME">
 <entml:parameter name="$PARAMETER_NAME">$PARAMETER_VALUE</entml:parameter>
 ...
@@ -33,7 +56,6 @@ You can invoke functions by writing a "<entml:function_calls>" block like the fo
 <entml:invoke name="$FUNCTION_NAME2">
 ...
 </entml:invoke>
-</entml:function_calls>
 
 String and scalar parameters should be specified as is, while lists and objects should use JSON format.
 
@@ -69,11 +91,15 @@ class EntmlProtocol(ToolProtocol):
     def id(self) -> str:
         return "entml"
 
-    _TRIGGER = "<entml:function_calls>"
-    _TRIGGER_PREFIX = "<entml:function_calls"
+    _TRIGGER = "<entml:invoke>"
+    _TRIGGER_PREFIX = "<entml:invoke"
 
     def get_trigger_tags(self) -> List[str]:
         return [self._TRIGGER]
+
+    def get_stream_end_tags(self) -> List[str]:
+        """新格式无外层 wrapper，不自动关闭流，由 finalize() 统一解析。"""
+        return []
 
     @staticmethod
     def format_tool_descs(tools: List[Dict[str, Any]]) -> str:
@@ -115,6 +141,7 @@ class EntmlProtocol(ToolProtocol):
         pos = buffer.find(self._TRIGGER_PREFIX)
         if pos < 0:
             return (False, -1)
+        # 确保是完整的开标签（name=" 属性存在）
         close = buffer.find(">", pos + len(self._TRIGGER_PREFIX))
         if close < 0:
             return (False, -1)
@@ -147,7 +174,7 @@ class EntmlProtocol(ToolProtocol):
         self,
         tool_calls: List[Dict[str, Any]],
     ) -> str:
-        return format_entml_tool_calls(tool_calls)
+        return _render_tool_calls_pseudocode(tool_calls)
 
     def supports_streaming(self) -> bool:
         return True

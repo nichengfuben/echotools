@@ -37,6 +37,10 @@ class ToolProtocol(ABC):
         """触发标记列表。"""
         return []
 
+    def get_stream_end_tags(self) -> List[str]:
+        """流式自动关闭标记列表；空列表表示不自动关闭，由 finalize() 统一处理。"""
+        return []
+
     @abstractmethod
     def render_prompt(
         self,

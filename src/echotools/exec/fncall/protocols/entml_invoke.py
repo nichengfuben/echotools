@@ -57,19 +57,17 @@ def parse_entml_tool_calls(
     schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
 ) -> List[Dict[str, Any]]:
     tool_calls: List[Dict[str, Any]] = []
-    for block_m in BLOCK_RE.finditer(text):
-        block_body = block_m.group(1)
-        for invoke_m in INVOKE_RE.finditer(block_body):
-            name = invoke_m.group(1).strip()
-            args = parse_invoke_args(invoke_m.group(2), name, schema_index)
-            arguments = json.dumps(args, ensure_ascii=False)
-            tool_calls.append(
-                {
-                    "id": f"call_{len(tool_calls):04d}",
-                    "type": "function",
-                    "function": {"name": name, "arguments": arguments},
-                }
-            )
+    for invoke_m in INVOKE_RE.finditer(text):
+        name = invoke_m.group(1).strip()
+        args = parse_invoke_args(invoke_m.group(2), name, schema_index)
+        arguments = json.dumps(args, ensure_ascii=False)
+        tool_calls.append(
+            {
+                "id": f"call_{len(tool_calls):04d}",
+                "type": "function",
+                "function": {"name": name, "arguments": arguments},
+            }
+        )
     return tool_calls
 
 
@@ -112,5 +110,4 @@ def format_entml_tool_calls(tool_calls: List[Dict[str, Any]]) -> str:
         body = "\n".join(param_lines)
         invokes.append(f'<entml:invoke name="{name}">\n{body}\n</entml:invoke>')
 
-    inner = "\n".join(invokes)
-    return f"<entml:function_calls>\n{inner}\n</entml:function_calls>"
+    return "\n".join(invokes)
