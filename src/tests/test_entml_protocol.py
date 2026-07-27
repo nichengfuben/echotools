@@ -256,6 +256,98 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
     assert hist_idx < reminder_idx < user_idx
 
 
+def test_entml_multi_tool_history_blocks() -> None:
+    """同一 assistant 轮次并行多工具时，每个调用独立 <tool> 块。"""
+    proto = get_protocol("entml")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_time",
+                "description": "Query local time",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_web",
+                "description": "Web search",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+            },
+        },
+    ]
+    msgs = [
+        {"role": "user", "content": "plan trip"},
+        {
+            "role": "assistant",
+            "content": "checking time and attractions",
+            "tool_calls": [
+                {
+                    "id": "call_t1",
+                    "type": "function",
+                    "function": {
+                        "name": "get_time",
+                        "arguments": json.dumps({"city": "Hangzhou"}),
+                    },
+                },
+                {
+                    "id": "call_s1",
+                    "type": "function",
+                    "function": {
+                        "name": "search_web",
+                        "arguments": json.dumps({"query": "West Lake spots"}),
+                    },
+                },
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_t1",
+            "content": "2026-07-26 14:30 CST",
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_s1",
+            "content": "Broken Bridge, Leifeng Pagoda",
+        },
+        {"role": "user", "content": "summarize"},
+    ]
+    content = inject_fncall(msgs, tools, proto)[0]["content"]
+
+    hist_start = content.index("<entml:conversation_history>")
+    hist_end = content.index("</entml:conversation_history>")
+    history = content[hist_start:hist_end]
+
+    assert history.count("<tool>") == 2
+    assert history.count("</tool>") == 2
+    assert "[get_time: Hangzhou ]" in history
+    assert "[search_web: West Lake spots ]" in history
+    assert "2026-07-26 14:30 CST" in history
+    assert "Broken Bridge, Leifeng Pagoda" in history
+    assert "→ Result:" not in history
+    assert "[get_time(" not in history
+    assert "[search_web(" not in history
+
+    time_block = (
+        "<tool>\n[get_time: Hangzhou ]\n2026-07-26 14:30 CST\n</tool>"
+    )
+    search_block = (
+        "<tool>\n[search_web: West Lake spots ]\n"
+        "Broken Bridge, Leifeng Pagoda\n</tool>"
+    )
+    assert time_block in history
+    assert search_block in history
+
+
 @pytest.mark.parametrize(
     "raw,schema,expected",
     [
