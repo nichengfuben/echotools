@@ -112,6 +112,44 @@ SIMULATED_LLM_RESPONSES: List[SimulatedCase] = [
         expect_clean_substrings=["我先查一下杭州天气。"],
     ),
     SimulatedCase(
+        id="parallel_two_tools_bare",
+        description="规范裸 invoke 并行两工具（与提示词示例一致）",
+        response=(
+            "稍等，我同时查天气和景点。\n"
+            '<entml:invoke name="get_weather">\n'
+            '<entml:parameter name="city">杭州</entml:parameter>\n'
+            "</entml:invoke>\n"
+            '<entml:invoke name="search_web">\n'
+            '<entml:parameter name="query">杭州西湖 周边景点</entml:parameter>\n'
+            '<entml:parameter name="limit">5</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["get_weather", "search_web"],
+        expect_args=[
+            {"city": "杭州"},
+            {"query": "杭州西湖 周边景点", "limit": 5},
+        ],
+        expect_clean_substrings=["稍等，我同时查天气和景点。"],
+    ),
+    SimulatedCase(
+        id="thinking_then_bare_invoke",
+        description="thinking 前置 + 裸 invoke（无 function_calls 外壳）",
+        response=(
+            "<entml:thinking>\n"
+            "用户要杭州天气，应调用 get_weather，unit 用 c。\n"
+            "</entml:thinking>\n"
+            "好的，我来查询。\n"
+            '<entml:invoke name="get_weather">\n'
+            '<entml:parameter name="city">杭州</entml:parameter>\n'
+            '<entml:parameter name="days">3</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["get_weather"],
+        expect_args=[{"city": "杭州", "days": 3}],
+        expect_clean_substrings=["好的，我来查询。"],
+        expect_thinking="用户要杭州天气，应调用 get_weather，unit 用 c。",
+    ),
+    SimulatedCase(
         id="thinking_then_wrapper",
         description="thinking + function_calls 外壳（最常见线上形态）",
         response=(
@@ -448,3 +486,9 @@ SIMULATED_LLM_RESPONSES: List[SimulatedCase] = [
 
 def iter_simulated_cases():
     return list(SIMULATED_LLM_RESPONSES)
+
+
+def iter_bare_invoke_cases():
+    """仅含裸 invoke 语料（无 legacy function_calls 外壳）。"""
+    banned = "<entml:function_calls"
+    return [c for c in SIMULATED_LLM_RESPONSES if banned not in c.response]

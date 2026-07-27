@@ -90,6 +90,9 @@ def test_simulated_corpus_covers_key_shapes() -> None:
     ids = {c.id for c in SIMULATED_LLM_RESPONSES}
     required = {
         "thinking_then_wrapper",
+        "thinking_then_bare_invoke",
+        "parallel_two_tools_bare",
+        "canonical_bare_invoke",
         "parallel_two_tools",
         "type_attrs_reordered",
         "single_quotes_everywhere",

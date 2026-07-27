@@ -1,6 +1,6 @@
 """Entropy ML (entml) 协议实现。
 
-- 工具调用：<entml:function_calls> / <entml:invoke> / <entml:parameter>
+- 工具调用：<entml:invoke> / <entml:parameter>（legacy ``function_calls`` 外壳仅解析兼容）
 - 对话历史：<entml:conversation_history>
 - 当前用户消息：<current_user_message>
 """
@@ -20,6 +20,9 @@ from echotools.exec.fncall.protocols.entml_invoke import (
 )
 from echotools.exec.fncall.protocols.entml_patterns import (
     BLOCK_RE,
+    extract_attr_value,
+    normalize_entml_name,
+    strip_legacy_function_calls_wrapper,
     strip_tool_entml_residue,
 )
 from echotools.exec.fncall.protocols.entml_think.core import (
@@ -136,19 +139,21 @@ class EntmlProtocol(ToolProtocol):
 
     _TRIGGER = "<entml:invoke>"
     _TRIGGER_PREFIX = "<entml:invoke"
-    _WRAPPER_PREFIX = "<entml:function_calls"
+    _LEGACY_WRAPPER_PREFIX = "<entml:function_calls"
     _THINKING_PREFIX = "<entml:thinking"
 
     def get_trigger_tags(self) -> List[str]:
-        # invoke / function_calls / thinking 前缀一并 holdback，避免 `<e` 歧义被提前吐出
+        # invoke / thinking 前缀 holdback，避免 `<e` 歧义被提前吐出
         return [
             self._TRIGGER,
             self._TRIGGER_PREFIX,
-            self._WRAPPER_PREFIX,
-            f"{self._WRAPPER_PREFIX}>",
             self._THINKING_PREFIX,
             f"{self._THINKING_PREFIX}>",
         ]
+
+    def normalize_stream_buffer(self, buffer: str) -> str:
+        """流式处理前剥离 legacy function_calls 外壳（提示词已不再要求）。"""
+        return strip_legacy_function_calls_wrapper(buffer)
 
     def get_stream_end_tags(self) -> List[str]:
         """新格式无外层 wrapper，不自动关闭流，由 finalize() 统一解析。"""
@@ -201,18 +206,43 @@ class EntmlProtocol(ToolProtocol):
         return "\n\n".join(sections)
 
     def detect_start(self, buffer: str) -> Tuple[bool, int]:
-        candidates: List[int] = []
-        for prefix in (self._WRAPPER_PREFIX, self._TRIGGER_PREFIX):
-            pos = buffer.find(prefix)
-            if pos < 0:
-                continue
-            close = buffer.find(">", pos + len(prefix))
-            if close < 0:
-                continue
-            candidates.append(pos)
-        if not candidates:
+        """invoke 开标签（含 name 且闭合 ``>``）稳定后才视为工具流开始。"""
+        invoke_pos = self._find_complete_invoke_open(buffer)
+        if invoke_pos < 0:
             return (False, -1)
-        return (True, min(candidates))
+        return (True, invoke_pos)
+
+    def find_fncall_hold_from(self, buffer: str) -> Optional[int]:
+        """invoke 未稳定前 hold 前缀；legacy 外壳开标签未闭合时同样 hold。"""
+        if self._find_complete_invoke_open(buffer) >= 0:
+            return None
+        hold: Optional[int] = None
+        legacy_pos = buffer.find(self._LEGACY_WRAPPER_PREFIX)
+        if legacy_pos >= 0:
+            close = buffer.find(">", legacy_pos)
+            if close < 0 and (hold is None or legacy_pos < hold):
+                hold = legacy_pos
+        invoke_pos = buffer.find(self._TRIGGER_PREFIX)
+        if invoke_pos >= 0 and (hold is None or invoke_pos < hold):
+            hold = invoke_pos
+        return hold
+
+    def _find_complete_invoke_open(self, buffer: str) -> int:
+        """返回首个含 name 且已闭合 ``>`` 的 ``<entml:invoke`` 起始下标；否则 -1。"""
+        search_from = 0
+        prefix_len = len(self._TRIGGER_PREFIX)
+        while True:
+            pos = buffer.find(self._TRIGGER_PREFIX, search_from)
+            if pos < 0:
+                return -1
+            close = buffer.find(">", pos + prefix_len)
+            if close < 0:
+                return -1
+            attrs = buffer[pos + prefix_len : close]
+            name = extract_attr_value(attrs, "name")
+            if name and normalize_entml_name(name):
+                return pos
+            search_from = close + 1
 
     def parse(
         self,

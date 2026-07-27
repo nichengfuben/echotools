@@ -93,7 +93,7 @@ def format_entml_parameter_value(value: Any) -> str:
 
 
 def format_entml_tool_calls(tool_calls: List[Dict[str, Any]]) -> str:
-    """将 tool_call 列表渲染为 entml function_calls 块。"""
+    """将 tool_call 列表渲染为裸 ``<entml:invoke>`` 块（无 function_calls 外壳）。"""
     if not tool_calls:
         return ""
 

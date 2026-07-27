@@ -558,6 +558,36 @@ class TestStreamPipeline:
         assert clean == "hello"
         assert _args(calls)[0]["s"] == "x"
 
+    def test_wrapper_without_invoke_name_not_detected(self) -> None:
+        parser = FncallStreamParser(protocol=_proto(), tools=RICH_TOOLS)
+        parser.feed("前文\n<entml:function_calls>\n")
+        assert parser.partial_text == "前文\n"
+        assert not parser.has_calls
+        parser.feed('<entml:invoke name="rich_tool">')
+        assert parser.has_calls
+        assert parser.partial_text == "前文\n"
+        parser.feed(
+            '<entml:parameter name="s">x</entml:parameter></entml:invoke>\n'
+            "</entml:function_calls>"
+        )
+        clean, calls = parser.finalize()
+        assert clean == "前文"
+        assert _args(calls)[0]["s"] == "x"
+
+    def test_prose_before_invoke_name_line_streams_after_stable(self) -> None:
+        parser = FncallStreamParser(protocol=_proto(), tools=RICH_TOOLS)
+        parser.feed("明白，不用 <tool> 块。现在用 `\n")
+        assert not parser.has_calls
+        assert "<tool>" in parser.partial_text
+        parser.feed('<entml:invoke name="rich_tool">')
+        assert parser.has_calls
+        assert "entml:" not in parser.partial_text
+        ready = parser.feed(
+            '<entml:parameter name="s">ok</entml:parameter></entml:invoke>'
+        )
+        assert len(ready) == 1
+        assert ready[0]["function"]["name"] == "rich_tool"
+
     def test_finalize_idempotent(self) -> None:
         parser = FncallStreamParser(protocol=_proto(), tools=RICH_TOOLS)
         parser.feed(_invoke("rich_tool", {"s": "x"}))

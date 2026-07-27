@@ -572,6 +572,46 @@ def test_entml_instruction_matches_spec_format() -> None:
     assert "<functions>" not in prompt
 
 
+def test_entml_prompt_and_stream_logic_no_function_calls_wrapper() -> None:
+    """提示词与流式检测均不以 function_calls 为一等公民。"""
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+    from echotools.exec.fncall.protocols.entml_patterns import (
+        strip_legacy_function_calls_wrapper,
+    )
+
+    proto = get_protocol("entml")
+    tags = proto.get_trigger_tags()
+    assert "function_calls" not in " ".join(tags)
+
+    # legacy 完整开标签在流式 normalize 时静默剥离
+    stripped = strip_legacy_function_calls_wrapper(
+        "前文\n<entml:function_calls>\n<entml:invoke name=\"x\">"
+    )
+    assert "function_calls" not in stripped
+    assert stripped.startswith("前文\n<entml:invoke")
+
+    # detect_start 只认 invoke 起点，不因 wrapper 提前切换
+    found, pos = proto.detect_start(
+        "<entml:function_calls>\n<entml:invoke name=\"rich_tool\">"
+    )
+    assert found
+    assert pos == len("<entml:function_calls>\n")
+
+    parser = FncallStreamParser(protocol=proto, tools=[])
+    parser.feed("说明\n<entml:function_calls>\n")
+    assert parser.partial_text == "说明\n"
+    assert "function_calls" not in parser.partial_text
+    parser.feed('<entml:invoke name="echo">')
+    assert parser.has_calls
+    parser.feed(
+        '<entml:parameter name="msg">hi</entml:parameter></entml:invoke>'
+        "</entml:function_calls>"
+    )
+    clean, calls = parser.finalize()
+    assert clean == "说明"
+    assert calls[0]["function"]["name"] == "echo"
+
+
 def test_entml_roundtrip_parameter_format() -> None:
     """渲染与解析均使用 <entml:parameter name=\"...\">。"""
     from echotools.exec.fncall.protocols.entml_invoke import format_entml_tool_calls

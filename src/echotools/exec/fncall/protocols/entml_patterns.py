@@ -39,6 +39,15 @@ _TOOL_WRAPPER_PAIR_RE = re.compile(
     r"<entml:function_calls\b[^>]*>[\s\S]*?</entml:function_calls>",
     re.DOTALL,
 )
+# 旧版 function_calls 外壳（提示词已不再要求；流式/解析前静默剥离完整开闭标签）。
+_LEGACY_WRAPPER_OPEN_RE = re.compile(
+    r"<entml:function_calls\b[^>]*>\s*",
+    re.IGNORECASE,
+)
+_LEGACY_WRAPPER_CLOSE_RE = re.compile(
+    r"\s*</entml:function_calls\s*>",
+    re.IGNORECASE,
+)
 _TOOL_ORPHAN_TAG_RE = re.compile(
     r"</?entml:(?:function_calls|invoke|parameter|parameters)\b[^>]*/?>",
     re.DOTALL,
@@ -96,6 +105,15 @@ def parse_sub_tags(
         pschema = schema_index.get(func_name, {}).get(pname, {}) if schema_index else {}
         args[pname] = coerce_entml_parameter_value(pval, pschema or None)
     return args
+
+
+def strip_legacy_function_calls_wrapper(text: str) -> str:
+    """移除完整 legacy ``<entml:function_calls>`` 开/闭标签（裸 invoke 为一等格式）。"""
+    if not text:
+        return text
+    out = _LEGACY_WRAPPER_OPEN_RE.sub("", text)
+    out = _LEGACY_WRAPPER_CLOSE_RE.sub("", out)
+    return out
 
 
 def strip_tool_entml_residue(content: str) -> str:

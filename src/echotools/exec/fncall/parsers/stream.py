@@ -140,13 +140,28 @@ class FncallStreamParser:
         if text:
             self._text_parts.append(text)
 
+    def _normalize_stream_chunk(self, text: str) -> str:
+        fn = getattr(self._protocol, "normalize_stream_buffer", None)
+        if callable(fn):
+            return fn(text)
+        return text
+
     def _feed_content_waiting(self, text: str) -> None:
         """thinking 已闭合后，对可见正文做 invoke 检测（不再经过 thinking 过滤器）。"""
         if not text:
             return
+        text = self._normalize_stream_chunk(text)
         trigger_tags = self._protocol.get_trigger_tags()
         found, pos = self._protocol.detect_start(text)
         if not found:
+            hold_from_fn = getattr(self._protocol, "find_fncall_hold_from", None)
+            if hold_from_fn is not None:
+                hold_from = hold_from_fn(text)
+                if hold_from is not None:
+                    if hold_from > 0:
+                        self._append_content_text(text[:hold_from])
+                    self._waiting_tail = text[hold_from:]
+                    return
             safe, remain = self._split_safe_text(text, trigger_tags)
             if safe:
                 self._append_content_text(safe)
@@ -173,7 +188,7 @@ class FncallStreamParser:
 
     def _feed_waiting(self, chunk: str) -> None:
         """在 WAITING_FOR_TAG 状态下处理新块。"""
-        combined = self._waiting_tail + chunk
+        combined = self._normalize_stream_chunk(self._waiting_tail + chunk)
         self._waiting_tail = ""
 
         # 已进入 thinking 块时，块内不做 invoke 检测。
@@ -196,14 +211,23 @@ class FncallStreamParser:
             return
 
         # 无完整工具开标签时，再处理未闭合 thinking / 思考开标签 holdback。
-        # 必须放在 detect_start 之后：否则 `<entml:function_calls>\n<en` 会被
-        # 尾部 `<en` 误判为 thinking 前缀，导致 invoke 内容被截断。
+        # 必须放在 detect_start 之后：否则 legacy 外壳后的 `<en` 会被
+        # 尾部误判为 thinking 前缀，导致 invoke 内容被截断。
         if self._thinking_filter is not None:
             from echotools.exec.fncall.protocols.entml_think.parse import (
                 has_unclosed_entml_thinking,
             )
             if has_unclosed_entml_thinking(combined):
                 self._feed_waiting_thinking_plain(combined)
+                return
+
+        hold_from_fn = getattr(self._protocol, "find_fncall_hold_from", None)
+        if hold_from_fn is not None:
+            hold_from = hold_from_fn(combined)
+            if hold_from is not None:
+                if hold_from > 0:
+                    self._emit_text(combined[:hold_from])
+                self._waiting_tail = combined[hold_from:]
                 return
 
         safe, remain = self._split_safe_text(combined, trigger_tags)
@@ -222,9 +246,11 @@ class FncallStreamParser:
         return False
 
     def feed(self, chunk: str) -> List[Dict[str, Any]]:
-        """喂入新的流式文本块，返回本轮新完成的 tool_calls（可空列表）。
+        """喂入新的流式文本块。
 
-        DONE 或 finalize 后调用静默忽略并返回 ``[]``。
+        返回本轮新完成的 tool_calls（与 ``get_ready_tool_calls()`` 相同语义：
+        调用后计数前进，勿再对本轮结果重复调用 ``get_ready_tool_calls``）。
+        DONE 或 finalize 后调用返回 ``[]``。
         """
         if not chunk or self._state == self.DONE:
             return []
@@ -236,7 +262,7 @@ class FncallStreamParser:
         if self._state == self.WAITING_FOR_TAG:
             self._feed_waiting(chunk)
         else:
-            self._fncall_buf += chunk
+            self._fncall_buf += self._normalize_stream_chunk(chunk)
             if self._is_call_closed():
                 self._state = self.DONE
 
