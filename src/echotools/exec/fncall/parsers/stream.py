@@ -176,37 +176,40 @@ class FncallStreamParser:
         combined = self._waiting_tail + chunk
         self._waiting_tail = ""
 
-        if self._thinking_filter is not None:
-            from echotools.exec.fncall.protocols.entml_think.parse import (
-                has_unclosed_entml_thinking,
-            )
-            if (
-                self._thinking_filter.in_open_thinking()
-                or has_unclosed_entml_thinking(combined)
-            ):
-                self._feed_waiting_thinking_plain(combined)
-                return
+        # 已进入 thinking 块时，块内不做 invoke 检测。
+        if self._thinking_filter is not None and self._thinking_filter.in_open_thinking():
+            self._feed_waiting_thinking_plain(combined)
+            return
 
         trigger_tags = self._protocol.get_trigger_tags()
         found, pos = self._protocol.detect_start(combined)
 
-        if not found:
-            safe, remain = self._split_safe_text(combined, trigger_tags)
-            if safe:
-                self._emit_text(safe)
-            self._waiting_tail = remain
+        if found:
+            if pos > 0:
+                # 工具标签前的正文仍可能含 thinking，走过滤器。
+                self._emit_text(combined[:pos])
+            self._fncall_buf = combined[pos:]
+            self._detected = True
+            self._state = self.IN_FUNCTION_CALLS
+            if self._is_call_closed():
+                self._state = self.DONE
             return
 
-        if pos > 0:
-            self._emit_text(combined[:pos])
+        # 无完整工具开标签时，再处理未闭合 thinking / 思考开标签 holdback。
+        # 必须放在 detect_start 之后：否则 `<entml:function_calls>\n<en` 会被
+        # 尾部 `<en` 误判为 thinking 前缀，导致 invoke 内容被截断。
+        if self._thinking_filter is not None:
+            from echotools.exec.fncall.protocols.entml_think.parse import (
+                has_unclosed_entml_thinking,
+            )
+            if has_unclosed_entml_thinking(combined):
+                self._feed_waiting_thinking_plain(combined)
+                return
 
-        self._fncall_buf = combined[pos:]
-        self._detected = True
-        self._state = self.IN_FUNCTION_CALLS
-
-        # 检查是否已闭合（单块内完成）
-        if self._is_call_closed():
-            self._state = self.DONE
+        safe, remain = self._split_safe_text(combined, trigger_tags)
+        if safe:
+            self._emit_text(safe)
+        self._waiting_tail = remain
 
     def _is_call_closed(self) -> bool:
         """检测 fncall 缓冲区中是否包含结束标记。"""
@@ -218,12 +221,15 @@ class FncallStreamParser:
                 return True
         return False
 
-    def feed(self, chunk: str) -> None:
-        """喂入新的流式文本块。DONE 或 finalize 后调用静默忽略。"""
+    def feed(self, chunk: str) -> List[Dict[str, Any]]:
+        """喂入新的流式文本块，返回本轮新完成的 tool_calls（可空列表）。
+
+        DONE 或 finalize 后调用静默忽略并返回 ``[]``。
+        """
         if not chunk or self._state == self.DONE:
-            return
+            return []
         if self._finalized_result is not None:
-            return
+            return []
 
         self._raw_buf += chunk
 
@@ -233,6 +239,12 @@ class FncallStreamParser:
             self._fncall_buf += chunk
             if self._is_call_closed():
                 self._state = self.DONE
+
+        return self.get_ready_tool_calls()
+
+    def _assembly_for_tool_parse(self) -> str:
+        """可供工具解析的已缓冲文本（不含 thinking 过滤器内部 pending）。"""
+        return "".join(self._text_parts) + self._waiting_tail + self._fncall_buf
 
     def finalize(self) -> Tuple[str, List[Dict[str, Any]]]:
         """结束流式解析，返回 (清理后文本, tool_calls 列表)。幂等。"""
@@ -253,12 +265,18 @@ class FncallStreamParser:
                 else:
                     self._text_parts.append(part)
 
-        if not self._detected:
-            full_text = "".join(self._text_parts)
-            clean_text, tool_calls = self._protocol.parse(full_text, self._tools)
-        else:
-            clean_text = "".join(self._text_parts).strip()
-            _, tool_calls = self._protocol.parse(self._fncall_buf, self._tools)
+        # 统一从「可见正文 + fncall 缓冲」解析，避免漏检；thinking 已在过滤器中剥离
+        assembled = "".join(self._text_parts) + self._fncall_buf
+        clean_text, tool_calls = self._protocol.parse(assembled, self._tools)
+
+        clean_fn = getattr(self._protocol, "clean_tool_tags", None)
+        if callable(clean_fn):
+            clean_text = clean_fn(clean_text)
+        elif getattr(self._protocol, "id", None) == "entml":
+            from echotools.exec.fncall.protocols.entml_patterns import (
+                strip_tool_entml_residue,
+            )
+            clean_text = strip_tool_entml_residue(clean_text)
 
         # 兜底：剥离残留 <entml:thinking>（holdback 边界/分片异常时）
         if self._thinking_filter is not None and clean_text:
@@ -298,16 +316,20 @@ class FncallStreamParser:
     def get_ready_tool_calls(self) -> List[Dict[str, Any]]:
         """返回新完成的 tool_calls（增量，每次调用只返回上次调用之后新增的）。
 
-        适用于在流式阶段实时发送已解析完毕的 tool call，无需等待整个 buffer 就绪。
+        流式阶段可在每次 ``feed`` 后调用，无需等待整个 buffer 结束。
         """
-        if self._state not in (self.IN_FUNCTION_CALLS, self.DONE):
-            return []
-        try:
-            _, all_calls = self._protocol.parse(self._fncall_buf, self._tools)
-        except Exception:
-            return []
+        if self._finalized_result is not None:
+            _, all_calls = self._finalized_result
+        else:
+            try:
+                _, all_calls = self._protocol.parse(
+                    self._assembly_for_tool_parse(),
+                    self._tools,
+                )
+            except Exception:
+                return []
         if len(all_calls) <= self._emitted_invoke_count:
             return []
-        new_calls = all_calls[self._emitted_invoke_count:]
+        new_calls = all_calls[self._emitted_invoke_count :]
         self._emitted_invoke_count = len(all_calls)
         return new_calls

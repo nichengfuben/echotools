@@ -257,9 +257,11 @@ def _coerce_param_value(raw: str, schema: Dict[str, Any]) -> Any:
         return parsed
 
     if effective_type == "string":
-        if isinstance(parsed, str):
-            return parsed
-        return _coerce_to_string(parsed)
+        # string 字段保留原文；仅当整段是 JSON 字符串字面量 ("...") 时才解包
+        if len(stripped) >= 2 and stripped[0] == '"' and stripped[-1] == '"':
+            if isinstance(parsed, str):
+                return parsed
+        return stripped
 
     if effective_type == "integer":
         return _coerce_to_integer(stripped, parsed)

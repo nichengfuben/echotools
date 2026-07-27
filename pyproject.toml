@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "echotools"
-version = "2.3.43"
+version = "2.3.44"
 description = "通用基础设施 SDK：配置、日志、事件、调度、插件、协议、调用链"
 readme = "docs/README.md"
 requires-python = ">=3.8"
@@ -103,6 +103,7 @@ ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["src/tests"]
+pythonpath = ["src", "src/tests"]
 asyncio_mode = "auto"
 addopts = ["--strict-markers", "--tb=short"]
 markers = [

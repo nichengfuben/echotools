@@ -10,6 +10,13 @@ THINKING_BLOCK_RE = re.compile(
 
 _THINKING_OPEN_PREFIX = "<entml:thinking"
 _THINKING_CLOSE = "</entml:thinking>"
+# 与 thinking 共享 `<entml:` 前缀的其它标签：歧义 holdback 应交由工具流式状态机处理
+_AMBIGUOUS_ENTML_PREFIXES = (
+    "<entml:invoke",
+    "<entml:function_calls",
+    "<entml:parameter",
+    "<entml:parameters",
+)
 
 
 def has_unclosed_entml_thinking(text: str) -> bool:
@@ -32,8 +39,14 @@ def has_unclosed_entml_thinking(text: str) -> bool:
     check_len = min(len(text), max_keep)
     for length in range(check_len, 0, -1):
         suffix = text[-length:]
-        if _THINKING_OPEN_PREFIX.startswith(suffix) and suffix != _THINKING_OPEN_PREFIX:
-            return True
+        if not (
+            _THINKING_OPEN_PREFIX.startswith(suffix) and suffix != _THINKING_OPEN_PREFIX
+        ):
+            continue
+        # `<e` / `<entml:` 等对 invoke 同样是真前缀 → 不在此抢占
+        if any(other.startswith(suffix) for other in _AMBIGUOUS_ENTML_PREFIXES):
+            continue
+        return True
     return False
 
 

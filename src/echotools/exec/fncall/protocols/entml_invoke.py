@@ -7,7 +7,9 @@ from .entml_patterns import (
     INVOKE_RE,
     PARAM_RE,
     PARAMETERS_RE,
+    extract_attr_value,
     extract_parameter_type_attr,
+    normalize_entml_name,
     parse_sub_tags,
 )
 from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value
@@ -36,9 +38,12 @@ def parse_invoke_args(
 
     args: Dict[str, Any] = {}
     for param_m in PARAM_RE.finditer(body):
-        pname = param_m.group(1).strip()
-        attrs = param_m.group(2) or ""
-        pval = param_m.group(3)
+        attrs = param_m.group(1) or ""
+        pname = extract_attr_value(attrs, "name")
+        if not pname:
+            continue
+        pname = normalize_entml_name(pname)
+        pval = (param_m.group(2) or "").strip()
         type_hint = extract_parameter_type_attr(attrs)
         pschema = func_props.get(pname) or {}
         args[pname] = coerce_entml_parameter_value(
@@ -57,7 +62,11 @@ def parse_entml_tool_calls(
 ) -> List[Dict[str, Any]]:
     tool_calls: List[Dict[str, Any]] = []
     for invoke_m in INVOKE_RE.finditer(text):
-        name = invoke_m.group(1).strip()
+        attrs = invoke_m.group(1) or ""
+        name = extract_attr_value(attrs, "name")
+        if not name:
+            continue
+        name = normalize_entml_name(name)
         args = parse_invoke_args(invoke_m.group(2), name, schema_index)
         arguments = json.dumps(args, ensure_ascii=False)
         tool_calls.append(

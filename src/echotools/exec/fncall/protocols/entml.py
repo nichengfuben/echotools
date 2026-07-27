@@ -18,7 +18,10 @@ from echotools.exec.fncall.prompt.templates import (
 from echotools.exec.fncall.protocols.entml_invoke import (
     parse_entml_tool_calls,
 )
-from echotools.exec.fncall.protocols.entml_patterns import BLOCK_RE
+from echotools.exec.fncall.protocols.entml_patterns import (
+    BLOCK_RE,
+    strip_tool_entml_residue,
+)
 from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_section,
 )
@@ -133,10 +136,19 @@ class EntmlProtocol(ToolProtocol):
 
     _TRIGGER = "<entml:invoke>"
     _TRIGGER_PREFIX = "<entml:invoke"
+    _WRAPPER_PREFIX = "<entml:function_calls"
+    _THINKING_PREFIX = "<entml:thinking"
 
     def get_trigger_tags(self) -> List[str]:
-        # 同时声明带/不带 ``>`` 的形式，便于流式 holdback 覆盖属性段
-        return [self._TRIGGER, self._TRIGGER_PREFIX]
+        # invoke / function_calls / thinking 前缀一并 holdback，避免 `<e` 歧义被提前吐出
+        return [
+            self._TRIGGER,
+            self._TRIGGER_PREFIX,
+            self._WRAPPER_PREFIX,
+            f"{self._WRAPPER_PREFIX}>",
+            self._THINKING_PREFIX,
+            f"{self._THINKING_PREFIX}>",
+        ]
 
     def get_stream_end_tags(self) -> List[str]:
         """新格式无外层 wrapper，不自动关闭流，由 finalize() 统一解析。"""
@@ -189,14 +201,18 @@ class EntmlProtocol(ToolProtocol):
         return "\n\n".join(sections)
 
     def detect_start(self, buffer: str) -> Tuple[bool, int]:
-        pos = buffer.find(self._TRIGGER_PREFIX)
-        if pos < 0:
+        candidates: List[int] = []
+        for prefix in (self._WRAPPER_PREFIX, self._TRIGGER_PREFIX):
+            pos = buffer.find(prefix)
+            if pos < 0:
+                continue
+            close = buffer.find(">", pos + len(prefix))
+            if close < 0:
+                continue
+            candidates.append(pos)
+        if not candidates:
             return (False, -1)
-        # 确保是完整的开标签（name=" 属性存在）
-        close = buffer.find(">", pos + len(self._TRIGGER_PREFIX))
-        if close < 0:
-            return (False, -1)
-        return (True, pos)
+        return (True, min(candidates))
 
     def parse(
         self,
@@ -207,7 +223,9 @@ class EntmlProtocol(ToolProtocol):
         tool_calls = parse_entml_tool_calls(text, tools, schema_index)
         clean = text
         if tool_calls:
-            clean = BLOCK_RE.sub("", text).strip()
+            clean = BLOCK_RE.sub("", text)
+        # 无论是否解析成功，都剥离工具相关残留，避免标签泄露；thinking 保留给后续 split。
+        clean = strip_tool_entml_residue(clean)
         return (clean, normalize_tool_calls(tool_calls, tools))
 
     def parse_fragment(
@@ -220,6 +238,10 @@ class EntmlProtocol(ToolProtocol):
 
     def clean_tags(self, content: str) -> str:
         return strip_entml_from_content(content)
+
+    def clean_tool_tags(self, content: str) -> str:
+        """仅剥离工具相关标签残留，保留 thinking。"""
+        return strip_tool_entml_residue(content)
 
     def format_assistant_tool_calls(
         self,
