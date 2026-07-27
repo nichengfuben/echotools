@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import (
+    TYPE_CHECKING,
     Any,
     Awaitable,
     Callable,
@@ -11,6 +12,9 @@ from typing import (
     Sequence,
     Set,
 )
+
+if TYPE_CHECKING:
+    from echotools.media.console.uicore.ui_console import ConsoleUI
 
 from echotools.media.console.uicore.ui_io import _write_flush
 from echotools.media.console.uicore.ui_types import (

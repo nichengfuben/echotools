@@ -5,12 +5,19 @@ import asyncio
 import sys
 import time
 from typing import (
+    TYPE_CHECKING,
     AsyncIterator,
     Iterator,
 )
 
+if TYPE_CHECKING:
+    from echotools.media.console.uicore.ui_console import ConsoleUI
+
 from echotools.media.console.uicore.ui_io import _write_flush
 from echotools.media.console.uicore.ui_types import (
+    ANSI_CLEAR_LINE,
+    ANSI_CLEAR_SCREEN,
+    ANSI_MOVE_UP,
     ANSI_RESET,
 )
 

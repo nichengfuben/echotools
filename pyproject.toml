@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "echotools"
-version = "2.3.45"
+version = "2.3.46"
 description = "通用基础设施 SDK：配置、日志、事件、调度、插件、协议、调用链"
 readme = "docs/README.md"
 requires-python = ">=3.8"
@@ -98,7 +98,7 @@ module = "echotools.exec.terminal.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "echotools.media.console.ui"
+module = "echotools.media.console.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]

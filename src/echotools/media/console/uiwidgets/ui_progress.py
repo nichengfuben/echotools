@@ -15,6 +15,7 @@ from echotools.media.console.uicore.ui_types import (
     ANSI_SHOW_CURSOR,
     SpinnerFrames,
 )
+from echotools.media.console.uilayout.ui_misc import _format_duration
 
 
 class ProgressBar:

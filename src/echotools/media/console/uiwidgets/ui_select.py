@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import NamedTuple, Sequence
+from typing import List, NamedTuple, Optional, Sequence
 
 from echotools.media.console.uicore.ui_io import _write_flush
 from echotools.media.console.uicore.ui_platform import (

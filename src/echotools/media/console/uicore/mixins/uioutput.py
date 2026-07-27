@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import sys
 from typing import (
+    TYPE_CHECKING,
     Mapping,
     Optional,
     Sequence,
 )
+
+if TYPE_CHECKING:
+    from echotools.media.console.uicore.ui_console import ConsoleUI
 
 from echotools.media.console.uicore.ui_types import (
     BorderStyle,

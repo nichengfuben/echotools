@@ -15,6 +15,7 @@ from echotools.media.console.uicore.ui_platform import (
 )
 from echotools.media.console.uicore.ui_text import GradientRenderer, TextUtils
 from echotools.media.console.uicore.ui_types import (
+    ANSI_CLEAR_LINE,
     ANSI_HIDE_CURSOR,
     ANSI_RESET,
     ANSI_SHOW_CURSOR,

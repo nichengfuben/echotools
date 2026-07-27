@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.46] - 2026-07-27
+
+### Fixed
+
+- entml 流式检测对齐裸 `<entml:invoke>` 提示词：`function_calls` 不再参与 trigger/holdback；legacy 外壳流式静默剥离
+- 新增裸 invoke 全方位测试套件（740 tests）
+
+### Changed
+
+- 拆分 `media.console.ui` 为 `uicore` / `uilayout` / `uiwidgets` 模块；修复拆分后 ruff/mypy 问题
+
 ## [2.3.40] - 2026-07-27
 
 ### Fixed

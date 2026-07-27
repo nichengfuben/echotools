@@ -3,10 +3,15 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
+    List,
     Optional,
 )
+
+if TYPE_CHECKING:
+    from echotools.media.console.uicore.ui_console import ConsoleUI
 
 from rich.console import Console
 

@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 from typing import (
+    TYPE_CHECKING,
     Optional,
     Sequence,
 )
+
+if TYPE_CHECKING:
+    from echotools.media.console.uicore.ui_console import ConsoleUI
 
 from echotools.media.console.uicore.ui_io import _write_flush
 from echotools.media.console.uicore.ui_types import (

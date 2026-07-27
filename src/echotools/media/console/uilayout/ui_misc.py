@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import math
 import time
-from typing import ClassVar, Dict, List, Mapping, Optional
+from typing import Any, ClassVar, Dict, List, Mapping, Optional
 
 from rich.console import Console
 
