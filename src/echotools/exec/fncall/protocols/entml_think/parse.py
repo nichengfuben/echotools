@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from echotools.exec.fncall.protocols.entml_patterns import (
     extract_attr_value,

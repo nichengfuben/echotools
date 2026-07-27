@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.47] - 2026-07-28
+
+### Fixed
+
+- entml 流式：invoke 开标签就绪后增量输出 `input_json_delta`（`EntmlInvokeJsonStreamEncoder`），避免长 parameter 期间 SSE 静默
+- thinking 块内出现 `<entml:invoke` 等工具前缀时 holdback/切出，避免 invoke 被 thinking 吞掉
+- 无 tools 的 inject 路径渲染 `<user_system_prompt>` 块
+- 无 tools 时 `thinking_behavior` 不再提及 `<entml:invoke>`
+
 ## [2.3.46] - 2026-07-27
 
 ### Fixed
