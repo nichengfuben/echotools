@@ -112,7 +112,7 @@ def test_char_by_char_ready_matches_final_for_all_tool_cases() -> None:
         assert _args(incremental) == _args(final) == case.expect_args, case.id
 
 
-def test_unclosed_thinking_invoke_not_ready_until_after_close() -> None:
+def test_unclosed_thinking_invoke_parsed_once_inside_block() -> None:
     proto = get_protocol("entml")
     tools = TOOLS
     invoke = (
@@ -121,16 +121,14 @@ def test_unclosed_thinking_invoke_not_ready_until_after_close() -> None:
         "</entml:invoke>"
     )
     parser = FncallStreamParser(protocol=proto, tools=tools)
-    for ch in f"<entml:thinking>\nplan {invoke}\n":
-        assert parser.feed(ch) == []
-    assert parser.get_ready_tool_calls() == []
-    for ch in f"</entml:thinking>\n可见\n{invoke}":
-        parser.feed(ch)
     ready = []
-    # 已 feed 完，收集剩余就绪
+    for ch in f"<entml:thinking>\nplan {invoke}\n":
+        ready.extend(parser.feed(ch))
+    assert len(ready) == 1
+    for ch in f"</entml:thinking>\n可见\n{invoke}":
+        ready.extend(parser.feed(ch))
     ready.extend(parser.get_ready_tool_calls())
     _, final = parser.finalize()
-    # thinking 内那次不得计入；闭合后那次必须有
-    assert _names(final) == ["get_weather"]
-    assert _args(final) == [{"city": "杭州"}]
-    assert len(final) == 1
+    # thinking 内第一次 invoke 已解析；闭合后重复 invoke 会再解析一次
+    assert _names(final) == ["get_weather", "get_weather"]
+    assert len(final) == 2

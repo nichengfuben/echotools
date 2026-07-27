@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List, Tuple
+from typing import List, Optional, Tuple
+
+from echotools.exec.fncall.protocols.entml_patterns import (
+    extract_attr_value,
+    normalize_entml_name,
+)
 
 THINKING_BLOCK_RE = re.compile(
     r"<entml:thinking\b[^>]*>([\s\S]*?)</entml:thinking>",
@@ -17,6 +22,53 @@ _AMBIGUOUS_ENTML_PREFIXES = (
     "<entml:parameter",
     "<entml:parameters",
 )
+_INVOKE_PREFIX = "<entml:invoke"
+
+
+def find_complete_entml_invoke_open(buffer: str) -> int:
+    """返回首个含 name 且已闭合 ``>`` 的 ``<entml:invoke`` 起始下标；否则 -1。"""
+    if not buffer:
+        return -1
+    search_from = 0
+    prefix_len = len(_INVOKE_PREFIX)
+    while True:
+        pos = buffer.find(_INVOKE_PREFIX, search_from)
+        if pos < 0:
+            return -1
+        close = buffer.find(">", pos + prefix_len)
+        if close < 0:
+            return -1
+        attrs = buffer[pos + prefix_len : close]
+        name = extract_attr_value(attrs, "name")
+        if name and normalize_entml_name(name):
+            return pos
+        search_from = close + 1
+
+
+def find_ambiguous_entml_tool_prefix(buffer: str) -> int:
+    """thinking 块内出现工具相关 entml 前缀时，最早的下标（含未收齐的开标签）。"""
+    if not buffer:
+        return -1
+    earliest = -1
+    for prefix in _AMBIGUOUS_ENTML_PREFIXES:
+        pos = buffer.find(prefix)
+        if pos >= 0 and (earliest < 0 or pos < earliest):
+            earliest = pos
+    return earliest
+
+
+def _hold_ambiguous_tool_markup(buffer: str) -> Tuple[str, str]:
+    """thinking 块内：尾部是工具 entml 标签真前缀时 hold，避免误当 thinking 吐出。"""
+    if not buffer:
+        return "", ""
+    lt = buffer.rfind("<")
+    if lt < 0:
+        return buffer, ""
+    tail = buffer[lt:]
+    for prefix in _AMBIGUOUS_ENTML_PREFIXES:
+        if prefix.startswith(tail) and tail != prefix:
+            return buffer[:lt], tail
+    return buffer, ""
 
 
 def has_unclosed_entml_thinking(text: str) -> bool:
@@ -105,8 +157,47 @@ class EntmlThinkingStreamFilter:
             return True
         return False
 
+    def _split_thinking_at_tool_markup(self, out: List[Tuple[str, str]]) -> bool:
+        """thinking 块内一旦出现工具 entml 前缀，立即切出为正文（含未收齐开标签）。"""
+        tool_at = find_ambiguous_entml_tool_prefix(self._pending)
+        if tool_at < 0:
+            return False
+        close_at = self._pending.find(_THINKING_CLOSE)
+        if close_at >= 0 and tool_at >= close_at:
+            return False
+        if tool_at > 0:
+            emitted = self._emit_thinking_piece(self._pending[:tool_at])
+            if emitted:
+                out.append(("thinking", emitted))
+        self._in_block = False
+        self._thinking_started = False
+        self._pending = self._pending[tool_at:]
+        return True
+
+    def _split_thinking_at_invoke(self, out: List[Tuple[str, str]]) -> bool:
+        """thinking 未闭合但已出现完整 invoke 开标签时，提前结束 thinking 块。"""
+        invoke_at = find_complete_entml_invoke_open(self._pending)
+        if invoke_at < 0:
+            return False
+        close_at = self._pending.find(_THINKING_CLOSE)
+        if close_at >= 0 and invoke_at >= close_at:
+            return False
+        if invoke_at > 0:
+            emitted = self._emit_thinking_piece(self._pending[:invoke_at])
+            if emitted:
+                out.append(("thinking", emitted))
+        self._in_block = False
+        self._thinking_started = False
+        self._pending = self._pending[invoke_at:]
+        return True
+
     def _feed_in_block(self, out: List[Tuple[str, str]]) -> bool:
         """处理块内 pending；返回 False 表示应退出 feed 主循环。"""
+        if self._split_thinking_at_invoke(out):
+            return True
+        if self._split_thinking_at_tool_markup(out):
+            return True
+
         close_at = self._pending.find(_THINKING_CLOSE)
         if close_at >= 0:
             piece = self._pending[:close_at]
@@ -117,6 +208,15 @@ class EntmlThinkingStreamFilter:
             self._thinking_started = False
             self._pending = self._pending[close_at + len(_THINKING_CLOSE) :]
             return True
+
+        safe, tool_hold = _hold_ambiguous_tool_markup(self._pending)
+        if tool_hold:
+            if safe:
+                emitted = self._emit_thinking_piece(safe)
+                if emitted:
+                    out.append(("thinking", emitted))
+            self._pending = tool_hold
+            return False
 
         safe, hold = _hold_prefix(self._pending, _THINKING_CLOSE)
         if safe:
@@ -180,10 +280,28 @@ class EntmlThinkingStreamFilter:
     def finalize(self) -> List[Tuple[str, str]]:
         out: List[Tuple[str, str]] = []
         if self._in_block:
-            # 未闭合：剩余 pending（含可能 hold 的关闭标签前缀）视作思考
-            emitted = self._emit_thinking_piece(self._pending)
-            if emitted:
-                out.append(("thinking", emitted))
+            if not self._split_thinking_at_invoke(out):
+                if not self._split_thinking_at_tool_markup(out):
+                    # 未闭合且无工具 markup：剩余 pending 视作思考
+                    emitted = self._emit_thinking_piece(self._pending)
+                    if emitted:
+                        out.append(("thinking", emitted))
+                    self._pending = ""
+                    self._in_block = False
+                    self._thinking_started = False
+                    return out
+            # invoke 已切出，继续处理 _pending 中的正文
+            while self._pending:
+                if self._in_block:
+                    if not self._feed_in_block(out):
+                        break
+                    continue
+                if not self._feed_before_block(out):
+                    break
+            self._pending = ""
+            self._in_block = False
+            self._thinking_started = False
+            return out
         elif self._pending:
             content, thinking = split_entml_thinking(self._pending)
             if thinking:

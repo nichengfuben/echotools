@@ -52,6 +52,8 @@ class FncallStreamParser:
         self._thinking_parts: List[str] = []
         self._thinking_filter = _make_thinking_filter(protocol)
         self._emitted_invoke_count: int = 0
+        self._json_stream_encoder = None
+        self._pending_stream_delta: Optional[Tuple[str, str]] = None
 
         # 三种情况：
         #   1. 协议实现了 get_stream_end_tags() 且返回非空列表  → 用声明的结束标记
@@ -266,7 +268,41 @@ class FncallStreamParser:
             if self._is_call_closed():
                 self._state = self.DONE
 
-        return self.get_ready_tool_calls()
+        self._pending_stream_delta = self._poll_streaming_tool_input_delta()
+        ready = self.get_ready_tool_calls()
+        if ready:
+            if self._json_stream_encoder is not None:
+                self._json_stream_encoder.reset()
+        return ready
+
+    def _poll_streaming_tool_input_delta(self) -> Optional[Tuple[str, str]]:
+        """invoke 开标签完整匹配后，返回 (tool_name, partial_json_delta)。"""
+        if not self._detected or getattr(self._protocol, "id", None) != "entml":
+            return None
+        if self._state not in (self.IN_FUNCTION_CALLS, self.DONE):
+            return None
+        from echotools.exec.fncall.protocols.entml_stream_json import (
+            EntmlInvokeJsonStreamEncoder,
+            split_invoke_open,
+        )
+
+        parsed = split_invoke_open(self._fncall_buf)
+        if not parsed:
+            return None
+        name, body_start = parsed
+        body = self._fncall_buf[body_start:]
+        if self._json_stream_encoder is None:
+            self._json_stream_encoder = EntmlInvokeJsonStreamEncoder()
+        delta = self._json_stream_encoder.poll(body)
+        if not delta:
+            return None
+        return (name, delta)
+
+    def consume_stream_delta(self) -> Optional[Tuple[str, str]]:
+        """取出本轮 ``feed`` 产生的 streaming partial_json 增量。"""
+        delta = self._pending_stream_delta
+        self._pending_stream_delta = None
+        return delta
 
     def _assembly_for_tool_parse(self) -> str:
         """可供工具解析的已缓冲文本（不含 thinking 过滤器内部 pending）。"""
