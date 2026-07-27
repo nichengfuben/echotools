@@ -15,7 +15,6 @@ from echotools.exec.fncall.protocols.entml import (
 from echotools.exec.fncall.protocols.entml_invoke import (
     format_entml_parameter_value,
     format_entml_tool_calls,
-    parse_entml_tool_calls,
     parse_invoke_args,
 )
 from echotools.exec.fncall.protocols.entml_patterns import (
@@ -34,7 +33,6 @@ from echotools.exec.fncall.shared.coercion import (
     _coerce_param_value,
 )
 from echotools.exec.fncall.shared.normalization import normalize_tool_call
-
 
 # ---------------------------------------------------------------------------
 # fixtures

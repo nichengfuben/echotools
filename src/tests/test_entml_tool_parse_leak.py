@@ -8,7 +8,6 @@ from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.protocols.entml_think.parse import split_entml_thinking
 
-
 WEATHER_TOOLS = [
     {
         "type": "function",

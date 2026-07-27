@@ -6,17 +6,16 @@ import json
 from typing import Any, Dict, List
 
 import pytest
+from fixtures.simulated_llm_tool_responses import (
+    SIMULATED_LLM_RESPONSES,
+    TOOLS,
+)
 
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.protocols.entml_think.parse import (
     has_unclosed_entml_thinking,
     split_entml_thinking,
-)
-
-from fixtures.simulated_llm_tool_responses import (
-    SIMULATED_LLM_RESPONSES,
-    TOOLS,
 )
 
 
