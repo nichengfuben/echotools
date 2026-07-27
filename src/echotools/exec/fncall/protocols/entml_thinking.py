@@ -103,7 +103,7 @@ def _prompt_auto() -> list[str]:
         "completed history turn (already executed — do NOT re-invoke):",
         "",
         "<tool>",
-        "[tool_name: value ]",
+        "[tool_name: value]",
         "...",
         "</tool>",
         "",

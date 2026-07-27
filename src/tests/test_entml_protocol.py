@@ -129,7 +129,7 @@ def test_thinking_prompt_auto() -> None:
     assert "<entml:thinking_mode>auto</entml:thinking_mode>" in section
     assert "model decides" in section
     assert "<tool>" in section
-    assert "[tool_name: value ]" in section
+    assert "[tool_name: value]" in section
     assert "→ Result:" not in section
     assert "[tool_name(" not in section
     assert "<function_results>" not in section
@@ -245,7 +245,7 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
         {"role": "user", "content": "summarize"},
     ]
     content = inject_fncall(msgs, tools, proto)[0]["content"]
-    assert "[search: docs ]" in content
+    assert "[search: docs]" in content
     assert "<tool>" in content
     assert "found 3" in content
     assert "IMPORTANT: Completed tool turns in conversation history" in content
@@ -332,8 +332,8 @@ def test_entml_multi_tool_history_blocks() -> None:
     assert "<assistant>" in history
     assert "<assistant>\nchecking time and attractions\n</assistant>" in history
     assert "<tool>" not in history.split("</assistant>")[0].split("<assistant>")[-1]
-    assert "[get_time: Hangzhou ]" in history
-    assert "[search_web: West Lake spots ]" in history
+    assert "[get_time: Hangzhou]" in history
+    assert "[search_web: West Lake spots]" in history
     assert "2026-07-26 14:30 CST" in history
     assert "Broken Bridge, Leifeng Pagoda" in history
     assert "→ Result:" not in history
@@ -342,9 +342,9 @@ def test_entml_multi_tool_history_blocks() -> None:
 
     turn_block = (
         "<tool>\n"
-        "[get_time: Hangzhou ]\n"
+        "[get_time: Hangzhou]\n"
         "2026-07-26 14:30 CST\n"
-        "[search_web: West Lake spots ]\n"
+        "[search_web: West Lake spots]\n"
         "Broken Bridge, Leifeng Pagoda\n"
         "</tool>"
     )

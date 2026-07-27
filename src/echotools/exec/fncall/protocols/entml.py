@@ -43,16 +43,18 @@ def _parse_tool_call_args(tc: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
 
 
 def _render_tool_call_line(name: str, args: Dict[str, Any]) -> str:
-    """将单次工具调用渲染为紧凑行，例如 [get_weather: 杭州 |c ]。"""
+    """将单次工具调用渲染为紧凑行，例如 [get_weather: 杭州 | c]。"""
     values: List[str] = []
     for v in args.values():
         if isinstance(v, str):
             values.append(v)
         else:
             values.append(_json.dumps(v, ensure_ascii=False))
-    if values:
-        return f"[{name}: {values[0]}" + "".join(f" |{v}" for v in values[1:]) + " ]"
-    return f"[{name}: ]"
+    if not values:
+        return f"[{name}:]"
+    if len(values) == 1:
+        return f"[{name}: {values[0]}]"
+    return f"[{name}: {' | '.join(values)}]"
 
 
 def _render_tool_history_block(body: str) -> str:
