@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.39] - 2026-07-27
+
+### Fixed
+
+- `prompt_helpers`: assistant history f-string compatible with Python 3.8–3.11 (fixes import SyntaxError on CI)
+- Lint: ruff import order / unused imports; console `ui.py` mypy override
+
 ## [2.3.22] - 2026-07-22
 
 ### Added
