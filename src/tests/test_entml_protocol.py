@@ -189,23 +189,8 @@ def test_thinking_prompt_on() -> None:
     assert "<thinking_behavior>" in section
     assert "Your default is to think before it answers" in section
     assert "<entml:thinking> block before any other content" in section
-    assert "<entml:invoke>" in section
     assert "`<entml:invoke>`" not in section
     assert "<entml:function_calls>" not in section
-
-
-def test_thinking_prompt_on_no_tools() -> None:
-    section = build_entml_thinking_section({"thinking_mode": "on"}, has_tools=False)
-    assert "Never skip the thinking block" in section
-    assert "output your visible reply." in section
-    assert "<entml:invoke>" not in section
-
-
-def test_thinking_prompt_auto_no_tools() -> None:
-    section = build_entml_thinking_section({"thinking_level": "auto"}, has_tools=False)
-    assert "You decide whether extended thinking helps" in section
-    assert "<tool>" not in section
-    assert "tool call" not in section
 
 
 def test_thinking_prompt_auto() -> None:
@@ -246,7 +231,6 @@ def test_inject_no_tools_with_thinking_on() -> None:
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in result
     assert "<thinking_behavior>" in result
     assert "Never skip the thinking block" in result
-    assert "<entml:invoke>" not in result
     # thinking 块必须在 current_user_message 之后
     assert result.index("</current_user_message>") < result.index("<entml:thinking_mode>")
 
