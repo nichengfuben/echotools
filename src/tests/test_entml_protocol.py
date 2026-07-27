@@ -128,11 +128,11 @@ def test_normalize_thinking_level(raw, expected) -> None:
 @pytest.mark.parametrize(
     "level,expected",
     [
-        ("low", 6554),
-        ("medium", 13108),
-        ("high", 32768),
-        ("xhigh", 52428),
-        ("max", 62260),
+        ("low", 12800),
+        ("medium", 25600),
+        ("high", 64000),
+        ("xhigh", 102400),
+        ("max", 134736),
         ("none", None),
         ("auto", None),
     ],
@@ -143,13 +143,13 @@ def test_default_max_thinking_length_for_level(level, expected) -> None:
 
 def test_resolve_thinking_injection_levels() -> None:
     assert resolve_thinking_injection({"thinking_level": "none"}) is None
-    assert resolve_thinking_injection({"thinking_level": "low"}) == ("on", 6554)
-    assert resolve_thinking_injection({"thinking_level": "high"}) == ("on", 32768)
+    assert resolve_thinking_injection({"thinking_level": "low"}) == ("low", 12800)
+    assert resolve_thinking_injection({"thinking_level": "high"}) == ("high", 64000)
     assert resolve_thinking_injection({"thinking_level": "auto"}) == ("auto", None)
     assert resolve_thinking_injection({
         "thinking_level": "max",
         "max_thinking_length": 1000,
-    }) == ("on", 1000)
+    }) == ("max", 1000)
 
 
 def test_thinking_prompt_off() -> None:
@@ -163,16 +163,22 @@ def test_thinking_prompt_off() -> None:
 def test_thinking_prompt_on_without_max_length() -> None:
     section = build_entml_thinking_section({"thinking_mode": "on"})
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
-    assert "<entml:max_thinking_length>13108</entml:max_thinking_length>" in section
+    assert "<entml:max_thinking_length>25600</entml:max_thinking_length>" in section
     assert "<thinking_behavior>" in section
 
 
 def test_thinking_prompt_on_by_level() -> None:
     section = build_entml_thinking_section({"thinking_level": "low"})
-    assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
-    assert "<entml:max_thinking_length>6554</entml:max_thinking_length>" in section
+    assert "<entml:thinking_mode>low</entml:thinking_mode>" in section
+    assert "<entml:max_thinking_length>12800</entml:max_thinking_length>" in section
     assert "Never skip the thinking block" in section
     assert "Your default is to think before it answers" in section
+
+
+def test_thinking_prompt_medium_by_level() -> None:
+    section = build_entml_thinking_section({"thinking_level": "medium"})
+    assert "<entml:thinking_mode>medium</entml:thinking_mode>" in section
+    assert "<entml:max_thinking_length>25600</entml:max_thinking_length>" in section
 
 
 def test_thinking_prompt_on() -> None:

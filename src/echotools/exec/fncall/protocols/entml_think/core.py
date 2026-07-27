@@ -53,11 +53,11 @@ _INJECTION_MODE_ALIASES: Dict[str, str] = {
 }
 
 _DEFAULT_MAX_BY_LEVEL: Dict[str, int] = {
-    "low": 6554,
-    "medium": 13108,
-    "high": 32768,
-    "xhigh": 52428,
-    "max": 62260,
+    "low": 12800,
+    "medium": 25600,
+    "high": 64000,
+    "xhigh": 102400,
+    "max": 134736,
 }
 
 _LEGACY_ON_DEFAULT_MAX = _DEFAULT_MAX_BY_LEVEL["medium"]
@@ -120,9 +120,12 @@ def parse_max_thinking_length(value: Any) -> Optional[int]:
 def resolve_thinking_injection(
     protocol_options: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[str, Optional[int]]]:
-    """解析注入用 thinking_mode (on/auto) 与 max_thinking_length。
+    """解析注入用 thinking_mode 与 max_thinking_length。
 
-    返回 None 表示不注入任何思考相关内容（none / off）。
+    - thinking_level 为 low|medium|high|xhigh|max 时，thinking_mode 直接传该挡位名。
+    - 仅 thinking_mode=on（无 level）时用 ``on``，并按 medium 默认长度。
+    - auto 传 ``auto``，无默认 max_thinking_length。
+    - none / off 返回 None，不注入任何思考相关内容。
     """
     opts = protocol_options or {}
 
@@ -130,8 +133,12 @@ def resolve_thinking_injection(
     if level is not None:
         if level == "none":
             return None
-        injection_mode = "auto" if level == "auto" else "on"
-        default_max = default_max_thinking_length_for_level(level)
+        if level == "auto":
+            injection_mode = "auto"
+            default_max = None
+        else:
+            injection_mode = level
+            default_max = default_max_thinking_length_for_level(level)
     else:
         mode = normalize_thinking_mode(opts.get("thinking_mode"))
         if mode is None or mode == "off":
@@ -144,8 +151,12 @@ def resolve_thinking_injection(
     return injection_mode, max_length
 
 
+def _uses_forced_thinking_behavior(injection_mode: str) -> bool:
+    return injection_mode != "auto"
+
+
 def _format_thinking_behavior(injection_mode: str) -> str:
-    body = _THINKING_BEHAVIOR_ON if injection_mode == "on" else _THINKING_BEHAVIOR_AUTO
+    body = _THINKING_BEHAVIOR_ON if _uses_forced_thinking_behavior(injection_mode) else _THINKING_BEHAVIOR_AUTO
     return f"<thinking_behavior>\n{body}\n</thinking_behavior>"
 
 
