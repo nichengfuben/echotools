@@ -6,7 +6,7 @@ import pytest
 
 from echotools.exec.fncall import get_protocol, inject_fncall
 from echotools.exec.fncall.protocols.entml_invoke import parse_entml_tool_calls
-from echotools.exec.fncall.protocols.entml_thinking import (
+from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_section,
     default_max_thinking_length_for_level,
     normalize_thinking_level,
@@ -77,7 +77,7 @@ def test_build_entml_thinking_section_empty_without_options() -> None:
 
 
 def test_parse_max_thinking_length() -> None:
-    from echotools.exec.fncall.protocols.entml_thinking import parse_max_thinking_length
+    from echotools.exec.fncall.protocols.entml_think.core import parse_max_thinking_length
 
     assert parse_max_thinking_length(None) is None
     assert parse_max_thinking_length("") is None
@@ -223,6 +223,33 @@ def test_inject_no_tools_with_thinking_on() -> None:
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in result
     assert "<thinking_behavior>" in result
     assert "Never skip the thinking block" in result
+    # thinking 块必须在 current_user_message 之后
+    assert result.index("</current_user_message>") < result.index("<entml:thinking_mode>")
+
+
+def test_render_prompt_thinking_after_current_user() -> None:
+    proto = get_protocol("entml")
+    prompt = proto.render_prompt(
+        tool_descs=proto.format_tool_descs([
+            {
+                "type": "function",
+                "function": {
+                    "name": "search",
+                    "description": "Search",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]),
+        lang="en",
+        history_text="<user>\nold\n</user>",
+        current_user_message="new",
+        protocol_options={"thinking_mode": "on", "max_thinking_length": 1000},
+    )
+    assert prompt.index("In this environment") < prompt.index("<entml:conversation_history>")
+    assert prompt.index("<entml:conversation_history>") < prompt.index("<current_user_message>")
+    assert prompt.index("</current_user_message>") < prompt.index("<entml:thinking_mode>")
+    assert prompt.index("<entml:thinking_mode>") < prompt.index("<thinking_behavior>")
+    assert prompt.rstrip().endswith("</thinking_behavior>")
 
 
 def test_inject_with_history_entml_tags() -> None:
@@ -316,7 +343,7 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
 
 
 def test_strip_entml_from_user_content() -> None:
-    from echotools.exec.fncall.protocols.entml_sanitize import strip_entml_from_content
+    from echotools.exec.fncall.protocols.entml import strip_entml_from_content
 
     raw = (
         "请查天气\n"

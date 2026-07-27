@@ -92,6 +92,49 @@ class EntmlThinkingStreamFilter:
             return True
         return False
 
+    def _feed_in_block(self, out: List[Tuple[str, str]]) -> bool:
+        """处理块内 pending；返回 False 表示应退出 feed 主循环。"""
+        close_at = self._pending.find(_THINKING_CLOSE)
+        if close_at >= 0:
+            piece = self._pending[:close_at]
+            emitted = self._emit_thinking_piece(piece)
+            if emitted:
+                out.append(("thinking", emitted))
+            self._in_block = False
+            self._thinking_started = False
+            self._pending = self._pending[close_at + len(_THINKING_CLOSE) :]
+            return True
+
+        safe, hold = _hold_prefix(self._pending, _THINKING_CLOSE)
+        if safe:
+            emitted = self._emit_thinking_piece(safe)
+            if emitted:
+                out.append(("thinking", emitted))
+        self._pending = hold
+        return False
+
+    def _feed_before_block(self, out: List[Tuple[str, str]]) -> bool:
+        """开标签之前或尚未进入块；返回 False 表示应退出 feed 主循环。"""
+        open_at = self._pending.find(_THINKING_OPEN_PREFIX)
+        if open_at < 0:
+            safe, self._pending = _hold_prefix(self._pending, _THINKING_OPEN_PREFIX)
+            if safe:
+                out.append(("content", safe))
+            return False
+
+        if open_at > 0:
+            out.append(("content", self._pending[:open_at]))
+            self._pending = self._pending[open_at:]
+
+        gt = self._pending.find(">")
+        if gt < 0:
+            return False
+
+        self._in_block = True
+        self._thinking_started = False
+        self._pending = self._pending[gt + 1 :]
+        return True
+
     def feed(self, chunk: str) -> List[Tuple[str, str]]:
         """返回 [(kind, text), ...]，kind 为 content 或 thinking。"""
         if not chunk:
@@ -102,45 +145,11 @@ class EntmlThinkingStreamFilter:
 
         while self._pending:
             if self._in_block:
-                close_at = self._pending.find(_THINKING_CLOSE)
-                if close_at >= 0:
-                    piece = self._pending[:close_at]
-                    emitted = self._emit_thinking_piece(piece)
-                    if emitted:
-                        out.append(("thinking", emitted))
-                    self._in_block = False
-                    self._thinking_started = False
-                    self._pending = self._pending[close_at + len(_THINKING_CLOSE) :]
-                    continue
-
-                # 关闭标签可能被分片：hold 真前缀，其余立即作为 thinking 输出
-                safe, hold = _hold_prefix(self._pending, _THINKING_CLOSE)
-                if safe:
-                    emitted = self._emit_thinking_piece(safe)
-                    if emitted:
-                        out.append(("thinking", emitted))
-                self._pending = hold
+                if not self._feed_in_block(out):
+                    break
+                continue
+            if not self._feed_before_block(out):
                 break
-
-            open_at = self._pending.find(_THINKING_OPEN_PREFIX)
-            if open_at < 0:
-                safe, self._pending = _hold_prefix(self._pending, _THINKING_OPEN_PREFIX)
-                if safe:
-                    out.append(("content", safe))
-                break
-
-            if open_at > 0:
-                out.append(("content", self._pending[:open_at]))
-                self._pending = self._pending[open_at:]
-
-            gt = self._pending.find(">")
-            if gt < 0:
-                # 开标签属性未收齐
-                break
-
-            self._in_block = True
-            self._thinking_started = False
-            self._pending = self._pending[gt + 1 :]
 
         return out
 

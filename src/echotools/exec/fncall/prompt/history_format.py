@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Conversation history block formatting."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from echotools.exec.fncall.shared.normalization import normalize_content
 
@@ -26,6 +26,51 @@ def history_contains_tool_calls(messages: List[Dict[str, Any]]) -> bool:
     return False
 
 
+def _append_user_part(
+    parts: List[Tuple[str, bool]],
+    m: Dict[str, Any],
+    clean_fn: Any,
+) -> None:
+    content_str = normalize_content(m.get("content", ""))
+    parts.append((format_user_block(content_str, clean_fn), False))
+
+
+def _append_assistant_part(
+    parts: List[Tuple[str, bool]],
+    messages: List[Dict[str, Any]],
+    index: int,
+    protocol: Optional[Any],
+    call_id_to_name: Dict[str, str],
+    seen_assistant_keys: set,
+    *,
+    include_thinking_in_history: bool,
+) -> int:
+    m = messages[index]
+    content_str = normalize_content(m.get("content", ""))
+    tcs = m.get("tool_calls") or []
+    if tcs:
+        tool_msgs = []
+        j = index + 1
+        while j < len(messages) and (messages[j].get("role") or "user") == "tool":
+            tool_msgs.append(messages[j])
+            j += 1
+        blocks = format_assistant_block_with_results(
+            m, tool_msgs, protocol, call_id_to_name, seen_assistant_keys,
+            include_thinking_in_history=include_thinking_in_history,
+        )
+        for block in blocks:
+            parts.append((block, False))
+        return j
+
+    blocks = format_assistant_block(
+        m, content_str, protocol, call_id_to_name, seen_assistant_keys,
+        include_thinking_in_history=include_thinking_in_history,
+    )
+    for block in blocks:
+        parts.append((block, False))
+    return index + 1
+
+
 def _format_conversation_history(
     messages: List[Dict[str, Any]],
     protocol: Optional[Any] = None,
@@ -37,52 +82,34 @@ def _format_conversation_history(
 
     call_id_to_name: Dict[str, str] = {}
     seen_assistant_keys = set()
-    parts: List[tuple] = []
+    parts: List[Tuple[str, bool]] = []
     clean_fn = protocol.clean_tags if protocol and hasattr(protocol, "clean_tags") else None
 
     i = 0
     while i < len(messages):
         m = messages[i]
         role: str = m.get("role") or "user"
-        content_str = normalize_content(m.get("content", ""))
 
         if role == "user":
-            parts.append((format_user_block(content_str, clean_fn), False))
+            _append_user_part(parts, m, clean_fn)
             i += 1
             continue
 
         if role == "assistant":
-            tcs = m.get("tool_calls") or []
-            if tcs:
-                # collect immediately following tool messages
-                tool_msgs = []
-                j = i + 1
-                while j < len(messages) and (messages[j].get("role") or "user") == "tool":
-                    tool_msgs.append(messages[j])
-                    j += 1
-                blocks = format_assistant_block_with_results(
-                    m, tool_msgs, protocol, call_id_to_name, seen_assistant_keys,
-                    include_thinking_in_history=include_thinking_in_history,
-                )
-                for block in blocks:
-                    parts.append((block, False))
-                i = j
-            else:
-                blocks = format_assistant_block(
-                    m, content_str, protocol, call_id_to_name, seen_assistant_keys,
-                    include_thinking_in_history=include_thinking_in_history,
-                )
-                for block in blocks:
-                    parts.append((block, False))
-                i += 1
+            i = _append_assistant_part(
+                parts, messages, i, protocol, call_id_to_name,
+                seen_assistant_keys,
+                include_thinking_in_history=include_thinking_in_history,
+            )
             continue
 
         if role == "tool":
-            # orphan tool message (not consumed above)
+            content_str = normalize_content(m.get("content", ""))
             parts.append((format_tool_block(m, content_str, call_id_to_name), True))
             i += 1
             continue
 
+        content_str = normalize_content(m.get("content", ""))
         parts.append((f"<{role}>\n{content_str}\n</{role}>", False))
         i += 1
 

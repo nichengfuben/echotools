@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json as _json
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from echotools.exec.fncall.prompt.templates import (
@@ -18,8 +19,7 @@ from echotools.exec.fncall.protocols.entml_invoke import (
     parse_entml_tool_calls,
 )
 from echotools.exec.fncall.protocols.entml_patterns import BLOCK_RE
-from echotools.exec.fncall.protocols.entml_sanitize import strip_entml_from_content
-from echotools.exec.fncall.protocols.entml_thinking import build_entml_thinking_section
+from echotools.exec.fncall.protocols.entml_think.core import build_entml_thinking_section
 from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 from echotools.exec.fncall.shared.normalization import (
@@ -27,6 +27,27 @@ from echotools.exec.fncall.shared.normalization import (
     normalize_tool_calls,
 )
 from echotools.exec.protocol.base import ToolProtocol
+
+# 仅按 entml: 前缀剥离标签，不区分具体标签名。
+_ENTML_PAIR_RE = re.compile(
+    r"<entml:[a-zA-Z_][\w]*\b[^>]*>.*?</entml:[a-zA-Z_][\w]*>",
+    re.DOTALL,
+)
+_ENTML_SELF_CLOSING_RE = re.compile(r"<entml:[a-zA-Z_][\w]*\b[^>]*/>", re.DOTALL)
+_ENTML_ORPHAN_CLOSE_RE = re.compile(r"</entml:[a-zA-Z_][\w]*>", re.DOTALL)
+_ENTML_ORPHAN_OPEN_RE = re.compile(r"<entml:[a-zA-Z_][\w]*\b[^>]*>", re.DOTALL)
+
+
+def strip_entml_from_content(content: str) -> str:
+    """从 user 消息正文剥离所有 entml:* 标签及残留开闭标签。"""
+    if not content:
+        return content
+    cleaned = content
+    cleaned = _ENTML_PAIR_RE.sub("", cleaned)
+    cleaned = _ENTML_SELF_CLOSING_RE.sub("", cleaned)
+    cleaned = _ENTML_ORPHAN_CLOSE_RE.sub("", cleaned)
+    cleaned = _ENTML_ORPHAN_OPEN_RE.sub("", cleaned)
+    return cleaned.strip()
 
 
 def _parse_tool_call_args(tc: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
@@ -141,10 +162,6 @@ class EntmlProtocol(ToolProtocol):
         else:
             sections = [_ENTML_INSTRUCTION.rstrip()]
 
-        thinking_section = build_entml_thinking_section(protocol_options)
-        if thinking_section:
-            sections.append(thinking_section)
-
         if user_system_prompt and user_system_prompt.strip():
             sections.append(
                 f"<user_system_prompt>\n{user_system_prompt.strip()}\n</user_system_prompt>"
@@ -161,6 +178,12 @@ class EntmlProtocol(ToolProtocol):
             sections.append(f"<loop_warning>\n{loop_warning}\n</loop_warning>")
 
         sections.append(format_entml_current_user_message(current_user_message))
+
+        # thinking 放在最后，超限截断时优先保留在 send_text 尾部
+        thinking_section = build_entml_thinking_section(protocol_options)
+        if thinking_section:
+            sections.append(thinking_section)
+
         return "\n\n".join(sections)
 
     def detect_start(self, buffer: str) -> Tuple[bool, int]:

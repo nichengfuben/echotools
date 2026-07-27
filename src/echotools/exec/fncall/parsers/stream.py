@@ -13,7 +13,7 @@ from echotools.exec.protocol.base import ToolProtocol
 # 懒导入：仅 entml 协议需要
 def _make_thinking_filter(protocol: ToolProtocol):
     if getattr(protocol, "id", None) == "entml":
-        from echotools.exec.fncall.protocols.entml_thinking_parse import (
+        from echotools.exec.fncall.protocols.entml_think.parse import (
             EntmlThinkingStreamFilter,
         )
         return EntmlThinkingStreamFilter()
@@ -177,7 +177,7 @@ class FncallStreamParser:
         self._waiting_tail = ""
 
         if self._thinking_filter is not None:
-            from echotools.exec.fncall.protocols.entml_thinking_parse import (
+            from echotools.exec.fncall.protocols.entml_think.parse import (
                 has_unclosed_entml_thinking,
             )
             if (
@@ -262,7 +262,7 @@ class FncallStreamParser:
 
         # 兜底：剥离残留 <entml:thinking>（holdback 边界/分片异常时）
         if self._thinking_filter is not None and clean_text:
-            from echotools.exec.fncall.protocols.entml_thinking_parse import (
+            from echotools.exec.fncall.protocols.entml_think.parse import (
                 split_entml_thinking,
             )
             clean_text, more_thinking = split_entml_thinking(clean_text)

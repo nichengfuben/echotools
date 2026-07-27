@@ -1,4 +1,4 @@
-from echotools.exec.fncall.protocols.entml_thinking_parse import (
+from echotools.exec.fncall.protocols.entml_think.parse import (
     EntmlThinkingStreamFilter,
     has_unclosed_entml_thinking,
     split_entml_thinking,

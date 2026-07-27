@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from echotools.base.logger.manager import get_logger
-from echotools.exec.fncall.protocols.entml_thinking_history import (
+from echotools.exec.fncall.protocols.entml_think.hist import (
     extract_reasoning_text,
     format_entml_thinking_history_block,
 )
