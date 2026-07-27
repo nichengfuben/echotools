@@ -410,7 +410,7 @@ def test_entml_instruction_matches_spec_format() -> None:
         },
     )
     assert "In this environment you have access to a set of tools" in prompt
-    assert "writing an invoke block like the following" in prompt
+    assert 'writing a "<entml:invoke>" block like the following' in prompt
     assert "Here are the functions available in JSONSchema format:" in prompt
     assert "```text" not in prompt
     assert "### ask_user_input_v0" in prompt
