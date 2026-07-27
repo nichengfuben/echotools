@@ -119,12 +119,11 @@ _HISTORY_CLARIFY_EN = (
 )
 
 _HISTORY_TOOL_INVOKE_REMINDER_EN = (
-    "Reminder — tool notation in the conversation history above: prior tool "
-    "calls appear as compact pseudocode (e.g. `[function_name(arg=\"value\")]` "
-    "and optional `→ Result:` / `→ Error:` lines). That transcript is for "
-    "context only; it is not parsed and must not be copied. To invoke a tool "
-    "in your reply, output a valid `<entml:invoke>` block exactly as specified "
-    "in the tool instructions at the top of this prompt."
+    "IMPORTANT: Completed tool turns in conversation history are context only — "
+    "never re-invoke them and never use the history `<tool>` block notation in "
+    "your reply. To execute a tool in this turn, you must output a valid "
+    "`<entml:invoke>` block exactly as specified in the tool instructions at "
+    "the top of this prompt."
 )
 
 _HISTORY_CLARIFY_ZH = (

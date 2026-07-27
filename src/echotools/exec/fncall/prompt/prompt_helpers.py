@@ -96,7 +96,13 @@ def format_assistant_block(
         has_markers = bool(content_str and _TOOL_CALL_MARKER_RE.search(content_str))
         if not has_markers:
             if protocol is not None and hasattr(protocol, "format_assistant_tool_calls"):
-                blocks.append(protocol.format_assistant_tool_calls(tcs))
+                wrap = getattr(protocol, "format_assistant_tool_history_block", None)
+                for tc in tcs:
+                    call_line = protocol.format_assistant_tool_calls([tc])
+                    if wrap is not None:
+                        blocks.append(wrap(call_line))
+                    else:
+                        blocks.append(call_line)
             else:
                 blocks.extend(_render_tool_call(tc) for tc in tcs)
     inner = "\n\n".join(blocks)
@@ -138,6 +144,11 @@ def format_assistant_block_with_results(
         m, content_str, protocol, include_thinking_in_history
     )
 
+    wrap = (
+        getattr(protocol, "format_assistant_tool_history_block", None)
+        if protocol is not None
+        else None
+    )
     for tc in tcs:
         if protocol is not None and hasattr(protocol, "format_assistant_tool_calls"):
             call_text = protocol.format_assistant_tool_calls([tc])
@@ -148,7 +159,14 @@ def format_assistant_block_with_results(
         if result_msg is not None:
             result_content = normalize_content(result_msg.get("content", ""))
             is_error = bool(result_msg.get("is_error", False))
-            blocks.append(_render_inline_call_result(call_text, result_content, is_error))
+            if wrap is not None:
+                blocks.append(wrap(call_text, result_content, is_error))
+            else:
+                blocks.append(
+                    _render_inline_call_result(call_text, result_content, is_error)
+                )
+        elif wrap is not None:
+            blocks.append(wrap(call_text))
         else:
             blocks.append(call_text)
 

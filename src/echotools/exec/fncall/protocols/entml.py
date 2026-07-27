@@ -22,30 +22,43 @@ from echotools.exec.fncall.protocols.entml_patterns import BLOCK_RE
 from echotools.exec.fncall.protocols.entml_thinking import build_entml_thinking_section
 from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
-from echotools.exec.fncall.shared.normalization import normalize_tool_calls
+from echotools.exec.fncall.shared.normalization import (
+    normalize_content,
+    normalize_tool_calls,
+)
 from echotools.exec.protocol.base import ToolProtocol
 
-def _render_tool_calls_pseudocode(tool_calls: List[Dict[str, Any]]) -> str:
-    """将历史 tool_calls 渲染为紧凑伪代码 [name(k="v", ...)]，节省上下文。"""
-    lines: List[str] = []
-    for tc in tool_calls:
-        fn = tc.get("function") or {}
-        name = fn.get("name") or ""
-        args_str = fn.get("arguments") or "{}"
-        try:
-            args = _json.loads(args_str) if isinstance(args_str, str) else args_str
-            if not isinstance(args, dict):
-                args = {"value": args}
-        except (_json.JSONDecodeError, TypeError):
-            args = {"value": args_str}
-        params: List[str] = []
-        for k, v in args.items():
-            if isinstance(v, str):
-                params.append(f'{k}="{v}"')
-            else:
-                params.append(f"{k}={_json.dumps(v, ensure_ascii=False)}")
-        lines.append(f"[{name}({', '.join(params)})]")
-    return "\n".join(lines)
+
+def _parse_tool_call_args(tc: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+    fn = tc.get("function") or {}
+    name = fn.get("name") or ""
+    args_str = fn.get("arguments") or "{}"
+    try:
+        args = _json.loads(args_str) if isinstance(args_str, str) else args_str
+        if not isinstance(args, dict):
+            args = {"value": args}
+    except (_json.JSONDecodeError, TypeError):
+        args = {"value": args_str}
+    return name, args
+
+
+def _render_tool_call_line(name: str, args: Dict[str, Any]) -> str:
+    """将单次工具调用渲染为紧凑行，例如 [get_weather: 杭州 |c ]。"""
+    values: List[str] = []
+    for v in args.values():
+        if isinstance(v, str):
+            values.append(v)
+        else:
+            values.append(_json.dumps(v, ensure_ascii=False))
+    if values:
+        return f"[{name}: {values[0]}" + "".join(f" |{v}" for v in values[1:]) + " ]"
+    return f"[{name}: ]"
+
+
+def _render_tool_history_block(call_line: str, result: str = "") -> str:
+    """将调用行与可选结果包裹为 <tool> 块。"""
+    body = call_line if not result else f"{call_line}\n{result.strip()}"
+    return f"<tool>\n{body}\n</tool>"
 
 
 _ENTML_INSTRUCTION = """\
@@ -188,7 +201,21 @@ class EntmlProtocol(ToolProtocol):
         self,
         tool_calls: List[Dict[str, Any]],
     ) -> str:
-        return _render_tool_calls_pseudocode(tool_calls)
+        lines: List[str] = []
+        for tc in tool_calls:
+            name, args = _parse_tool_call_args(tc)
+            lines.append(_render_tool_call_line(name, args))
+        return "\n".join(lines)
+
+    def format_assistant_tool_history_block(
+        self,
+        call_line: str,
+        result: str = "",
+        is_error: bool = False,
+    ) -> str:
+        del is_error  # 历史块中结果正文已含错误语义，不再追加箭头前缀
+        text = normalize_content(result).strip() if result else ""
+        return _render_tool_history_block(call_line, text)
 
     def supports_streaming(self) -> bool:
         return True

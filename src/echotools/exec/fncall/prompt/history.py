@@ -34,7 +34,8 @@ _TOOL_CALL_MARKER_RE = re.compile(
     r"<function_calls|<entml:function_calls|<function_calls|\[function_calls\]"
     r'|<\|PROVIDER\|tool_calls|"type"\s*:\s*"function_call"'
     r"|<invoke\s+name=|<entml:invoke\s+name="
-    r"|^\[\w[\w.]*\(",
+    r"|^\[\w[\w.]*\("
+    r"|^\[\w[\w.]*:\s",
     re.MULTILINE,
 )
 

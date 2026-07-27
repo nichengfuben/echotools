@@ -128,8 +128,10 @@ def test_thinking_prompt_auto() -> None:
     section = build_entml_thinking_section({"thinking_mode": "auto"})
     assert "<entml:thinking_mode>auto</entml:thinking_mode>" in section
     assert "model decides" in section
-    assert "→ Result:" in section
-    assert "[tool_name(" in section
+    assert "<tool>" in section
+    assert "[tool_name: value ]" in section
+    assert "→ Result:" not in section
+    assert "[tool_name(" not in section
     assert "<function_results>" not in section
     assert "<entml:function_calls>" not in section
     assert "strongly prefer to output one if you are uncertain" in section
@@ -243,11 +245,13 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
         {"role": "user", "content": "summarize"},
     ]
     content = inject_fncall(msgs, tools, proto)[0]["content"]
-    assert "[search(query=\"docs\")]" in content
-    assert "Reminder — tool notation in the conversation history above" in content
-    assert "output a valid `<entml:invoke>` block" in content
+    assert "[search: docs ]" in content
+    assert "<tool>" in content
+    assert "found 3" in content
+    assert "IMPORTANT: Completed tool turns in conversation history" in content
+    assert "`<entml:invoke>` block" in content
     hist_idx = content.index("<entml:conversation_history>")
-    reminder_idx = content.index("Reminder — tool notation")
+    reminder_idx = content.index("IMPORTANT: Completed tool turns")
     user_idx = content.index("<current_user_message>")
     assert hist_idx < reminder_idx < user_idx
 

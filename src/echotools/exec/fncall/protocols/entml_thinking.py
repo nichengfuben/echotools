@@ -102,8 +102,10 @@ def _prompt_auto() -> list[str]:
         "consider outputting a thinking block before continuing. Example of a "
         "completed history turn (already executed — do NOT re-invoke):",
         "",
-        '[tool_name(param="value")]',
-        "→ Result: ...",
+        "<tool>",
+        "[tool_name: value ]",
+        "...",
+        "</tool>",
         "",
         "Then at the start of your next reply:",
         "",
