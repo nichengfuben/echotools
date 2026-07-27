@@ -378,7 +378,7 @@ def test_coerce_entml_parameter_value(raw, schema, expected) -> None:
 
 
 def test_entml_instruction_matches_spec_format() -> None:
-    """示范格式：```text 调用示例 + ### 工具名 + 外置 Description + parameters-only JSON。"""
+    """示范格式：裸 invoke 示例 + ### 工具名 + 外置 Description + parameters-only JSON。"""
     proto = get_protocol("entml")
     tools = [
         {
@@ -410,8 +410,9 @@ def test_entml_instruction_matches_spec_format() -> None:
         },
     )
     assert "In this environment you have access to a set of tools" in prompt
+    assert "writing an invoke block like the following" in prompt
     assert "Here are the functions available in JSONSchema format:" in prompt
-    assert "```text" in prompt
+    assert "```text" not in prompt
     assert "### ask_user_input_v0" in prompt
     assert "**ask_user_input_v0**" not in prompt
     assert 'Description: "Ask user"' in prompt

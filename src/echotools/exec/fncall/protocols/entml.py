@@ -62,9 +62,8 @@ def _render_tool_history_block(body: str) -> str:
 
 _ENTML_INSTRUCTION = """\
 In this environment you have access to a set of tools you can use to answer the user's question.
-You can invoke functions by writing a "<entml:invoke>" block like the following as part of your reply to the user:
+You can invoke functions by writing an invoke block like the following as part of your reply to the user:
 
-```text
 <entml:invoke name="$FUNCTION_NAME">
 <entml:parameter name="$PARAMETER_NAME">$PARAMETER_VALUE</entml:parameter>
 ...
@@ -72,7 +71,6 @@ You can invoke functions by writing a "<entml:invoke>" block like the following 
 <entml:invoke name="$FUNCTION_NAME2">
 ...
 </entml:invoke>
-```
 
 String and scalar parameters should be specified as is, while lists and objects should use JSON format.
 
