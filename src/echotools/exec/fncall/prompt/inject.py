@@ -147,6 +147,10 @@ def inject_fncall(
     if not tools:
         if protocol.id == "entml":
             sections: List[str] = []
+            if user_system_prompt and user_system_prompt.strip():
+                sections.append(
+                    f"<user_system_prompt>\n{user_system_prompt.strip()}\n</user_system_prompt>"
+                )
             if history_text.strip():
                 sections.append(format_entml_conversation_history(history_text))
             sections.append(format_entml_current_user_message(current_user_message))
