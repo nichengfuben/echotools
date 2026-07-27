@@ -19,6 +19,7 @@ from echotools.exec.fncall.protocols.entml_invoke import (
     parse_entml_tool_calls,
 )
 from echotools.exec.fncall.protocols.entml_patterns import BLOCK_RE
+from echotools.exec.fncall.protocols.entml_sanitize import strip_entml_from_content
 from echotools.exec.fncall.protocols.entml_thinking import build_entml_thinking_section
 from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
@@ -194,7 +195,7 @@ class EntmlProtocol(ToolProtocol):
         return tool_calls
 
     def clean_tags(self, content: str) -> str:
-        return BLOCK_RE.sub("", content).strip()
+        return strip_entml_from_content(content)
 
     def format_assistant_tool_calls(
         self,

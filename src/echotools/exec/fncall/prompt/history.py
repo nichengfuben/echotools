@@ -39,45 +39,6 @@ _TOOL_CALL_MARKER_RE = re.compile(
     re.MULTILINE,
 )
 
-# entml 标签清理正则
-_ENTML_FNCALL_BLOCK_RE = re.compile(
-    r"<entml:function_calls\b[^>]*>.*?</entml:function_calls>",
-    re.DOTALL,
-)
-_ENTML_INVOKE_RE = re.compile(
-    r'<entml:invoke\s+name="[^"]+"\s*>.*?</entml:invoke>',
-    re.DOTALL,
-)
-_ENTML_PARAMETERS_RE = re.compile(
-    r'<entml:parameters>.*?</entml:parameters>',
-    re.DOTALL,
-)
-_ENTML_PARAM_RE = re.compile(
-    r'<entml:parameter\s+name="[^"]+"[^>]*>.*?</entml:parameter>',
-    re.DOTALL,
-)
-# 清理任意 entml:* 标签
-_ENTML_ANY_TAG_RE = re.compile(
-    r'<entml:[a-zA-Z_][\w]*\b[^>]*>.*?</entml:[a-zA-Z_][\w]*>',
-    re.DOTALL,
-)
-
-
-def _clean_entml_tags(content: str) -> str:
-    """移除内容中的所有 entml 标签及其内部内容。"""
-    if not content:
-        return content
-    cleaned = content
-    cleaned = _ENTML_FNCALL_BLOCK_RE.sub("", cleaned)
-    cleaned = _ENTML_INVOKE_RE.sub("", cleaned)
-    cleaned = _ENTML_PARAMETERS_RE.sub("", cleaned)
-    cleaned = _ENTML_PARAM_RE.sub("", cleaned)
-    cleaned = _ENTML_ANY_TAG_RE.sub("", cleaned)
-    # 清理多余空行
-    lines = [line for line in cleaned.splitlines() if line.strip()]
-    return "\n".join(lines)
-
-
 # ---------------------------------------------------------------------------
 # 渲染工具调用 / 工具结果
 # ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ from echotools.exec.fncall.protocols.entml_thinking_history import (
     parse_include_thinking_in_history,
 )
 from echotools.exec.fncall.shared.loop_detect import detect_tool_loop
-from echotools.exec.fncall.shared.normalization import format_tool_descs
+from echotools.exec.fncall.shared.normalization import format_tool_descs, normalize_content
 from echotools.exec.protocol.base import ToolProtocol
 
 __all__ = ["inject_fncall"]
@@ -92,6 +92,29 @@ def build_tools_prompt(
     )
 
 
+def _strip_entml_from_user_messages(
+    messages: List[Dict[str, Any]],
+    protocol: ToolProtocol,
+) -> List[Dict[str, Any]]:
+    """从全部 user 消息正文中剥离 entml:* 标签。"""
+    clean_fn = getattr(protocol, "clean_tags", None)
+    if clean_fn is None:
+        return messages
+    stripped: List[Dict[str, Any]] = []
+    for m in messages:
+        role = m.get("role") or "user"
+        if role != "user":
+            stripped.append(m)
+            continue
+        content = normalize_content(m.get("content", ""))
+        cleaned = clean_fn(content)
+        if cleaned == content:
+            stripped.append(m)
+        else:
+            stripped.append({**m, "content": cleaned})
+    return stripped
+
+
 def inject_fncall(
     messages: List[Dict[str, Any]],
     tools: List[Dict[str, Any]],
@@ -107,10 +130,8 @@ def inject_fncall(
     include_history = parse_include_thinking_in_history(protocol_options)
     prepared = apply_thinking_history_policy(list(messages), include_history)
     normalized = _normalize_messages(prepared)
+    normalized = _strip_entml_from_user_messages(normalized, protocol)
     history_messages, current_user_message = split_last_user_message(normalized)
-
-    if hasattr(protocol, 'clean_tags'):
-        current_user_message = protocol.clean_tags(current_user_message)
 
     history_text = _format_conversation_history(
         history_messages,
