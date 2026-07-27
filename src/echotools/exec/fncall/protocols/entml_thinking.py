@@ -1,54 +1,109 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
-_CANONICAL_MODES = frozenset({"off", "on", "auto"})
+_CANONICAL_LEVELS = frozenset({"none", "low", "medium", "high", "xhigh", "max", "auto"})
+_CANONICAL_INJECTION_MODES = frozenset({"off", "on", "auto"})
 
-_OFF_ALIASES = frozenset(
-    {"off", "disabled", "disable", "false", "none", "no", "never"}
-)
-_ON_ALIASES = frozenset(
-    {
-        "on",
-        "enabled",
-        "enable",
-        "true",
-        "force",
-        "forced",
-        "required",
-        "must",
-        "static",
-        "thinking",
-    }
-)
-_AUTO_ALIASES = frozenset(
-    {"auto", "automatic", "adaptive", "interleaved"}
-)
+_LEVEL_ALIASES: Dict[str, str] = {
+    "none": "none",
+    "off": "none",
+    "disabled": "none",
+    "disable": "none",
+    "false": "none",
+    "no": "none",
+    "never": "none",
+    "low": "low",
+    "medium": "medium",
+    "med": "medium",
+    "high": "high",
+    "xhigh": "xhigh",
+    "extra_high": "xhigh",
+    "extrahigh": "xhigh",
+    "max": "max",
+    "maximum": "max",
+    "auto": "auto",
+    "automatic": "auto",
+    "adaptive": "auto",
+    "interleaved": "auto",
+}
 
-_THINKING_BLOCK_OPEN = "<entml:thinking>"
-_THINKING_BLOCK_CLOSE = "</entml:thinking>"
+_INJECTION_MODE_ALIASES: Dict[str, str] = {
+    "off": "off",
+    "disabled": "off",
+    "disable": "off",
+    "false": "off",
+    "none": "off",
+    "no": "off",
+    "never": "off",
+    "on": "on",
+    "enabled": "on",
+    "enable": "on",
+    "true": "on",
+    "force": "on",
+    "forced": "on",
+    "required": "on",
+    "must": "on",
+    "static": "on",
+    "thinking": "on",
+    "auto": "auto",
+    "automatic": "auto",
+    "adaptive": "auto",
+    "interleaved": "auto",
+}
+
+_DEFAULT_MAX_BY_LEVEL: Dict[str, int] = {
+    "low": 6554,
+    "medium": 13108,
+    "high": 32768,
+    "xhigh": 52428,
+    "max": 62260,
+}
+
+_LEGACY_ON_DEFAULT_MAX = _DEFAULT_MAX_BY_LEVEL["medium"]
+
+_THINKING_BEHAVIOR_ON = """\
+Your default is to think before it answers to give the person the best possible answer. Even for questions that might seem obvious, if there are any signs of lurking complexity, You takes the time to open up an extended thinking block and dig in to make sure it's got the details figured out and isn't just pattern-matching to the familiar. At the end of its thinking, You restates which language it should respond in.
+
+You MUST output a <entml:thinking> block before any other content in every reply. Only after that block, output your visible reply and/or <entml:invoke> tool call(s). Never skip the thinking block."""
+
+_THINKING_BEHAVIOR_AUTO = """\
+You decide whether extended thinking helps for each reply. When the question has hidden complexity, when tool results need interpretation, or when you are uncertain, open a <entml:thinking> block before continuing and strongly prefer to do so rather than guessing.
+
+After completed tool turns appear in conversation history inside <tool> blocks (for example a line like [tool_name: value] followed by its result), strongly consider outputting a <entml:thinking> block before your next visible reply or tool call."""
+
+
+def normalize_thinking_level(level: Any) -> Optional[str]:
+    """将 echotools 思考挡位归一化为 none | low | medium | high | xhigh | max | auto。"""
+    if level is None:
+        return None
+    key = str(level).strip().lower()
+    if not key:
+        return None
+    if key in _CANONICAL_LEVELS:
+        return key
+    return _LEVEL_ALIASES.get(key)
 
 
 def normalize_thinking_mode(mode: Any) -> Optional[str]:
-    """将外界声明归一化为 off | on | auto；无法识别时返回 None。"""
+    """将注入侧思考模式归一化为 off | on | auto（兼容旧 thinking_mode 字段）。"""
     if mode is None:
         return None
     key = str(mode).strip().lower()
     if not key:
         return None
-    if key in _OFF_ALIASES:
-        return "off"
-    if key in _ON_ALIASES:
-        return "on"
-    if key in _AUTO_ALIASES:
-        return "auto"
-    if key in _CANONICAL_MODES:
+    if key in _CANONICAL_INJECTION_MODES:
         return key
-    return None
+    return _INJECTION_MODE_ALIASES.get(key)
+
+
+def default_max_thinking_length_for_level(level: str) -> Optional[int]:
+    """按挡位返回默认 max_thinking_length；none / auto 无默认值。"""
+    return _DEFAULT_MAX_BY_LEVEL.get(level)
 
 
 def parse_max_thinking_length(value: Any) -> Optional[int]:
-    """仅当显式传入正整数时返回长度；否则为 None（不注入标签）。"""
+    """仅当显式传入正整数时返回长度；否则为 None。"""
     if value is None:
         return None
     if isinstance(value, str) and not value.strip():
@@ -62,84 +117,50 @@ def parse_max_thinking_length(value: Any) -> Optional[int]:
     return parsed
 
 
-def _policy_header(mode: str) -> str:
-    labels = {
-        "on": "on (forced thinking)",
-        "auto": "auto (model decides)",
-    }
-    return (
-        f"The thinking_mode for this request is {labels[mode]}. "
-        f"Follow the rules below exactly."
-    )
+def resolve_thinking_injection(
+    protocol_options: Optional[Dict[str, Any]] = None,
+) -> Optional[Tuple[str, Optional[int]]]:
+    """解析注入用 thinking_mode (on/auto) 与 max_thinking_length。
+
+    返回 None 表示不注入任何思考相关内容（none / off）。
+    """
+    opts = protocol_options or {}
+
+    level = normalize_thinking_level(opts.get("thinking_level"))
+    if level is not None:
+        if level == "none":
+            return None
+        injection_mode = "auto" if level == "auto" else "on"
+        default_max = default_max_thinking_length_for_level(level)
+    else:
+        mode = normalize_thinking_mode(opts.get("thinking_mode"))
+        if mode is None or mode == "off":
+            return None
+        injection_mode = mode
+        default_max = _LEGACY_ON_DEFAULT_MAX if mode == "on" else None
+
+    explicit_max = parse_max_thinking_length(opts.get("max_thinking_length"))
+    max_length = explicit_max if explicit_max is not None else default_max
+    return injection_mode, max_length
 
 
-def _prompt_on() -> list[str]:
-    return [
-        _policy_header("on"),
-        "",
-        "You MUST output a thinking block before any other content.",
-        "At the very start of your response, output:",
-        "",
-        _THINKING_BLOCK_OPEN,
-        "...your reasoning here...",
-        _THINKING_BLOCK_CLOSE,
-        "",
-        "Only after that block, output your visible reply and/or "
-        "`<entml:invoke>` tool call(s). Never skip the thinking block.",
-    ]
-
-
-def _prompt_auto() -> list[str]:
-    return [
-        _policy_header("auto"),
-        "",
-        "Thinking blocks are optional but encouraged when they would help.",
-        "At the very start of your response, think carefully about whether "
-        f"a `{_THINKING_BLOCK_OPEN}` `{_THINKING_BLOCK_CLOSE}` block would be "
-        "appropriate and strongly prefer to output one if you are uncertain.",
-        "",
-        "After tool results appear in conversation history, you should strongly "
-        "consider outputting a thinking block before continuing. Example of a "
-        "completed history turn (already executed — do NOT re-invoke):",
-        "",
-        "<tool>",
-        "[tool_name: value]",
-        "...",
-        "</tool>",
-        "",
-        "Then at the start of your next reply:",
-        "",
-        _THINKING_BLOCK_OPEN,
-        "...thinking about results...",
-        _THINKING_BLOCK_CLOSE,
-    ]
+def _format_thinking_behavior(injection_mode: str) -> str:
+    body = _THINKING_BEHAVIOR_ON if injection_mode == "on" else _THINKING_BEHAVIOR_AUTO
+    return f"<thinking_behavior>\n{body}\n</thinking_behavior>"
 
 
 def build_entml_thinking_section(
     protocol_options: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """按 thinking_mode 构建思考链指令块（on / auto）；off 时不注入任何内容。"""
-    opts = protocol_options or {}
-    mode = normalize_thinking_mode(opts.get("thinking_mode"))
-    max_thinking_length = parse_max_thinking_length(opts.get("max_thinking_length"))
-
-    if mode == "off":
+    """按思考挡位构建注入块：thinking_mode + max_thinking_length + thinking_behavior。"""
+    resolved = resolve_thinking_injection(protocol_options)
+    if resolved is None:
         return ""
 
-    if mode is None and max_thinking_length is None:
-        return ""
-
-    lines: list[str] = []
-    if mode is not None:
-        lines.append(f"<entml:thinking_mode>{mode}</entml:thinking_mode>")
-    if max_thinking_length is not None:
-        lines.append(
-            f"<entml:max_thinking_length>{max_thinking_length}</entml:max_thinking_length>"
-        )
-
-    if mode == "on":
-        lines.extend([""] + _prompt_on())
-    elif mode == "auto":
-        lines.extend([""] + _prompt_auto())
-
+    injection_mode, max_length = resolved
+    lines = [f"<entml:thinking_mode>{injection_mode}</entml:thinking_mode>"]
+    if max_length is not None:
+        lines.append(f"<entml:max_thinking_length>{max_length}</entml:max_thinking_length>")
+    lines.append("")
+    lines.append(_format_thinking_behavior(injection_mode))
     return "\n".join(lines)

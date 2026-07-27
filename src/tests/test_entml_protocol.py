@@ -8,7 +8,10 @@ from echotools.exec.fncall import get_protocol, inject_fncall
 from echotools.exec.fncall.protocols.entml_invoke import parse_entml_tool_calls
 from echotools.exec.fncall.protocols.entml_thinking import (
     build_entml_thinking_section,
+    default_max_thinking_length_for_level,
+    normalize_thinking_level,
     normalize_thinking_mode,
+    resolve_thinking_injection,
 )
 from echotools.exec.fncall.protocols.entml_values import coerce_entml_parameter_value
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
@@ -63,8 +66,9 @@ def test_inject_with_thinking_options_only_when_declared() -> None:
     )[0]["content"]
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in with_opts
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in with_opts
-    assert "MUST output a thinking block" in with_opts
-    assert "At the very start of your response" in with_opts
+    assert "<thinking_behavior>" in with_opts
+    assert "Never skip the thinking block" in with_opts
+    assert "<entml:thinking> block before any other content" in with_opts
 
 
 def test_build_entml_thinking_section_empty_without_options() -> None:
@@ -88,6 +92,7 @@ def test_parse_max_thinking_length() -> None:
     [
         ("off", "off"),
         ("disabled", "off"),
+        ("none", "off"),
         ("on", "on"),
         ("enabled", "on"),
         ("interleaved", "auto"),
@@ -100,8 +105,56 @@ def test_normalize_thinking_mode(raw, expected) -> None:
     assert normalize_thinking_mode(raw) == expected
 
 
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("none", "none"),
+        ("off", "none"),
+        ("low", "low"),
+        ("medium", "medium"),
+        ("med", "medium"),
+        ("high", "high"),
+        ("xhigh", "xhigh"),
+        ("max", "max"),
+        ("auto", "auto"),
+        ("interleaved", "auto"),
+        ("bogus", None),
+    ],
+)
+def test_normalize_thinking_level(raw, expected) -> None:
+    assert normalize_thinking_level(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "level,expected",
+    [
+        ("low", 6554),
+        ("medium", 13108),
+        ("high", 32768),
+        ("xhigh", 52428),
+        ("max", 62260),
+        ("none", None),
+        ("auto", None),
+    ],
+)
+def test_default_max_thinking_length_for_level(level, expected) -> None:
+    assert default_max_thinking_length_for_level(level) == expected
+
+
+def test_resolve_thinking_injection_levels() -> None:
+    assert resolve_thinking_injection({"thinking_level": "none"}) is None
+    assert resolve_thinking_injection({"thinking_level": "low"}) == ("on", 6554)
+    assert resolve_thinking_injection({"thinking_level": "high"}) == ("on", 32768)
+    assert resolve_thinking_injection({"thinking_level": "auto"}) == ("auto", None)
+    assert resolve_thinking_injection({
+        "thinking_level": "max",
+        "max_thinking_length": 1000,
+    }) == ("on", 1000)
+
+
 def test_thinking_prompt_off() -> None:
     assert build_entml_thinking_section({"thinking_mode": "off"}) == ""
+    assert build_entml_thinking_section({"thinking_level": "none"}) == ""
     assert build_entml_thinking_section(
         {"thinking_mode": "off", "max_thinking_length": 22000}
     ) == ""
@@ -110,32 +163,37 @@ def test_thinking_prompt_off() -> None:
 def test_thinking_prompt_on_without_max_length() -> None:
     section = build_entml_thinking_section({"thinking_mode": "on"})
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
-    assert "<entml:max_thinking_length>" not in section
+    assert "<entml:max_thinking_length>13108</entml:max_thinking_length>" in section
+    assert "<thinking_behavior>" in section
+
+
+def test_thinking_prompt_on_by_level() -> None:
+    section = build_entml_thinking_section({"thinking_level": "low"})
+    assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
+    assert "<entml:max_thinking_length>6554</entml:max_thinking_length>" in section
+    assert "Never skip the thinking block" in section
+    assert "Your default is to think before it answers" in section
 
 
 def test_thinking_prompt_on() -> None:
     section = build_entml_thinking_section({"thinking_mode": "on"})
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
-    assert "forced thinking" in section
-    assert "MUST output a thinking block" in section
-    assert "<entml:thinking>" in section
-    assert "`<entml:invoke>`" in section
+    assert "<thinking_behavior>" in section
+    assert "Your default is to think before it answers" in section
+    assert "<entml:thinking> block before any other content" in section
+    assert "`<entml:invoke>`" not in section
     assert "<entml:function_calls>" not in section
-    assert "You must NOT output any thinking blocks" not in section
 
 
 def test_thinking_prompt_auto() -> None:
-    section = build_entml_thinking_section({"thinking_mode": "auto"})
+    section = build_entml_thinking_section({"thinking_level": "auto"})
     assert "<entml:thinking_mode>auto</entml:thinking_mode>" in section
-    assert "model decides" in section
+    assert "<entml:max_thinking_length>" not in section
+    assert "<thinking_behavior>" in section
+    assert "You decide whether extended thinking helps" in section
     assert "<tool>" in section
     assert "[tool_name: value]" in section
-    assert "→ Result:" not in section
-    assert "[tool_name(" not in section
-    assert "<function_results>" not in section
-    assert "<entml:function_calls>" not in section
-    assert "strongly prefer to output one if you are uncertain" in section
-    assert "MUST output a thinking block" not in section
+    assert "Never skip the thinking block" not in section
 
 
 def test_inject_no_tools_with_thinking_off() -> None:
@@ -163,7 +221,8 @@ def test_inject_no_tools_with_thinking_on() -> None:
         protocol_options={"thinking_mode": "on"},
     )[0]["content"]
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in result
-    assert "MUST output a thinking block" in result
+    assert "<thinking_behavior>" in result
+    assert "Never skip the thinking block" in result
 
 
 def test_inject_with_history_entml_tags() -> None:
@@ -470,7 +529,8 @@ def test_entml_instruction_matches_spec_format() -> None:
     assert "String and scalar parameters should be specified as is" in prompt
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in prompt
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in prompt
-    assert "MUST output a thinking block" in prompt
+    assert "<thinking_behavior>" in prompt
+    assert "Never skip the thinking block" in prompt
     assert "<function_results>" not in prompt
     assert "<entml:conversation_history>" not in prompt
     assert "<entml:history>" not in prompt
