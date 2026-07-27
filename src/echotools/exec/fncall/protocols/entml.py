@@ -20,6 +20,7 @@ from echotools.exec.fncall.protocols.entml_invoke import (
 )
 from echotools.exec.fncall.protocols.entml_patterns import (
     BLOCK_RE,
+    entml_invoke_open_may_be_streaming,
     extract_attr_value,
     normalize_entml_name,
     strip_legacy_function_calls_wrapper,
@@ -225,7 +226,11 @@ class EntmlProtocol(ToolProtocol):
             if close < 0 and (hold is None or legacy_pos < hold):
                 hold = legacy_pos
         invoke_pos = buffer.find(self._TRIGGER_PREFIX)
-        if invoke_pos >= 0 and (hold is None or invoke_pos < hold):
+        if (
+            invoke_pos >= 0
+            and entml_invoke_open_may_be_streaming(buffer, invoke_pos)
+            and (hold is None or invoke_pos < hold)
+        ):
             hold = invoke_pos
         return hold
 

@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple
 
 from echotools.exec.fncall.protocols.entml_patterns import (
     BLOCK_RE,
+    entml_invoke_open_may_be_streaming,
     extract_attr_value,
     normalize_entml_name,
 )
@@ -116,12 +117,22 @@ def find_ambiguous_entml_tool_prefix(buffer: str) -> int:
 
 
 def _hold_ambiguous_tool_markup(buffer: str) -> Tuple[str, str]:
-    """thinking 块内：从最早工具 entml 前缀处 hold，避免 invoke 被当作 thinking 吐出。"""
+    """thinking 块内：hold 可能长成真实工具调用的 markup（非 prose ``<entml:invoke>`` 提及）。"""
     if not buffer:
         return "", ""
-    ambig = find_ambiguous_entml_tool_prefix(buffer)
-    if ambig >= 0:
-        return buffer[:ambig], buffer[ambig:]
+    hold_from: Optional[int] = None
+    invoke_pos = buffer.find(_INVOKE_PREFIX)
+    if invoke_pos >= 0 and entml_invoke_open_may_be_streaming(buffer, invoke_pos):
+        if hold_from is None or invoke_pos < hold_from:
+            hold_from = invoke_pos
+    for prefix in _AMBIGUOUS_ENTML_PREFIXES:
+        if prefix == _INVOKE_PREFIX:
+            continue
+        pos = buffer.find(prefix)
+        if pos >= 0 and (hold_from is None or pos < hold_from):
+            hold_from = pos
+    if hold_from is not None:
+        return buffer[:hold_from], buffer[hold_from:]
     lt = buffer.rfind("<")
     if lt < 0:
         return buffer, ""

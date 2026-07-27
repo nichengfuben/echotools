@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.53] - 2026-07-28
+
+### Fixed
+
+- 可见正文与 thinking 内 prose 提及 ``<entml:invoke>`` 不再被 hold/剥离；仅带真实 ``name=`` 的 invoke 开标签参与工具 holdback
+- thinking 内逐字流式 invoke：开标签未闭合 ``>`` 前持续 hold，避免 `` name="Bash"`` 等被误吐进 thinking
+- 恢复 thinking 内 ``<entml:parameter>`` 歧义 hold，与 invoke 开标签 hold 配合
+
 ## [2.3.52] - 2026-07-28
 
 ### Fixed

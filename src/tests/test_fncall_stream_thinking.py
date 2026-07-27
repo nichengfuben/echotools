@@ -170,6 +170,26 @@ def test_fault_thinking_close_without_invoke_is_plain_text() -> None:
     assert "answer" in clean
 
 
+def test_prose_invoke_mention_preserved_in_visible_text() -> None:
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    text = "当我使用`<entml:invoke>`格式时，参数要简单。\n"
+    parser.feed(text)
+    clean, calls = parser.finalize()
+    assert not calls
+    assert "<entml:invoke>" in parser.partial_text
+    assert "<entml:invoke>" in clean
+
+
+def test_prose_invoke_mention_preserved_in_thinking_stream() -> None:
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    text = "<entml:thinking>\n当我使用`<entml:invoke>`格式时\n</entml:thinking>\n"
+    for i in range(0, len(text), 4):
+        parser.feed(text[i : i + 4])
+    _, calls = parser.finalize()
+    assert not calls
+    assert "<entml:invoke>" in parser.partial_thinking
+
+
 def test_stream_delta_not_duplicated_after_invoke_in_thinking() -> None:
     """thinking 内 invoke ready 后，下一 chunk 不应重发整段 partial_json。"""
     import json

@@ -60,6 +60,65 @@ _FENCE_ONLY_LINE_RE = re.compile(
     r"^\s*```(?:xml|entml|text)?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
+_INVOKE_OPEN_PREFIX = "<entml:invoke"
+_PLACEHOLDER_INVOKE_NAMES = frozenset({"$FUNCTION_NAME", "$FUNCTION_NAME2"})
+
+
+def is_placeholder_invoke_name(name: str) -> bool:
+    """提示词占位符（如 ``$FUNCTION_NAME``）不算真实工具调用。"""
+    n = (name or "").strip()
+    return not n or "$" in n
+
+
+def entml_invoke_open_is_actionable(buffer: str, pos: int) -> bool:
+    """``pos`` 处 ``<entml:invoke`` 是否为已闭合且含真实 name 的工具开标签。"""
+    if pos < 0 or not buffer.startswith(_INVOKE_OPEN_PREFIX, pos):
+        return False
+    gt = buffer.find(">", pos + len(_INVOKE_OPEN_PREFIX))
+    if gt < 0:
+        return False
+    attrs = buffer[pos + len(_INVOKE_OPEN_PREFIX) : gt]
+    name = extract_attr_value(attrs, "name")
+    if not name:
+        return False
+    name = normalize_entml_name(name)
+    return bool(name) and not is_placeholder_invoke_name(name)
+
+
+def entml_invoke_open_may_be_streaming(buffer: str, pos: int) -> bool:
+    """``pos`` 处 ``<entml:invoke`` 是否仍可能长成真实工具开标签（非 prose 提及）。"""
+    if pos < 0 or not buffer.startswith(_INVOKE_OPEN_PREFIX, pos):
+        return False
+    if entml_invoke_open_is_actionable(buffer, pos):
+        return True
+    gt = buffer.find(">", pos + len(_INVOKE_OPEN_PREFIX))
+    if gt < 0:
+        return True
+    return False
+
+
+def _strip_orphan_invoke_tags(content: str) -> str:
+    """仅剥离带真实 name 的 invoke 孤儿标签；保留 prose 中的 ``<entml:invoke>`` 提及。"""
+    pattern = re.compile(r"</?entml:invoke\b[^>]*/?>", re.DOTALL)
+
+    def repl(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        if tag.startswith("</"):
+            return ""
+        if entml_invoke_open_is_actionable(content, match.start()):
+            return ""
+        return tag
+
+    return pattern.sub(repl, content)
+
+
+def _strip_orphan_non_invoke_tool_tags(content: str) -> str:
+    return re.sub(
+        r"</?entml:(?:function_calls|parameter|parameters)\b[^>]*/?>",
+        "",
+        content,
+        flags=re.DOTALL,
+    )
 
 
 def extract_attr_value(attrs: str, attr_name: str = "name") -> Optional[str]:
@@ -117,12 +176,13 @@ def strip_legacy_function_calls_wrapper(text: str) -> str:
 
 
 def strip_tool_entml_residue(content: str) -> str:
-    """剥离工具相关 entml 标签残留，保留 thinking 等非工具标签。"""
+    """剥离工具相关 entml 标签残留，保留 thinking 与非工具 prose 提及。"""
     if not content:
         return content
     cleaned = _TOOL_WRAPPER_PAIR_RE.sub("", content)
     cleaned = BLOCK_RE.sub("", cleaned)
-    cleaned = _TOOL_ORPHAN_TAG_RE.sub("", cleaned)
+    cleaned = _strip_orphan_invoke_tags(cleaned)
+    cleaned = _strip_orphan_non_invoke_tool_tags(cleaned)
     cleaned = _EMPTY_FENCE_RE.sub("", cleaned)
     cleaned = _FENCE_ONLY_LINE_RE.sub("", cleaned)
     # 折叠因剥离产生的多余空行
