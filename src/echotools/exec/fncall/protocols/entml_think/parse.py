@@ -15,6 +15,7 @@ THINKING_BLOCK_RE = re.compile(
 
 _THINKING_OPEN_PREFIX = "<entml:thinking"
 _THINKING_CLOSE = "</entml:thinking>"
+_FAULT_THINKING_CLOSE = "</thinking>"
 # 与 thinking 共享 `<entml:` 前缀的其它标签：歧义 holdback 应交由工具流式状态机处理
 _AMBIGUOUS_ENTML_PREFIXES = (
     "<entml:invoke",
@@ -142,10 +143,13 @@ class EntmlThinkingStreamFilter:
         self._in_block = False
         # 当前 thinking 块是否已输出过任何内容（用于首片去前导空白）
         self._thinking_started = False
+        # 见到 ``</thinking>`` 后暂存，仅当后续出现 invoke 才视为闭合；否则当纯文本
+        self._fault_watch = False
+        self._fault_buffer = ""
 
     def in_open_thinking(self) -> bool:
-        """思考块已开始且尚未收到 </entml:thinking>（含开/闭标签分片 hold）。"""
-        if self._in_block:
+        """思考块已开始且尚未收到 ``</entml:thinking>``（含开/闭标签分片 hold）。"""
+        if self._in_block or self._fault_watch:
             return True
         open_at = self._pending.find(_THINKING_OPEN_PREFIX)
         if open_at >= 0:
@@ -157,47 +161,47 @@ class EntmlThinkingStreamFilter:
             return True
         return False
 
-    def _split_thinking_at_tool_markup(self, out: List[Tuple[str, str]]) -> bool:
-        """thinking 块内一旦出现工具 entml 前缀，立即切出为正文（含未收齐开标签）。"""
-        tool_at = find_ambiguous_entml_tool_prefix(self._pending)
-        if tool_at < 0:
+    def _try_resolve_fault_watch_on_invoke(self) -> bool:
+        """``</thinking>`` 之后若出现完整 invoke 开标签，则在该处结束 thinking。"""
+        if not self._fault_watch or not self._fault_buffer:
             return False
-        close_at = self._pending.find(_THINKING_CLOSE)
-        if close_at >= 0 and tool_at >= close_at:
+        invoke_at = find_complete_entml_invoke_open(self._fault_buffer)
+        if invoke_at < len(_FAULT_THINKING_CLOSE):
             return False
-        if tool_at > 0:
-            emitted = self._emit_thinking_piece(self._pending[:tool_at])
-            if emitted:
-                out.append(("thinking", emitted))
         self._in_block = False
+        self._fault_watch = False
         self._thinking_started = False
-        self._pending = self._pending[tool_at:]
+        self._pending = self._fault_buffer[len(_FAULT_THINKING_CLOSE) :]
+        self._fault_buffer = ""
         return True
 
-    def _split_thinking_at_invoke(self, out: List[Tuple[str, str]]) -> bool:
-        """thinking 未闭合但已出现完整 invoke 开标签时，提前结束 thinking 块。"""
-        invoke_at = find_complete_entml_invoke_open(self._pending)
-        if invoke_at < 0:
+    def _try_resolve_fault_watch_on_entml_close(self, out: List[Tuple[str, str]]) -> bool:
+        """未见 invoke 时出现 ``</entml:thinking>`` → ``</thinking>`` 仅为思考内纯文本。"""
+        if not self._fault_watch:
             return False
-        close_at = self._pending.find(_THINKING_CLOSE)
-        if close_at >= 0 and invoke_at >= close_at:
+        close_at = self._fault_buffer.find(_THINKING_CLOSE)
+        if close_at < 0:
             return False
-        if invoke_at > 0:
-            emitted = self._emit_thinking_piece(self._pending[:invoke_at])
-            if emitted:
-                out.append(("thinking", emitted))
+        emitted = self._emit_thinking_piece(self._fault_buffer[:close_at])
+        if emitted:
+            out.append(("thinking", emitted))
         self._in_block = False
+        self._fault_watch = False
         self._thinking_started = False
-        self._pending = self._pending[invoke_at:]
+        self._pending = self._fault_buffer[close_at + len(_THINKING_CLOSE) :]
+        self._fault_buffer = ""
         return True
+
+    def _feed_fault_watch(self, out: List[Tuple[str, str]]) -> bool:
+        """处理 ``</thinking>`` 容错观察期；返回 True 表示可继续主循环。"""
+        if self._try_resolve_fault_watch_on_invoke():
+            return True
+        if self._try_resolve_fault_watch_on_entml_close(out):
+            return True
+        return False
 
     def _feed_in_block(self, out: List[Tuple[str, str]]) -> bool:
         """处理块内 pending；返回 False 表示应退出 feed 主循环。"""
-        if self._split_thinking_at_invoke(out):
-            return True
-        if self._split_thinking_at_tool_markup(out):
-            return True
-
         close_at = self._pending.find(_THINKING_CLOSE)
         if close_at >= 0:
             piece = self._pending[:close_at]
@@ -205,9 +209,22 @@ class EntmlThinkingStreamFilter:
             if emitted:
                 out.append(("thinking", emitted))
             self._in_block = False
+            self._fault_watch = False
+            self._fault_buffer = ""
             self._thinking_started = False
             self._pending = self._pending[close_at + len(_THINKING_CLOSE) :]
             return True
+
+        fault_at = self._pending.find(_FAULT_THINKING_CLOSE)
+        if fault_at >= 0:
+            before = self._pending[:fault_at]
+            emitted = self._emit_thinking_piece(before)
+            if emitted:
+                out.append(("thinking", emitted))
+            self._fault_watch = True
+            self._fault_buffer = self._pending[fault_at:]
+            self._pending = ""
+            return False
 
         safe, tool_hold = _hold_ambiguous_tool_markup(self._pending)
         if tool_hold:
@@ -219,6 +236,8 @@ class EntmlThinkingStreamFilter:
             return False
 
         safe, hold = _hold_prefix(self._pending, _THINKING_CLOSE)
+        if not hold:
+            safe, hold = _hold_prefix(safe, _FAULT_THINKING_CLOSE)
         if safe:
             emitted = self._emit_thinking_piece(safe)
             if emitted:
@@ -257,6 +276,12 @@ class EntmlThinkingStreamFilter:
         out: List[Tuple[str, str]] = []
 
         while self._pending:
+            if self._fault_watch:
+                self._fault_buffer += self._pending
+                self._pending = ""
+                if self._feed_fault_watch(out):
+                    continue
+                break
             if self._in_block:
                 if not self._feed_in_block(out):
                     break
@@ -279,39 +304,37 @@ class EntmlThinkingStreamFilter:
 
     def finalize(self) -> List[Tuple[str, str]]:
         out: List[Tuple[str, str]] = []
+        if self._fault_watch:
+            if self._try_resolve_fault_watch_on_invoke():
+                pass
+            elif self._try_resolve_fault_watch_on_entml_close(out):
+                pass
+            else:
+                emitted = self._emit_thinking_piece(self._fault_buffer)
+                if emitted:
+                    out.append(("thinking", emitted))
+                self._fault_buffer = ""
+                self._fault_watch = False
+                self._in_block = False
+                self._thinking_started = False
         if self._in_block:
-            if not self._split_thinking_at_invoke(out):
-                if not self._split_thinking_at_tool_markup(out):
-                    # 未闭合且无工具 markup：剩余 pending 视作思考
-                    emitted = self._emit_thinking_piece(self._pending)
-                    if emitted:
-                        out.append(("thinking", emitted))
-                    self._pending = ""
-                    self._in_block = False
-                    self._thinking_started = False
-                    return out
-            # invoke 已切出，继续处理 _pending 中的正文
-            while self._pending:
-                if self._in_block:
-                    if not self._feed_in_block(out):
-                        break
-                    continue
-                if not self._feed_before_block(out):
-                    break
+            emitted = self._emit_thinking_piece(self._pending)
+            if emitted:
+                out.append(("thinking", emitted))
             self._pending = ""
             self._in_block = False
             self._thinking_started = False
-            return out
-        elif self._pending:
+        if self._pending:
             content, thinking = split_entml_thinking(self._pending)
             if thinking:
                 out.append(("thinking", thinking))
             if content:
                 out.append(("content", content))
             elif self._pending and not thinking:
-                # 仅 hold 了半截开标签：原样吐出，避免吞字
                 out.append(("content", self._pending))
         self._pending = ""
         self._in_block = False
+        self._fault_watch = False
+        self._fault_buffer = ""
         self._thinking_started = False
         return out

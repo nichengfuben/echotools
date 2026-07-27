@@ -112,7 +112,7 @@ def test_char_by_char_ready_matches_final_for_all_tool_cases() -> None:
         assert _args(incremental) == _args(final) == case.expect_args, case.id
 
 
-def test_unclosed_thinking_invoke_parsed_once_inside_block() -> None:
+def test_unclosed_thinking_invoke_not_parsed_until_close() -> None:
     proto = get_protocol("entml")
     tools = TOOLS
     invoke = (
@@ -124,11 +124,10 @@ def test_unclosed_thinking_invoke_parsed_once_inside_block() -> None:
     ready = []
     for ch in f"<entml:thinking>\nplan {invoke}\n":
         ready.extend(parser.feed(ch))
-    assert len(ready) == 1
+    assert ready == []
     for ch in f"</entml:thinking>\n可见\n{invoke}":
         ready.extend(parser.feed(ch))
     ready.extend(parser.get_ready_tool_calls())
     _, final = parser.finalize()
-    # thinking 内第一次 invoke 已解析；闭合后重复 invoke 会再解析一次
-    assert _names(final) == ["get_weather", "get_weather"]
-    assert len(final) == 2
+    assert _names(final) == ["get_weather"]
+    assert len(final) == 1
