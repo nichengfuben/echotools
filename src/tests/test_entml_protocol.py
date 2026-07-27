@@ -327,8 +327,11 @@ def test_entml_multi_tool_history_blocks() -> None:
     hist_end = content.index("</entml:conversation_history>")
     history = content[hist_start:hist_end]
 
-    assert history.count("<tool>") == 2
-    assert history.count("</tool>") == 2
+    assert history.count("<tool>") == 1
+    assert history.count("</tool>") == 1
+    assert "<assistant>" in history
+    assert "<assistant>\nchecking time and attractions\n</assistant>" in history
+    assert "<tool>" not in history.split("</assistant>")[0].split("<assistant>")[-1]
     assert "[get_time: Hangzhou ]" in history
     assert "[search_web: West Lake spots ]" in history
     assert "2026-07-26 14:30 CST" in history
@@ -337,15 +340,16 @@ def test_entml_multi_tool_history_blocks() -> None:
     assert "[get_time(" not in history
     assert "[search_web(" not in history
 
-    time_block = (
-        "<tool>\n[get_time: Hangzhou ]\n2026-07-26 14:30 CST\n</tool>"
+    turn_block = (
+        "<tool>\n"
+        "[get_time: Hangzhou ]\n"
+        "2026-07-26 14:30 CST\n"
+        "[search_web: West Lake spots ]\n"
+        "Broken Bridge, Leifeng Pagoda\n"
+        "</tool>"
     )
-    search_block = (
-        "<tool>\n[search_web: West Lake spots ]\n"
-        "Broken Bridge, Leifeng Pagoda\n</tool>"
-    )
-    assert time_block in history
-    assert search_block in history
+    assert turn_block in history
+    assert "</assistant>\n\n<tool>" in history
 
 
 @pytest.mark.parametrize(

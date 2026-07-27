@@ -55,10 +55,9 @@ def _render_tool_call_line(name: str, args: Dict[str, Any]) -> str:
     return f"[{name}: ]"
 
 
-def _render_tool_history_block(call_line: str, result: str = "") -> str:
-    """将调用行与可选结果包裹为 <tool> 块。"""
-    body = call_line if not result else f"{call_line}\n{result.strip()}"
-    return f"<tool>\n{body}\n</tool>"
+def _render_tool_history_block(body: str) -> str:
+    """将工具轮次正文包裹为 <tool> 块。"""
+    return f"<tool>\n{body.strip()}\n</tool>"
 
 
 _ENTML_INSTRUCTION = """\
@@ -207,15 +206,23 @@ class EntmlProtocol(ToolProtocol):
             lines.append(_render_tool_call_line(name, args))
         return "\n".join(lines)
 
-    def format_assistant_tool_history_block(
+    def format_assistant_tool_turn_block(
         self,
-        call_line: str,
-        result: str = "",
-        is_error: bool = False,
+        tool_calls: List[Dict[str, Any]],
+        tid_to_result: Dict[str, Dict[str, Any]],
     ) -> str:
-        del is_error  # 历史块中结果正文已含错误语义，不再追加箭头前缀
-        text = normalize_content(result).strip() if result else ""
-        return _render_tool_history_block(call_line, text)
+        """同一 assistant 轮次的全部工具调用与结果合并为一个 <tool> 块。"""
+        lines: List[str] = []
+        for tc in tool_calls:
+            name, args = _parse_tool_call_args(tc)
+            lines.append(_render_tool_call_line(name, args))
+            tid = tc.get("id") or ""
+            result_msg = tid_to_result.get(tid)
+            if result_msg is not None:
+                text = normalize_content(result_msg.get("content", "")).strip()
+                if text:
+                    lines.append(text)
+        return _render_tool_history_block("\n".join(lines))
 
     def supports_streaming(self) -> bool:
         return True
