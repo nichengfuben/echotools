@@ -170,6 +170,42 @@ def test_fault_thinking_close_without_invoke_is_plain_text() -> None:
     assert "answer" in clean
 
 
+def test_stream_delta_not_duplicated_after_invoke_in_thinking() -> None:
+    """thinking 内 invoke ready 后，下一 chunk 不应重发整段 partial_json。"""
+    import json
+
+    bash_tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Bash",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"command": {"type": "string"}},
+                    "required": ["command"],
+                },
+            },
+        },
+    ]
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=bash_tools)
+    text = (
+        "<entml:thinking>\nneed to run echo\n"
+        '<entml:invoke name="Bash">\n'
+        '<entml:parameter name="command">echo hello</entml:parameter>\n'
+        "</entml:invoke>\n"
+    )
+    merged = ""
+    for ch in text:
+        parser.feed(ch)
+        delta = parser.consume_stream_delta()
+        if delta:
+            merged += delta[1]
+    json.loads(merged)
+    assert merged.count('"command"') == 1
+    _, calls = parser.finalize()
+    assert len(calls) == 1
+
+
 def test_fault_thinking_close_stays_open_while_waiting_for_invoke() -> None:
     filt = EntmlThinkingStreamFilter()
     filt.feed("<entml:thinking>\nplan\n</thinking>\nstill ")

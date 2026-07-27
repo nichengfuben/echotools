@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.52] - 2026-07-28
+
+### Fixed
+
+- 流式 partial_json：invoke ready 后对齐 encoder 已发快照，避免下一 chunk 重发整段 JSON（`Extra data` 导致 Bash 等工具循环失败）
+
 ## [2.3.51] - 2026-07-28
 
 ### Fixed

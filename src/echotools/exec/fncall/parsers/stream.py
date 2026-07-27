@@ -332,6 +332,23 @@ class FncallStreamParser:
                 return True
         return False
 
+    def _sync_json_stream_encoder_emitted(self) -> None:
+        """invoke 已 ready 后对齐 encoder，避免下一 chunk 重发整段 partial_json。"""
+        if self._json_stream_encoder is None:
+            return
+        from echotools.exec.fncall.protocols.entml_stream_json import (
+            build_streaming_json_snapshot,
+            split_invoke_open,
+        )
+
+        parsed = split_invoke_open(self._fncall_buf)
+        if not parsed:
+            self._json_stream_encoder.reset()
+            return
+        _, body_start = parsed
+        body = self._fncall_buf[body_start:]
+        self._json_stream_encoder._emitted = build_streaming_json_snapshot(body)
+
     def feed(self, chunk: str) -> List[Dict[str, Any]]:
         """喂入新的流式文本块。
 
@@ -352,7 +369,7 @@ class FncallStreamParser:
         self._pending_stream_delta = self._poll_streaming_tool_input_delta()
         ready = self.get_ready_tool_calls()
         if ready and self._json_stream_encoder is not None:
-            self._json_stream_encoder.reset()
+            self._sync_json_stream_encoder_emitted()
         return ready
 
     def _poll_streaming_tool_input_delta(self) -> Optional[Tuple[str, str]]:
