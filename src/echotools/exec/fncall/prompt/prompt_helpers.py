@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from echotools.base.logger.manager import get_logger
 from echotools.exec.fncall.protocols.entml_think.hist import (
     extract_reasoning_text,
     format_entml_thinking_history_block,
@@ -12,14 +11,11 @@ from echotools.exec.fncall.shared.normalization import normalize_content
 from .history import (
     _TOOL_CALL_MARKER_RE,
     _convert_assistant_pseudo_calls,
-    _make_assistant_dedup_key,
     _render_inline_call_result,
     _render_tool_call,
     _render_tool_result,
     _try_convert_user_to_tool,
 )
-
-logger = get_logger(__name__)
 
 
 def _assistant_history_content_blocks(
@@ -139,18 +135,11 @@ def format_assistant_block(
     content_str: str,
     protocol: Optional[Any],
     call_id_to_name: Dict[str, str],
-    seen_assistant_keys: Set[Tuple[str, Tuple[Tuple[str, str], ...]]],
     *,
     include_thinking_in_history: bool = False,
 ) -> List[str]:
     tcs: List[Dict[str, Any]] = m.get("tool_calls") or []
     _register_tool_call_names(tcs, call_id_to_name)
-
-    dedup_key = _make_assistant_dedup_key(content_str, tcs)
-    if dedup_key in seen_assistant_keys:
-        logger.debug("跳过重复 assistant 消息（dedup_key 已见）")
-        return []
-    seen_assistant_keys.add(dedup_key)
 
     parts: List[str] = []
     assistant = _format_assistant_text_block(
@@ -174,19 +163,12 @@ def format_assistant_block_with_results(
     tool_msgs: List[Dict[str, Any]],
     protocol: Optional[Any],
     call_id_to_name: Dict[str, str],
-    seen_assistant_keys: Set[Tuple[str, Tuple[Tuple[str, str], ...]]],
     *,
     include_thinking_in_history: bool = False,
 ) -> List[str]:
     tcs: List[Dict[str, Any]] = m.get("tool_calls") or []
     content_str = normalize_content(m.get("content", ""))
     _register_tool_call_names(tcs, call_id_to_name)
-
-    dedup_key = _make_assistant_dedup_key(content_str, tcs)
-    if dedup_key in seen_assistant_keys:
-        logger.debug("跳过重复 assistant 消息（dedup_key 已见）")
-        return []
-    seen_assistant_keys.add(dedup_key)
 
     parts: List[str] = []
     assistant = _format_assistant_text_block(

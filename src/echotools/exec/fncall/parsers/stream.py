@@ -148,6 +148,23 @@ class FncallStreamParser:
             return fn(text)
         return text
 
+    def _drain_thinking_holdback_to_fncall(self) -> None:
+        """invoke 已开始后，thinking 过滤器里对工具标签的 holdback 应并入 fncall 缓冲。"""
+        if self._thinking_filter is None:
+            return
+        pending = self._thinking_filter._pending
+        if pending:
+            self._fncall_buf += pending
+            self._thinking_filter._pending = ""
+
+    def _begin_function_calls(self, buffer_from: str, *, pos: int) -> None:
+        self._fncall_buf = buffer_from[pos:]
+        self._drain_thinking_holdback_to_fncall()
+        self._detected = True
+        self._state = self.IN_FUNCTION_CALLS
+        if self._is_call_closed():
+            self._state = self.DONE
+
     def _feed_content_waiting(self, text: str) -> None:
         """thinking 已闭合后，对可见正文做 invoke 检测（不再经过 thinking 过滤器）。"""
         if not text:
@@ -173,11 +190,7 @@ class FncallStreamParser:
         if pos > 0:
             self._append_content_text(text[:pos])
 
-        self._fncall_buf = text[pos:]
-        self._detected = True
-        self._state = self.IN_FUNCTION_CALLS
-        if self._is_call_closed():
-            self._state = self.DONE
+        self._begin_function_calls(text, pos=pos)
 
     def _feed_waiting_thinking_plain(self, combined: str) -> None:
         """未闭合 thinking 阶段：块内一律按纯文本进 thinking，不检测 invoke。"""
@@ -187,6 +200,8 @@ class FncallStreamParser:
                 self._thinking_parts.append(part)
             elif part:
                 self._feed_content_waiting(part)
+        if self._state == self.IN_FUNCTION_CALLS:
+            self._drain_thinking_holdback_to_fncall()
 
     def _feed_waiting(self, chunk: str) -> None:
         """在 WAITING_FOR_TAG 状态下处理新块。"""
@@ -202,14 +217,17 @@ class FncallStreamParser:
         found, pos = self._protocol.detect_start(combined)
 
         if found:
+            if self._thinking_filter is not None:
+                from echotools.exec.fncall.protocols.entml_think.parse import (
+                    invoke_index_inside_unclosed_thinking,
+                )
+                if invoke_index_inside_unclosed_thinking(combined, pos):
+                    self._feed_waiting_thinking_plain(combined)
+                    return
             if pos > 0:
                 # 工具标签前的正文仍可能含 thinking，走过滤器。
                 self._emit_text(combined[:pos])
-            self._fncall_buf = combined[pos:]
-            self._detected = True
-            self._state = self.IN_FUNCTION_CALLS
-            if self._is_call_closed():
-                self._state = self.DONE
+            self._begin_function_calls(combined, pos=pos)
             return
 
         # 无完整工具开标签时，再处理未闭合 thinking / 思考开标签 holdback。
@@ -264,6 +282,10 @@ class FncallStreamParser:
         if self._state == self.WAITING_FOR_TAG:
             self._feed_waiting(chunk)
         else:
+            if self._waiting_tail:
+                self._fncall_buf += self._normalize_stream_chunk(self._waiting_tail)
+                self._waiting_tail = ""
+            self._drain_thinking_holdback_to_fncall()
             self._fncall_buf += self._normalize_stream_chunk(chunk)
             if self._is_call_closed():
                 self._state = self.DONE

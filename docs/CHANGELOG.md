@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.50] - 2026-07-28
+
+### Fixed
+
+- 流式解析：首包含 thinking 内 invoke 开标签时不再误进 `IN_FUNCTION_CALLS`（`invoke_index_inside_unclosed_thinking`）
+- fault ``</thinking>`` 后 invoke 与 ``<entml:parameter>`` 分片时 holdback ``<ent`` 并入 fncall 缓冲，避免参数解析为 ``{}``
+- prompt 构建：移除 assistant 消息去重（重复 assistant 全部保留进历史）
+
+### Added
+
+- `test_entml_parser_comprehensive.py` / `test_entml_agent_output_formats.py` 全方位解析与边界回归
+
 ## [2.3.49] - 2026-07-28
 
 ### Fixed

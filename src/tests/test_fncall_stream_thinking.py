@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.protocols.entml_think.parse import (
@@ -110,17 +112,50 @@ def test_stream_thinking_invoke_inside_stays_thinking_until_close() -> None:
     assert "answer" in clean
 
 
-def test_fault_thinking_close_then_invoke() -> None:
+@pytest.mark.parametrize("chunk", [1, 5, 8, 17])
+def test_fault_thinking_close_then_invoke(chunk: int) -> None:
     """``</thinking>`` 后若出现 invoke，则在该处结束思考并解析工具。"""
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     text = f"<entml:thinking>\nplan\n</thinking>\n{INVOKE}"
-    for i in range(0, len(text), 5):
-        parser.feed(text[i : i + 5])
+    for i in range(0, len(text), chunk):
+        parser.feed(text[i : i + chunk])
     clean, calls = parser.finalize()
     assert "plan" in parser.partial_thinking
     assert len(calls) == 1
     assert calls[0]["function"]["name"] == "get_weather"
+    assert "Hangzhou" in calls[0]["function"]["arguments"]
     assert INVOKE not in clean
+
+
+@pytest.mark.parametrize("chunk", [8, 17])
+def test_fault_close_multiline_parameter_not_empty_args(chunk: int) -> None:
+    """``</thinking>`` 后 invoke/parameter 之间有换行时，分片不应丢 ``<ent`` 前缀。"""
+    read_invoke = (
+        '<entml:invoke name="Read">\n'
+        '<entml:parameter name="path">C:/tmp/x.py</entml:parameter>\n'
+        "</entml:invoke>"
+    )
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                },
+            },
+        },
+    ])
+    text = f"<entml:thinking>\nplan\n</thinking>\n{read_invoke}"
+    for i in range(0, len(text), chunk):
+        parser.feed(text[i : i + chunk])
+    _, calls = parser.finalize()
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "Read"
+    assert "C:/tmp/x.py" in calls[0]["function"]["arguments"]
+    assert calls[0]["function"]["arguments"] != "{}"
 
 
 def test_fault_thinking_close_without_invoke_is_plain_text() -> None:

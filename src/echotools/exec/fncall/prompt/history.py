@@ -319,22 +319,3 @@ def _normalize_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return inject_orphan_tool_results(step2)
 
 
-# ---------------------------------------------------------------------------
-# 对话历史格式化
-# ---------------------------------------------------------------------------
-
-
-def _make_assistant_dedup_key(
-    content: Optional[str],
-    tool_calls: List[Dict[str, Any]],
-) -> Tuple[str, Tuple[Tuple[str, str], ...]]:
-    """生成 assistant 消息的去重键。"""
-    safe_content = content or ""
-    tc_key: Tuple[Tuple[str, str], ...] = tuple(
-        (
-            (tc.get("function") or {}).get("name") or "",
-            (tc.get("function") or {}).get("arguments") or "",
-        )
-        for tc in tool_calls
-    )
-    return (safe_content, tc_key)

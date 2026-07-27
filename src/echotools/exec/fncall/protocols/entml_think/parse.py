@@ -103,6 +103,25 @@ def has_unclosed_entml_thinking(text: str) -> bool:
     return False
 
 
+def invoke_index_inside_unclosed_thinking(text: str, invoke_at: int) -> bool:
+    """``invoke_at`` 是否落在尚未正式 ``</entml:thinking>`` 闭合的块内。
+
+    已出现容错 ``</thinking>`` 且 invoke 在其后的段落，视为 thinking 外。
+    """
+    if invoke_at < 0:
+        return False
+    think_open = text.find(_THINKING_OPEN_PREFIX)
+    if think_open < 0 or invoke_at <= think_open:
+        return False
+    entml_close = text.find(_THINKING_CLOSE, think_open)
+    if entml_close >= 0:
+        return invoke_at < entml_close
+    fault_at = text.find(_FAULT_THINKING_CLOSE, think_open)
+    if fault_at >= 0:
+        return invoke_at < fault_at + len(_FAULT_THINKING_CLOSE)
+    return True
+
+
 def split_entml_thinking(text: str) -> Tuple[str, str]:
     """从文本中剥离 <entml:thinking> 块，返回 (正文, 思考链拼接)。"""
     if not text:

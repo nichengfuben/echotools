@@ -41,7 +41,6 @@ def _append_assistant_part(
     index: int,
     protocol: Optional[Any],
     call_id_to_name: Dict[str, str],
-    seen_assistant_keys: set,
     *,
     include_thinking_in_history: bool,
 ) -> int:
@@ -55,7 +54,7 @@ def _append_assistant_part(
             tool_msgs.append(messages[j])
             j += 1
         blocks = format_assistant_block_with_results(
-            m, tool_msgs, protocol, call_id_to_name, seen_assistant_keys,
+            m, tool_msgs, protocol, call_id_to_name,
             include_thinking_in_history=include_thinking_in_history,
         )
         for block in blocks:
@@ -63,7 +62,7 @@ def _append_assistant_part(
         return j
 
     blocks = format_assistant_block(
-        m, content_str, protocol, call_id_to_name, seen_assistant_keys,
+        m, content_str, protocol, call_id_to_name,
         include_thinking_in_history=include_thinking_in_history,
     )
     for block in blocks:
@@ -81,7 +80,6 @@ def _format_conversation_history(
         return ""
 
     call_id_to_name: Dict[str, str] = {}
-    seen_assistant_keys = set()
     parts: List[Tuple[str, bool]] = []
     clean_fn = protocol.clean_tags if protocol and hasattr(protocol, "clean_tags") else None
 
@@ -98,7 +96,6 @@ def _format_conversation_history(
         if role == "assistant":
             i = _append_assistant_part(
                 parts, messages, i, protocol, call_id_to_name,
-                seen_assistant_keys,
                 include_thinking_in_history=include_thinking_in_history,
             )
             continue
