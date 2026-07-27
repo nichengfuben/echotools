@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from echotools.exec.fncall.protocols.entml_patterns import (
+    BLOCK_RE,
     extract_attr_value,
     normalize_entml_name,
 )
@@ -24,6 +25,62 @@ _AMBIGUOUS_ENTML_PREFIXES = (
     "<entml:parameters",
 )
 _INVOKE_PREFIX = "<entml:invoke"
+
+
+def _is_placeholder_invoke_name(name: str) -> bool:
+    """提示词占位符（如 ``$FUNCTION_NAME``）不算真实工具调用。"""
+    n = (name or "").strip()
+    return not n or "$" in n
+
+
+def _invoke_name_from_block(block: str) -> Optional[str]:
+    prefix_len = len(_INVOKE_PREFIX)
+    pos = block.find(_INVOKE_PREFIX)
+    if pos < 0:
+        return None
+    gt = block.find(">", pos + prefix_len)
+    if gt < 0:
+        return None
+    attrs = block[pos + prefix_len : gt]
+    name = extract_attr_value(attrs, "name")
+    if not name:
+        return None
+    return normalize_entml_name(name)
+
+
+def find_actionable_invoke_block(buffer: str) -> Optional[Tuple[str, str, str]]:
+    """返回首个非占位符的完整 invoke 块：``(before, block, after)``。"""
+    if not buffer:
+        return None
+    for match in BLOCK_RE.finditer(buffer):
+        block = match.group(0)
+        name = _invoke_name_from_block(block)
+        if not name or _is_placeholder_invoke_name(name):
+            continue
+        return buffer[: match.start()], block, buffer[match.end() :]
+    return None
+
+
+def find_actionable_invoke_open(buffer: str) -> int:
+    """返回首个非占位符且已闭合 ``>`` 的 invoke 开标签下标；否则 -1。"""
+    if not buffer:
+        return -1
+    search_from = 0
+    prefix_len = len(_INVOKE_PREFIX)
+    while True:
+        pos = buffer.find(_INVOKE_PREFIX, search_from)
+        if pos < 0:
+            return -1
+        close = buffer.find(">", pos + prefix_len)
+        if close < 0:
+            return -1
+        attrs = buffer[pos + prefix_len : close]
+        name = extract_attr_value(attrs, "name")
+        if name:
+            name = normalize_entml_name(name)
+        if name and not _is_placeholder_invoke_name(name):
+            return pos
+        search_from = close + 1
 
 
 def find_complete_entml_invoke_open(buffer: str) -> int:
@@ -59,9 +116,12 @@ def find_ambiguous_entml_tool_prefix(buffer: str) -> int:
 
 
 def _hold_ambiguous_tool_markup(buffer: str) -> Tuple[str, str]:
-    """thinking 块内：尾部是工具 entml 标签真前缀时 hold，避免误当 thinking 吐出。"""
+    """thinking 块内：从最早工具 entml 前缀处 hold，避免 invoke 被当作 thinking 吐出。"""
     if not buffer:
         return "", ""
+    ambig = find_ambiguous_entml_tool_prefix(buffer)
+    if ambig >= 0:
+        return buffer[:ambig], buffer[ambig:]
     lt = buffer.rfind("<")
     if lt < 0:
         return buffer, ""
@@ -166,6 +226,13 @@ class EntmlThinkingStreamFilter:
         self._fault_watch = False
         self._fault_buffer = ""
 
+    def clear_invoke_handoff_state(self) -> None:
+        """invoke 已交给正文/工具解析后，结束 thinking / fault 观察状态。"""
+        self._in_block = False
+        self._fault_watch = False
+        self._fault_buffer = ""
+        self._thinking_started = False
+
     def in_open_thinking(self) -> bool:
         """思考块已开始且尚未收到 ``</entml:thinking>``（含开/闭标签分片 hold）。"""
         if self._in_block or self._fault_watch:
@@ -219,19 +286,64 @@ class EntmlThinkingStreamFilter:
             return True
         return False
 
+    def _try_emit_actionable_invoke_from_in_block(
+        self, out: List[Tuple[str, str]]
+    ) -> bool:
+        """thinking 块内出现真实 invoke 时，在该处结束 thinking 并交给正文解析。"""
+        split = find_actionable_invoke_block(self._pending)
+        if split is not None:
+            before, invoke_block, after = split
+            if before:
+                emitted = self._emit_thinking_piece(before)
+                if emitted:
+                    out.append(("thinking", emitted))
+            out.append(("content", invoke_block))
+            self._in_block = False
+            self._fault_watch = False
+            self._fault_buffer = ""
+            self._thinking_started = False
+            rest = after.lstrip()
+            if rest.startswith(_THINKING_CLOSE):
+                rest = rest[len(_THINKING_CLOSE) :].lstrip()
+            self._pending = rest
+            return True
+        return False
+
+    def _emit_piece_with_actionable_invokes(
+        self, piece: str, out: List[Tuple[str, str]]
+    ) -> str:
+        """从 thinking 正文中切出真实 invoke 块，返回剩余 thinking 文本。"""
+        while piece:
+            split = find_actionable_invoke_block(piece)
+            if split is None:
+                break
+            before, invoke_block, rest = split
+            if before:
+                emitted = self._emit_thinking_piece(before)
+                if emitted:
+                    out.append(("thinking", emitted))
+            out.append(("content", invoke_block))
+            piece = rest
+        return piece
+
     def _feed_in_block(self, out: List[Tuple[str, str]]) -> bool:
         """处理块内 pending；返回 False 表示应退出 feed 主循环。"""
         close_at = self._pending.find(_THINKING_CLOSE)
         if close_at >= 0:
             piece = self._pending[:close_at]
-            emitted = self._emit_thinking_piece(piece)
-            if emitted:
-                out.append(("thinking", emitted))
+            piece = self._emit_piece_with_actionable_invokes(piece, out)
+            if piece:
+                emitted = self._emit_thinking_piece(piece)
+                if emitted:
+                    out.append(("thinking", emitted))
             self._in_block = False
             self._fault_watch = False
             self._fault_buffer = ""
             self._thinking_started = False
             self._pending = self._pending[close_at + len(_THINKING_CLOSE) :]
+            return True
+
+        if self._try_emit_actionable_invoke_from_in_block(out):
             return True
 
         fault_at = self._pending.find(_FAULT_THINKING_CLOSE)
@@ -337,10 +449,11 @@ class EntmlThinkingStreamFilter:
                 self._in_block = False
                 self._thinking_started = False
         if self._in_block:
-            emitted = self._emit_thinking_piece(self._pending)
-            if emitted:
-                out.append(("thinking", emitted))
-            self._pending = ""
+            if not self._try_emit_actionable_invoke_from_in_block(out):
+                emitted = self._emit_thinking_piece(self._pending)
+                if emitted:
+                    out.append(("thinking", emitted))
+                self._pending = ""
             self._in_block = False
             self._thinking_started = False
         if self._pending:

@@ -139,14 +139,34 @@ class FncallStreamParser:
         return buffer, ""
 
     def _append_content_text(self, text: str) -> None:
-        if text:
-            self._text_parts.append(text)
+        if not text:
+            return
+        from echotools.exec.fncall.protocols.entml_think.parse import _THINKING_CLOSE
+
+        remainder = text
+        while True:
+            stripped = remainder.strip()
+            if not stripped:
+                return
+            if stripped == _THINKING_CLOSE:
+                return
+            if _THINKING_CLOSE in remainder:
+                before, _, after = remainder.partition(_THINKING_CLOSE)
+                if before.strip():
+                    self._text_parts.append(before)
+                remainder = after
+                continue
+            self._text_parts.append(remainder)
+            return
 
     def _normalize_stream_chunk(self, text: str) -> str:
         fn = getattr(self._protocol, "normalize_stream_buffer", None)
         if callable(fn):
             return fn(text)
         return text
+
+    def _invoke_close_tag(self) -> str:
+        return self._end_tags[0] if self._end_tags else "</entml:invoke>"
 
     def _drain_thinking_holdback_to_fncall(self) -> None:
         """invoke 已开始后，thinking 过滤器里对工具标签的 holdback 应并入 fncall 缓冲。"""
@@ -162,14 +182,47 @@ class FncallStreamParser:
         self._drain_thinking_holdback_to_fncall()
         self._detected = True
         self._state = self.IN_FUNCTION_CALLS
-        if self._is_call_closed():
-            self._state = self.DONE
+        self._json_stream_encoder = None
+        if self._thinking_filter is not None:
+            self._thinking_filter.clear_invoke_handoff_state()
 
     def _feed_content_waiting(self, text: str) -> None:
         """thinking 已闭合后，对可见正文做 invoke 检测（不再经过 thinking 过滤器）。"""
         if not text:
             return
         text = self._normalize_stream_chunk(text)
+        if self._state == self.IN_FUNCTION_CALLS:
+            close_tag = self._invoke_close_tag()
+            if not self._is_call_closed():
+                if close_tag in text:
+                    idx = text.find(close_tag)
+                    self._fncall_buf += text[: idx + len(close_tag)]
+                    tail = text[idx + len(close_tag) :]
+                    if tail:
+                        self._feed_content_waiting(tail)
+                    return
+                self._fncall_buf += text
+                return
+            trigger_tags = self._protocol.get_trigger_tags()
+            found, pos = self._protocol.detect_start(text)
+            if found:
+                if pos > 0:
+                    self._append_content_text(text[:pos])
+                self._fncall_buf += text[pos:]
+                return
+            hold_from_fn = getattr(self._protocol, "find_fncall_hold_from", None)
+            if hold_from_fn is not None:
+                hold_from = hold_from_fn(text)
+                if hold_from is not None:
+                    if hold_from > 0:
+                        self._append_content_text(text[:hold_from])
+                    self._waiting_tail = text[hold_from:]
+                    return
+            safe, remain = self._split_safe_text(text, trigger_tags)
+            if safe:
+                self._append_content_text(safe)
+            self._waiting_tail = remain
+            return
         trigger_tags = self._protocol.get_trigger_tags()
         found, pos = self._protocol.detect_start(text)
         if not found:
@@ -204,9 +257,23 @@ class FncallStreamParser:
             self._drain_thinking_holdback_to_fncall()
 
     def _feed_waiting(self, chunk: str) -> None:
-        """在 WAITING_FOR_TAG 状态下处理新块。"""
+        """在 WAITING_FOR_TAG / IN_FUNCTION_CALLS 状态下处理新块。"""
         combined = self._normalize_stream_chunk(self._waiting_tail + chunk)
         self._waiting_tail = ""
+
+        if self._state == self.IN_FUNCTION_CALLS:
+            if self._thinking_filter is not None and self._thinking_filter.in_open_thinking():
+                self._feed_waiting_thinking_plain(combined)
+                return
+            if self._waiting_tail:
+                self._fncall_buf += self._normalize_stream_chunk(self._waiting_tail)
+                self._waiting_tail = ""
+            self._drain_thinking_holdback_to_fncall()
+            if not self._is_call_closed():
+                self._fncall_buf += combined
+                return
+            self._feed_content_waiting(combined)
+            return
 
         # 已进入 thinking 块时，块内不做 invoke 检测。
         if self._thinking_filter is not None and self._thinking_filter.in_open_thinking():
@@ -279,29 +346,20 @@ class FncallStreamParser:
 
         self._raw_buf += chunk
 
-        if self._state == self.WAITING_FOR_TAG:
+        if self._state != self.DONE:
             self._feed_waiting(chunk)
-        else:
-            if self._waiting_tail:
-                self._fncall_buf += self._normalize_stream_chunk(self._waiting_tail)
-                self._waiting_tail = ""
-            self._drain_thinking_holdback_to_fncall()
-            self._fncall_buf += self._normalize_stream_chunk(chunk)
-            if self._is_call_closed():
-                self._state = self.DONE
 
         self._pending_stream_delta = self._poll_streaming_tool_input_delta()
         ready = self.get_ready_tool_calls()
-        if ready:
-            if self._json_stream_encoder is not None:
-                self._json_stream_encoder.reset()
+        if ready and self._json_stream_encoder is not None:
+            self._json_stream_encoder.reset()
         return ready
 
     def _poll_streaming_tool_input_delta(self) -> Optional[Tuple[str, str]]:
         """invoke 开标签完整匹配后，返回 (tool_name, partial_json_delta)。"""
         if not self._detected or getattr(self._protocol, "id", None) != "entml":
             return None
-        if self._state not in (self.IN_FUNCTION_CALLS, self.DONE):
+        if self._state not in (self.IN_FUNCTION_CALLS,):
             return None
         from echotools.exec.fncall.protocols.entml_stream_json import (
             EntmlInvokeJsonStreamEncoder,
@@ -325,6 +383,43 @@ class FncallStreamParser:
         delta = self._pending_stream_delta
         self._pending_stream_delta = None
         return delta
+
+    @property
+    def streaming_invoke_closed(self) -> bool:
+        """流式 fncall 缓冲中是否已出现 ``</entml:invoke>``。"""
+        if getattr(self._protocol, "id", None) != "entml":
+            return False
+        from echotools.exec.fncall.protocols.entml_stream_json import _INVOKE_CLOSE
+
+        return _INVOKE_CLOSE in self._fncall_buf
+
+    def complete_stream_delta_if_needed(self) -> Optional[Tuple[str, str]]:
+        """invoke 已开标签但未闭合时，补齐 partial_json 尾部的合法 JSON 后缀。"""
+        if not self._detected or getattr(self._protocol, "id", None) != "entml":
+            return None
+        if self.streaming_invoke_closed:
+            return None
+        from echotools.exec.fncall.protocols.entml_stream_json import (
+            _INVOKE_CLOSE,
+            EntmlInvokeJsonStreamEncoder,
+            build_streaming_json_snapshot,
+            split_invoke_open,
+        )
+
+        parsed = split_invoke_open(self._fncall_buf)
+        if not parsed:
+            return None
+        name, body_start = parsed
+        body = self._fncall_buf[body_start:]
+        snapshot = build_streaming_json_snapshot(body + _INVOKE_CLOSE)
+        if not snapshot:
+            return None
+        if self._json_stream_encoder is None:
+            self._json_stream_encoder = EntmlInvokeJsonStreamEncoder()
+        delta = self._json_stream_encoder.poll(body + _INVOKE_CLOSE)
+        if not delta:
+            return None
+        return (name, delta)
 
     def _assembly_for_tool_parse(self) -> str:
         """可供工具解析的已缓冲文本（不含 thinking 过滤器内部 pending）。"""

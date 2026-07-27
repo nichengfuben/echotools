@@ -55,16 +55,16 @@ def test_split_entml_thinking_ignores_unclosed_block() -> None:
     assert INVOKE in content
 
 
-def test_invoke_inside_unclosed_thinking_not_parsed() -> None:
-    """未闭合 thinking 内的 entml 标签仅作思考文本，不解析为 tool call。"""
+def test_invoke_inside_unclosed_thinking_is_parsed_when_complete() -> None:
+    """thinking 内完整的真实 invoke 应切出并解析（占位符示例除外）。"""
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     stream = f"<entml:thinking>\nplan {INVOKE}\n"
     for i in range(0, len(stream), 7):
         parser.feed(stream[i : i + 7])
-    assert not parser.has_calls
-    assert INVOKE in parser.partial_thinking or "entml:invoke" in parser.partial_thinking
+    assert parser.has_calls
     clean, calls = parser.finalize()
-    assert len(calls) == 0
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "get_weather"
 
 
 def test_invoke_after_thinking_close_is_parsed() -> None:
@@ -97,18 +97,18 @@ def test_no_thinking_invoke_still_works() -> None:
     assert "Sure" in clean
 
 
-def test_stream_thinking_invoke_inside_stays_thinking_until_close() -> None:
+def test_stream_thinking_invoke_inside_parsed_when_complete() -> None:
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     parser.feed("<entml:thinking>\n")
     parser.feed("line one\n")
     assert "line one" in parser.partial_thinking
     assert not parser.has_calls
     parser.feed(f"mention {INVOKE}\n")
-    assert not parser.has_calls
-    assert "entml:invoke" in parser.partial_thinking
+    assert parser.has_calls
     parser.feed("</entml:thinking>\nanswer")
     clean, calls = parser.finalize()
-    assert len(calls) == 0
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "get_weather"
     assert "answer" in clean
 
 

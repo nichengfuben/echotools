@@ -278,16 +278,18 @@ def _scenarios() -> List[ParserScenario]:
             id="invoke_inside_unclosed_thinking",
             text=f"<entml:thinking>\nplan\n{READ_INVOKE}\n",
             tools=[READ_TOOL],
-            expect_call_count=0,
-            expect_thinking_contains=("plan", "cursor_agent_simple.py"),
+            expect_names=("Read",),
+            expect_args=({"path": READ_PATH},),
+            expect_thinking_contains=("plan",),
             stream_only=True,
         ),
         ParserScenario(
             id="invoke_and_example_inside_closed_thinking",
             text=example_in_thinking,
             tools=[READ_TOOL],
-            expect_call_count=0,
-            expect_thinking_contains=("格式示例", "cursor_agent_simple.py"),
+            expect_names=("Read",),
+            expect_args=({"path": READ_PATH},),
+            expect_thinking_contains=("格式示例", "$FUNCTION_NAME"),
             stream_only=True,
         ),
         ParserScenario(
@@ -559,29 +561,27 @@ def test_invoke_index_inside_unclosed_thinking() -> None:
     assert not invoke_index_inside_unclosed_thinking(closed, pos3)
 
 
-def test_large_chunk_invoke_inside_unclosed_thinking_zero_calls() -> None:
-    """回归：首包很大且含 thinking 内 invoke 时不得进入 IN_FUNCTION_CALLS。"""
+def test_large_chunk_invoke_inside_unclosed_thinking_parsed() -> None:
+    """回归：首包很大且含 thinking 内完整 invoke 时应解析工具。"""
     text = f"<entml:thinking>\nplan\n{READ_INVOKE}\n"
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=[READ_TOOL])
     parser.feed(text[:64])
-    assert parser.state == FncallStreamParser.WAITING_FOR_TAG
     assert parser._thinking_filter is not None
-    assert parser._thinking_filter.in_open_thinking()
     parser.feed(text[64:])
     _, calls = parser.finalize()
-    assert calls == []
-    assert "cursor_agent_simple.py" in parser.partial_thinking
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "Read"
 
 
-def test_batch_thinking_invoke_known_gap() -> None:
-    """文档化：批量 parse 会解析 thinking 块内的 invoke（流式不会）。"""
+def test_batch_thinking_invoke_stream_parses_complete_inside() -> None:
+    """流式与批量均解析 thinking 内已闭合的真实 invoke。"""
     proto = get_protocol("entml")
     inside = f"<entml:thinking>\nplan\n{READ_INVOKE}\n</entml:thinking>\n"
     _, batch_calls = proto.parse(inside, [READ_TOOL])
     assert len(batch_calls) >= 1
     stream_clean, stream_calls, _ = _stream_parse(inside, [READ_TOOL], 8)
-    assert len(stream_calls) == 0
-    assert "entml:invoke" not in stream_clean
+    assert len(stream_calls) == 1
+    assert stream_calls[0]["function"]["name"] == "Read"
 
 
 def test_char_by_char_all_scenarios_with_tools() -> None:

@@ -65,7 +65,7 @@ _LEGACY_ON_DEFAULT_MAX = _DEFAULT_MAX_BY_LEVEL["medium"]
 _THINKING_BEHAVIOR_ON_WITH_TOOLS = """\
 Your default is to think before it answers to give the person the best possible answer. Even for questions that might seem obvious, if there are any signs of lurking complexity, You takes the time to open up an extended thinking block and dig in to make sure it's got the details figured out and isn't just pattern-matching to the familiar. At the end of its thinking, You restates which language it should respond in.
 
-You MUST output a <entml:thinking> block before any other content in every reply. Only after that block, output your visible reply and/or <entml:invoke> tool call(s). Never skip the thinking block."""
+You MUST output a <entml:thinking> block before any other content in every reply. Only after that block closes with </entml:thinking>, output your visible reply and/or <entml:invoke> tool call(s). Never place <entml:invoke> inside <entml:thinking>. Never skip the thinking block."""
 
 _THINKING_BEHAVIOR_ON_NO_TOOLS = """\
 Your default is to think before it answers to give the person the best possible answer. Even for questions that might seem obvious, if there are any signs of lurking complexity, You takes the time to open up an extended thinking block and dig in to make sure it's got the details figured out and isn't just pattern-matching to the familiar. At the end of its thinking, You restates which language it should respond in.

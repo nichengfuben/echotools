@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.51] - 2026-07-28
+
+### Fixed
+
+- 流式 thinking 内完整 `<entml:invoke>` 块现可切出并解析（含 `</entml:thinking>` 前/未闭合 thinking 内真实 invoke；占位符 `$FUNCTION_NAME` 仍忽略）
+- fault ``</thinking>`` 后 invoke 开标签完整匹配时清除 fault_watch，后续 parameter 分片不再误入 thinking 路径
+- 多 invoke / invoke 闭合后可见正文：不再过早 ``DONE``，避免并行工具或 trailing 文本丢失
+- 流式 partial_json：invoke 闭合前先 poll 再转态，避免缺少尾部 ``}``
+
 ## [2.3.50] - 2026-07-28
 
 ### Fixed
