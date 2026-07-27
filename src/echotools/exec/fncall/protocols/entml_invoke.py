@@ -4,7 +4,6 @@ import json
 from typing import Any, Dict, List, Optional
 
 from .entml_patterns import (
-    BLOCK_RE,
     INVOKE_RE,
     PARAM_RE,
     PARAMETERS_RE,

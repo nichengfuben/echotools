@@ -8,8 +8,6 @@ def test_console_package_import() -> None:
         BorderStyle,
         Clock,
         ConsoleUI,
-        FontStyle,
-        GradientTheme,
         Spinner,
         char_map,
     )

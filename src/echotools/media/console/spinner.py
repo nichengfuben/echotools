@@ -6,13 +6,13 @@ Spinner 动画引擎 - 绿→蓝单向渐变版
 - stop() 后恢复光标并清除 spinner 行
 """
 
-import sys
-import time
+import math
 import os
 import platform
-import math
+import sys
 import threading
-from typing import List, Tuple, Dict, Callable, Optional
+import time
+from typing import Callable, Dict, List, Optional, Tuple
 
 try:
     from wcwidth import wcswidth as _wcswidth

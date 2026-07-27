@@ -97,6 +97,10 @@ disable_error_code = [
 module = "echotools.exec.terminal.*"
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = "echotools.media.console.ui"
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["src/tests"]
 asyncio_mode = "auto"

@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from echotools.base.logger.manager import get_logger
+from echotools.exec.fncall.protocols.entml_thinking_history import (
+    extract_reasoning_text,
+    format_entml_thinking_history_block,
+)
 from echotools.exec.fncall.shared.normalization import normalize_content
 
 from .history import (
@@ -13,11 +17,6 @@ from .history import (
     _render_tool_call,
     _render_tool_result,
     _try_convert_user_to_tool,
-)
-
-from echotools.exec.fncall.protocols.entml_thinking_history import (
-    extract_reasoning_text,
-    format_entml_thinking_history_block,
 )
 
 logger = get_logger(__name__)
@@ -86,7 +85,8 @@ def _format_assistant_text_block(
     )
     if not blocks:
         return None
-    return f"<assistant>\n{'\n\n'.join(blocks)}\n</assistant>"
+    body = "\n\n".join(blocks)
+    return f"<assistant>\n{body}\n</assistant>"
 
 
 def _register_tool_call_names(

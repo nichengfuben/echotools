@@ -22,12 +22,11 @@ import math
 import os
 import re
 import sys
-from pathlib import Path
 import threading
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from pathlib import Path
 from typing import (
     Any,
     AsyncIterator,
@@ -51,7 +50,7 @@ from typing import (
 
 from rich.console import Console
 from rich.text import Text
-from wcwidth import wcwidth, wcswidth
+from wcwidth import wcswidth, wcwidth
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 类型定义与平台常量
@@ -133,39 +132,39 @@ class _WindowsBackend:
 
     def _define_structures(self) -> None:
         """定义 Windows 控制台输入记录结构体"""
-        ctypes = self._ctypes
+        ct = self._ctypes
 
-        class COORD(ctypes.Structure):
-            _fields_ = [("X", ctypes.c_short), ("Y", ctypes.c_short)]
+        class COORD(ct.Structure):
+            _fields_ = [("X", ct.c_short), ("Y", ct.c_short)]
 
-        class KEY_EVENT_RECORD(ctypes.Structure):
+        class KEY_EVENT_RECORD(ct.Structure):
             _fields_ = [
-                ("bKeyDown", ctypes.wintypes.BOOL),
-                ("wRepeatCount", ctypes.wintypes.WORD),
-                ("wVirtualKeyCode", ctypes.wintypes.WORD),
-                ("wVirtualScanCode", ctypes.wintypes.WORD),
-                ("uChar", ctypes.wintypes.WCHAR),
-                ("dwControlKeyState", ctypes.wintypes.DWORD),
+                ("bKeyDown", ct.wintypes.BOOL),
+                ("wRepeatCount", ct.wintypes.WORD),
+                ("wVirtualKeyCode", ct.wintypes.WORD),
+                ("wVirtualScanCode", ct.wintypes.WORD),
+                ("uChar", ct.wintypes.WCHAR),
+                ("dwControlKeyState", ct.wintypes.DWORD),
             ]
 
-        class MOUSE_EVENT_RECORD(ctypes.Structure):
+        class MOUSE_EVENT_RECORD(ct.Structure):
             _fields_ = [
                 ("dwMousePosition", COORD),
-                ("dwButtonState", ctypes.wintypes.DWORD),
-                ("dwControlKeyState", ctypes.wintypes.DWORD),
-                ("dwEventFlags", ctypes.wintypes.DWORD),
+                ("dwButtonState", ct.wintypes.DWORD),
+                ("dwControlKeyState", ct.wintypes.DWORD),
+                ("dwEventFlags", ct.wintypes.DWORD),
             ]
 
-        class WINDOW_BUFFER_SIZE_RECORD(ctypes.Structure):
+        class WINDOW_BUFFER_SIZE_RECORD(ct.Structure):
             _fields_ = [("dwSize", COORD)]
 
-        class MENU_EVENT_RECORD(ctypes.Structure):
-            _fields_ = [("dwCommandId", ctypes.wintypes.UINT)]
+        class MENU_EVENT_RECORD(ct.Structure):
+            _fields_ = [("dwCommandId", ct.wintypes.UINT)]
 
-        class FOCUS_EVENT_RECORD(ctypes.Structure):
-            _fields_ = [("bSetFocus", ctypes.wintypes.BOOL)]
+        class FOCUS_EVENT_RECORD(ct.Structure):
+            _fields_ = [("bSetFocus", ct.wintypes.BOOL)]
 
-        class INPUT_RECORD_EVENT(ctypes.Union):
+        class INPUT_RECORD_EVENT(ct.Union):
             _fields_ = [
                 ("KeyEvent", KEY_EVENT_RECORD),
                 ("MouseEvent", MOUSE_EVENT_RECORD),
@@ -174,9 +173,9 @@ class _WindowsBackend:
                 ("FocusEvent", FOCUS_EVENT_RECORD),
             ]
 
-        class INPUT_RECORD(ctypes.Structure):
+        class INPUT_RECORD(ct.Structure):
             _fields_ = [
-                ("EventType", ctypes.wintypes.WORD),
+                ("EventType", ct.wintypes.WORD),
                 ("Event", INPUT_RECORD_EVENT),
             ]
 
@@ -304,8 +303,8 @@ class _UnixBackend:
                         vk = arrow_map.get(ch3, "unknown")
                         # 消费 Delete 键的尾部 '~'
                         if ch3 == "3":
-                            extra, _, _ = select.select([fd], [], [], 0.02)
-                            if extra:
+                            pending_del, _, _ = select.select([fd], [], [], 0.02)
+                            if pending_del:
                                 os.read(fd, 1)
                         results.append({
                             "type": "key", "vk": vk,
@@ -389,10 +388,10 @@ class _UnixBackend:
                     # 尝试读取更多字节以组成完整 UTF-8 字符
                     more, _, _ = select.select([fd], [], [], 0.02)
                     if more:
-                        extra = os.read(fd, 3).decode(
+                        utf_tail = os.read(fd, 3).decode(
                             "utf-8", errors="replace",
                         )
-                        full_char += extra
+                        full_char += utf_tail
                 results.append({
                     "type": "key", "vk": "char",
                     "char": full_char, "ctrl": False,

@@ -9,10 +9,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from echotools.exec.protocol.base import ToolProtocol
 
+
 # 懒导入：仅 entml 协议需要
 def _make_thinking_filter(protocol: ToolProtocol):
     if getattr(protocol, "id", None) == "entml":
-        from echotools.exec.fncall.protocols.entml_thinking_parse import EntmlThinkingStreamFilter
+        from echotools.exec.fncall.protocols.entml_thinking_parse import (
+            EntmlThinkingStreamFilter,
+        )
         return EntmlThinkingStreamFilter()
     return None
 
@@ -213,7 +216,9 @@ class FncallStreamParser:
 
         # 兜底：剥离残留 <entml:thinking>（holdback 边界/分片异常时）
         if self._thinking_filter is not None and clean_text:
-            from echotools.exec.fncall.protocols.entml_thinking_parse import split_entml_thinking
+            from echotools.exec.fncall.protocols.entml_thinking_parse import (
+                split_entml_thinking,
+            )
             clean_text, more_thinking = split_entml_thinking(clean_text)
             if more_thinking:
                 self._thinking_parts.append(more_thinking)

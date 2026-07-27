@@ -16,9 +16,9 @@ from echotools.media.console.ui import (
     FontStyle,
     GradientTheme,
     TextUtils,
-    create_ui,
     _get_backend,
     _normalize_key_event,
+    create_ui,
 )
 
 __all__ = [

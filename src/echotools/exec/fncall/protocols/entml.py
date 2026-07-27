@@ -15,7 +15,6 @@ from echotools.exec.fncall.prompt.templates import (
     _HISTORY_TOOL_INVOKE_REMINDER_EN,
 )
 from echotools.exec.fncall.protocols.entml_invoke import (
-    format_entml_tool_calls,
     parse_entml_tool_calls,
 )
 from echotools.exec.fncall.protocols.entml_patterns import BLOCK_RE

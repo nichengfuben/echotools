@@ -28,7 +28,10 @@ from echotools.exec.fncall.protocols.entml_thinking_history import (
     parse_include_thinking_in_history,
 )
 from echotools.exec.fncall.shared.loop_detect import detect_tool_loop
-from echotools.exec.fncall.shared.normalization import format_tool_descs, normalize_content
+from echotools.exec.fncall.shared.normalization import (
+    format_tool_descs,
+    normalize_content,
+)
 from echotools.exec.protocol.base import ToolProtocol
 
 __all__ = ["inject_fncall"]
