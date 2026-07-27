@@ -72,7 +72,11 @@ def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool]]:
 
 
 def build_streaming_json_snapshot(body: str) -> str:
-    """构造当前应已发出的 partial_json 累积串（可未完成）。"""
+    """构造当前应已发出的 partial_json 累积串（可未完成）。
+
+    仅在 ``</entml:invoke>`` 出现后才闭合最外层 ``}``，避免多参数时
+    中间态变成完整 JSON 对象，导致后续 delta 拼接出现 Extra data。
+    """
     invoke_closed = _INVOKE_CLOSE in body
     inner = body[: body.index(_INVOKE_CLOSE)] if invoke_closed else body
     entries = _parse_parameter_entries(inner)
@@ -92,9 +96,7 @@ def build_streaming_json_snapshot(body: str) -> str:
         else:
             return "".join(parts)
 
-    if entries and all(entry[2] for entry in entries):
-        parts.append("}")
-    elif invoke_closed:
+    if invoke_closed:
         parts.append("}")
     return "".join(parts)
 

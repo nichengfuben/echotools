@@ -30,6 +30,7 @@ def test_json_stream_encoder_monotonic() -> None:
         "hel",
         "lo",
         "</entml:parameter>",
+        "</entml:invoke>",
     ]
     merged = ""
     body = ""

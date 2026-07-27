@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.48] - 2026-07-28
+
+### Fixed
+
+- entml 流式 `input_json_delta`：多参数 invoke 时不再在中间参数完成后提前闭合 `}`，修复 delta 拼接 Extra data
+
 ## [2.3.47] - 2026-07-28
 
 ### Fixed
