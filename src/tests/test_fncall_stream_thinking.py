@@ -170,6 +170,17 @@ def test_fault_thinking_close_without_invoke_is_plain_text() -> None:
     assert "answer" in clean
 
 
+def test_orphan_thinking_close_without_open_reclassified_from_visible() -> None:
+    """漏写 ``<entml:thinking>`` 仅有闭标签时，闭标签前正文应进 thinking 而非 visible。"""
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    text = "plan step one\nplan step two\n</entml:thinking>\nvisible reply\n"
+    for i in range(0, len(text), 9):
+        parser.feed(text[i : i + 9])
+    assert "plan step one" in parser.partial_thinking
+    assert "visible reply" in parser.partial_text
+    assert "</entml:thinking>" not in parser.partial_text
+
+
 def test_prose_invoke_mention_preserved_in_visible_text() -> None:
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     text = "当我使用`<entml:invoke>`格式时，参数要简单。\n"

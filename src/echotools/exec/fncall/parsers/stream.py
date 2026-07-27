@@ -349,6 +349,26 @@ class FncallStreamParser:
         body = self._fncall_buf[body_start:]
         self._json_stream_encoder._emitted = build_streaming_json_snapshot(body)
 
+    def _reclassify_orphan_thinking_close_in_text(self) -> None:
+        """将误进 visible 的「无开标签 + 闭标签」思考正文移回 thinking。"""
+        if self._thinking_filter is not None and self._thinking_filter.in_open_thinking():
+            return
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            _THINKING_CLOSE,
+            _THINKING_OPEN_PREFIX,
+        )
+
+        visible = "".join(self._text_parts)
+        if not visible or _THINKING_OPEN_PREFIX in visible:
+            return
+        close_at = visible.find(_THINKING_CLOSE)
+        if close_at < 0:
+            return
+        thinking_body = visible[:close_at]
+        after = visible[close_at + len(_THINKING_CLOSE) :].lstrip("\n")
+        self._thinking_parts.append(thinking_body)
+        self._text_parts = [after] if after else []
+
     def feed(self, chunk: str) -> List[Dict[str, Any]]:
         """喂入新的流式文本块。
 
@@ -370,6 +390,7 @@ class FncallStreamParser:
         ready = self.get_ready_tool_calls()
         if ready and self._json_stream_encoder is not None:
             self._sync_json_stream_encoder_emitted()
+        self._reclassify_orphan_thinking_close_in_text()
         return ready
 
     def _poll_streaming_tool_input_delta(self) -> Optional[Tuple[str, str]]:
