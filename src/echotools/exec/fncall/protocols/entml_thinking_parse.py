@@ -12,6 +12,31 @@ _THINKING_OPEN_PREFIX = "<entml:thinking"
 _THINKING_CLOSE = "</entml:thinking>"
 
 
+def has_unclosed_entml_thinking(text: str) -> bool:
+    """buffer 中是否存在尚未闭合的 <entml:thinking> 块（含开标签未收齐）。"""
+    if not text:
+        return False
+    i = 0
+    while i < len(text):
+        open_at = text.find(_THINKING_OPEN_PREFIX, i)
+        if open_at < 0:
+            break
+        gt = text.find(">", open_at)
+        if gt < 0:
+            return True
+        close_at = text.find(_THINKING_CLOSE, gt + 1)
+        if close_at < 0:
+            return True
+        i = close_at + len(_THINKING_CLOSE)
+    max_keep = len(_THINKING_OPEN_PREFIX) - 1
+    check_len = min(len(text), max_keep)
+    for length in range(check_len, 0, -1):
+        suffix = text[-length:]
+        if _THINKING_OPEN_PREFIX.startswith(suffix) and suffix != _THINKING_OPEN_PREFIX:
+            return True
+    return False
+
+
 def split_entml_thinking(text: str) -> Tuple[str, str]:
     """从文本中剥离 <entml:thinking> 块，返回 (正文, 思考链拼接)。"""
     if not text:
@@ -52,6 +77,20 @@ class EntmlThinkingStreamFilter:
         self._in_block = False
         # 当前 thinking 块是否已输出过任何内容（用于首片去前导空白）
         self._thinking_started = False
+
+    def in_open_thinking(self) -> bool:
+        """思考块已开始且尚未收到 </entml:thinking>（含开/闭标签分片 hold）。"""
+        if self._in_block:
+            return True
+        open_at = self._pending.find(_THINKING_OPEN_PREFIX)
+        if open_at >= 0:
+            gt = self._pending.find(">", open_at)
+            if gt < 0:
+                return True
+        _, hold = _hold_prefix(self._pending, _THINKING_OPEN_PREFIX)
+        if hold:
+            return True
+        return False
 
     def feed(self, chunk: str) -> List[Tuple[str, str]]:
         """返回 [(kind, text), ...]，kind 为 content 或 thinking。"""

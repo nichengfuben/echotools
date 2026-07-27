@@ -1,5 +1,6 @@
 from echotools.exec.fncall.protocols.entml_thinking_parse import (
     EntmlThinkingStreamFilter,
+    has_unclosed_entml_thinking,
     split_entml_thinking,
 )
 
@@ -14,6 +15,11 @@ def test_split_entml_thinking() -> None:
     assert "prefix" in content
     assert "answer tail" in content
     assert "<entml:thinking>" not in content
+
+
+def test_has_unclosed_entml_thinking_streaming_prefix() -> None:
+    assert has_unclosed_entml_thinking("<entml:think")
+    assert not has_unclosed_entml_thinking("<entml:thinking>done</entml:thinking>")
 
 
 def test_entml_thinking_stream_filter() -> None:

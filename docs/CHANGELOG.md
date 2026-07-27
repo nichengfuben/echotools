@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.40] - 2026-07-27
+
+### Fixed
+
+- 流式解析：未闭合 `<entml:thinking>` 期间块内按纯文本处理，不检测/解析 `<entml:invoke>` 等标签；闭合后才进入正常 fncall 检测
+- `has_unclosed_entml_thinking` / `EntmlThinkingStreamFilter.in_open_thinking()` 供 stream parser 与测试使用
+
 ## [2.3.39] - 2026-07-27
 
 ### Fixed

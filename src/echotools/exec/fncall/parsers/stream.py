@@ -136,12 +136,59 @@ class FncallStreamParser:
 
         return buffer, ""
 
+    def _append_content_text(self, text: str) -> None:
+        if text:
+            self._text_parts.append(text)
+
+    def _feed_content_waiting(self, text: str) -> None:
+        """thinking 已闭合后，对可见正文做 invoke 检测（不再经过 thinking 过滤器）。"""
+        if not text:
+            return
+        trigger_tags = self._protocol.get_trigger_tags()
+        found, pos = self._protocol.detect_start(text)
+        if not found:
+            safe, remain = self._split_safe_text(text, trigger_tags)
+            if safe:
+                self._append_content_text(safe)
+            self._waiting_tail = remain
+            return
+
+        if pos > 0:
+            self._append_content_text(text[:pos])
+
+        self._fncall_buf = text[pos:]
+        self._detected = True
+        self._state = self.IN_FUNCTION_CALLS
+        if self._is_call_closed():
+            self._state = self.DONE
+
+    def _feed_waiting_thinking_plain(self, combined: str) -> None:
+        """未闭合 thinking 阶段：块内一律按纯文本进 thinking，不检测 invoke。"""
+        assert self._thinking_filter is not None
+        for kind, part in self._thinking_filter.feed(combined):
+            if kind == "thinking":
+                self._thinking_parts.append(part)
+            elif part:
+                self._feed_content_waiting(part)
+
     def _feed_waiting(self, chunk: str) -> None:
         """在 WAITING_FOR_TAG 状态下处理新块。"""
         combined = self._waiting_tail + chunk
-        found, pos = self._protocol.detect_start(combined)
+        self._waiting_tail = ""
+
+        if self._thinking_filter is not None:
+            from echotools.exec.fncall.protocols.entml_thinking_parse import (
+                has_unclosed_entml_thinking,
+            )
+            if (
+                self._thinking_filter.in_open_thinking()
+                or has_unclosed_entml_thinking(combined)
+            ):
+                self._feed_waiting_thinking_plain(combined)
+                return
 
         trigger_tags = self._protocol.get_trigger_tags()
+        found, pos = self._protocol.detect_start(combined)
 
         if not found:
             safe, remain = self._split_safe_text(combined, trigger_tags)
@@ -154,7 +201,6 @@ class FncallStreamParser:
             self._emit_text(combined[:pos])
 
         self._fncall_buf = combined[pos:]
-        self._waiting_tail = ""
         self._detected = True
         self._state = self.IN_FUNCTION_CALLS
 
