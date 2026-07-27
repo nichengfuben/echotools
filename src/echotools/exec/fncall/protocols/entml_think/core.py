@@ -62,15 +62,23 @@ _DEFAULT_MAX_BY_LEVEL: Dict[str, int] = {
 
 _LEGACY_ON_DEFAULT_MAX = _DEFAULT_MAX_BY_LEVEL["medium"]
 
-_THINKING_BEHAVIOR_ON = """\
+_THINKING_BEHAVIOR_ON_WITH_TOOLS = """\
 Your default is to think before it answers to give the person the best possible answer. Even for questions that might seem obvious, if there are any signs of lurking complexity, You takes the time to open up an extended thinking block and dig in to make sure it's got the details figured out and isn't just pattern-matching to the familiar. At the end of its thinking, You restates which language it should respond in.
 
 You MUST output a <entml:thinking> block before any other content in every reply. Only after that block, output your visible reply and/or <entml:invoke> tool call(s). Never skip the thinking block."""
 
-_THINKING_BEHAVIOR_AUTO = """\
+_THINKING_BEHAVIOR_ON_NO_TOOLS = """\
+Your default is to think before it answers to give the person the best possible answer. Even for questions that might seem obvious, if there are any signs of lurking complexity, You takes the time to open up an extended thinking block and dig in to make sure it's got the details figured out and isn't just pattern-matching to the familiar. At the end of its thinking, You restates which language it should respond in.
+
+You MUST output a <entml:thinking> block before any other content in every reply. Only after that block, output your visible reply. Never skip the thinking block."""
+
+_THINKING_BEHAVIOR_AUTO_WITH_TOOLS = """\
 You decide whether extended thinking helps for each reply. When the question has hidden complexity, when tool results need interpretation, or when you are uncertain, open a <entml:thinking> block before continuing and strongly prefer to do so rather than guessing.
 
 After completed tool turns appear in conversation history inside <tool> blocks (for example a line like [tool_name: value] followed by its result), strongly consider outputting a <entml:thinking> block before your next visible reply or tool call."""
+
+_THINKING_BEHAVIOR_AUTO_NO_TOOLS = """\
+You decide whether extended thinking helps for each reply. When the question has hidden complexity or when you are uncertain, open a <entml:thinking> block before continuing and strongly prefer to do so rather than guessing."""
 
 
 def normalize_thinking_level(level: Any) -> Optional[str]:
@@ -155,13 +163,18 @@ def _uses_forced_thinking_behavior(injection_mode: str) -> bool:
     return injection_mode != "auto"
 
 
-def _format_thinking_behavior(injection_mode: str) -> str:
-    body = _THINKING_BEHAVIOR_ON if _uses_forced_thinking_behavior(injection_mode) else _THINKING_BEHAVIOR_AUTO
+def _format_thinking_behavior(injection_mode: str, *, has_tools: bool) -> str:
+    if _uses_forced_thinking_behavior(injection_mode):
+        body = _THINKING_BEHAVIOR_ON_WITH_TOOLS if has_tools else _THINKING_BEHAVIOR_ON_NO_TOOLS
+    else:
+        body = _THINKING_BEHAVIOR_AUTO_WITH_TOOLS if has_tools else _THINKING_BEHAVIOR_AUTO_NO_TOOLS
     return f"<thinking_behavior>\n{body}\n</thinking_behavior>"
 
 
 def build_entml_thinking_section(
     protocol_options: Optional[Dict[str, Any]] = None,
+    *,
+    has_tools: bool = True,
 ) -> str:
     """按思考挡位构建注入块：thinking_mode + max_thinking_length + thinking_behavior。"""
     resolved = resolve_thinking_injection(protocol_options)
@@ -173,5 +186,5 @@ def build_entml_thinking_section(
     if max_length is not None:
         lines.append(f"<entml:max_thinking_length>{max_length}</entml:max_thinking_length>")
     lines.append("")
-    lines.append(_format_thinking_behavior(injection_mode))
+    lines.append(_format_thinking_behavior(injection_mode, has_tools=has_tools))
     return "\n".join(lines)
