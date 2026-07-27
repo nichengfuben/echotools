@@ -22,7 +22,9 @@ from echotools.exec.fncall.protocols.entml import (
     format_entml_conversation_history,
     format_entml_current_user_message,
 )
-from echotools.exec.fncall.protocols.entml_think.core import build_entml_thinking_section
+from echotools.exec.fncall.protocols.entml_think.core import (
+    build_entml_thinking_section,
+)
 from echotools.exec.fncall.protocols.entml_think.hist import (
     apply_thinking_history_policy,
     parse_include_thinking_in_history,

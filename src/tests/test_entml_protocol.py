@@ -77,7 +77,9 @@ def test_build_entml_thinking_section_empty_without_options() -> None:
 
 
 def test_parse_max_thinking_length() -> None:
-    from echotools.exec.fncall.protocols.entml_think.core import parse_max_thinking_length
+    from echotools.exec.fncall.protocols.entml_think.core import (
+        parse_max_thinking_length,
+    )
 
     assert parse_max_thinking_length(None) is None
     assert parse_max_thinking_length("") is None
