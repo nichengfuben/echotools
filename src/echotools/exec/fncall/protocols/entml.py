@@ -30,8 +30,8 @@ from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_section,
 )
 from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
-from echotools.exec.fncall.shared.history_markup import strip_fake_history_markup
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
+from echotools.exec.fncall.shared.history_markup import strip_fake_history_markup
 from echotools.exec.fncall.shared.normalization import (
     normalize_content,
     normalize_tool_calls,

@@ -6,15 +6,15 @@ import json
 from typing import Any, Dict, List
 
 import pytest
-
-from echotools.exec.fncall import get_protocol
-from echotools.exec.fncall.parsers.stream import FncallStreamParser
-from echotools.exec.fncall.protocols.entml_think.parse import EntmlThinkingStreamFilter
 from fixtures.simulated_fault_thinking_responses import (
     FaultThinkingCase,
     iter_fault_thinking_cases,
     tools_for_fault_case,
 )
+
+from echotools.exec.fncall import get_protocol
+from echotools.exec.fncall.parsers.stream import FncallStreamParser
+from echotools.exec.fncall.protocols.entml_think.parse import EntmlThinkingStreamFilter
 
 CASES = iter_fault_thinking_cases()
 CASE_IDS = [c.id for c in CASES]
