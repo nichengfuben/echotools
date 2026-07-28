@@ -400,6 +400,80 @@ FAKE_HISTORY_MARKUP_CASES: Tuple[HistoryMarkupCase, ...] = (
         expect_clean_excludes=("{Read: x}",),
         worst_split=True,
     ),
+    HistoryMarkupCase(
+        id="unclosed_fake_tool_invoke_trailing_reply",
+        description="未闭合伪 <tool> + invoke + 可见尾句：batch/stream 均须保留尾句",
+        extra_tools=("Read", "Edit"),
+        response=(
+            "前言\n"
+            "<tool>\n"
+            '{Edit: {"path": "a.py", "old_string": "x", "new_string": "y"}}\n'
+            f"{REAL_READ_INVOKE}\n"
+            "尾句保留。"
+        ),
+        expect_names=("Read",),
+        expect_args=({"path": "src/main.py"},),
+        expect_call_count=1,
+        expect_clean_contains=("前言", "尾句保留"),
+        expect_clean_excludes=("Edit", "<tool>"),
+        partial_leak_markers=("<tool>", "{Edit:", "entml:parameter"),
+        worst_split=True,
+    ),
+    HistoryMarkupCase(
+        id="function_calls_wrap_trailing_reply",
+        description="function_calls 包裹 invoke + 尾部可见回复",
+        extra_tools=("Read",),
+        response=(
+            "说明。\n"
+            "<entml:function_calls>\n"
+            f"{REAL_READ_INVOKE}\n"
+            "</entml:function_calls>\n"
+            "后续说明。"
+        ),
+        expect_names=("Read",),
+        expect_args=({"path": "src/main.py"},),
+        expect_call_count=1,
+        expect_clean_contains=("说明", "后续说明"),
+        expect_clean_excludes=("<tool>",),
+        partial_leak_markers=("<tool>", "{Edit:"),
+    ),
+    HistoryMarkupCase(
+        id="invoke_then_fake_tool_then_reply",
+        description="真实 invoke 后误写伪 tool，须剥离伪块保留尾句",
+        extra_tools=("Read", "Edit"),
+        response=(
+            f"{REAL_READ_INVOKE}\n"
+            "<tool>\n"
+            '{Edit: {"path": "a.py"}}\n'
+            "</tool>\n"
+            "尾句。"
+        ),
+        expect_names=("Read",),
+        expect_args=({"path": "src/main.py"},),
+        expect_call_count=1,
+        expect_clean_contains=("尾句",),
+        expect_clean_excludes=("Edit", "<tool>"),
+    ),
+    HistoryMarkupCase(
+        id="fake_tool_inside_function_calls_with_invoke",
+        description="伪 <tool> 块内含 function_calls+invoke，不得误删 invoke",
+        extra_tools=("Read", "Edit"),
+        response=(
+            "<tool>\n"
+            '{Edit: {"path": "a.py"}}\n'
+            "<entml:function_calls>\n"
+            f"{REAL_READ_INVOKE}\n"
+            "</entml:function_calls>\n"
+            "</tool>\n"
+            "尾句。"
+        ),
+        expect_names=("Read",),
+        expect_args=({"path": "src/main.py"},),
+        expect_call_count=1,
+        expect_clean_contains=("尾句",),
+        expect_clean_excludes=("Edit", "<tool>"),
+        worst_split=True,
+    ),
 )
 
 

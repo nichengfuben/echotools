@@ -33,6 +33,15 @@ _ENTML_INVOKE_BLOCK_RE = re.compile(
     r"<entml:invoke\b[^>]*>[\s\S]*?</entml:invoke>",
     re.IGNORECASE,
 )
+_ENTML_FUNCTION_CALLS_OPEN_RE = re.compile(
+    r"<entml:function_calls\b",
+    re.IGNORECASE,
+)
+_ENTML_FUNCTION_CALLS_BLOCK_RE = re.compile(
+    r"<entml:function_calls\b[^>]*>[\s\S]*?</entml:function_calls>",
+    re.IGNORECASE,
+)
+_ENTML_FUNCTION_CALLS_CLOSE = "</entml:function_calls>"
 
 
 class HistoryMarkupDetectionResult:
@@ -96,19 +105,25 @@ def _orphan_open_re(tag: str) -> re.Pattern[str]:
 
 
 def _split_entml_invoke_protected(segment: str) -> List[Tuple[str, bool]]:
-    """按 ``<entml:invoke>`` 切分；invoke 块（含未闭合尾部）不参与伪 history 剥离。"""
+    """按 ``<entml:function_calls>`` / ``<entml:invoke>`` 切分；保护区不参与伪 history 剥离。"""
     if not segment:
         return []
     parts: List[Tuple[str, bool]] = []
     i = 0
     while i < len(segment):
-        open_m = _ENTML_INVOKE_OPEN_RE.search(segment, i)
-        if not open_m:
+        fc_m = _ENTML_FUNCTION_CALLS_OPEN_RE.search(segment, i)
+        inv_m = _ENTML_INVOKE_OPEN_RE.search(segment, i)
+        candidates = [m for m in (fc_m, inv_m) if m]
+        if not candidates:
             parts.append((segment[i:], False))
             break
+        open_m = min(candidates, key=lambda m: m.start())
         if open_m.start() > i:
             parts.append((segment[i : open_m.start()], False))
-        block_m = _ENTML_INVOKE_BLOCK_RE.match(segment, open_m.start())
+        if open_m is fc_m:
+            block_m = _ENTML_FUNCTION_CALLS_BLOCK_RE.match(segment, open_m.start())
+        else:
+            block_m = _ENTML_INVOKE_BLOCK_RE.match(segment, open_m.start())
         if block_m:
             parts.append((block_m.group(0), True))
             i = block_m.end()
@@ -119,9 +134,9 @@ def _split_entml_invoke_protected(segment: str) -> List[Tuple[str, bool]]:
 
 
 def _open_before_entml_re(tag: str) -> re.Pattern[str]:
-    """``<tool>\\n…`` 未闭合但在 ``<entml:invoke`` 前 — 整段剥离。"""
+    """``<tool>\\n…`` 未闭合但在 ``<entml:(function_calls|invoke)`` 前 — 整段剥离。"""
     return re.compile(
-        rf"<{tag}\s*>\s*\n[\s\S]*?(?=<entml:invoke\b)",
+        rf"<{tag}\s*>\s*\n[\s\S]*?(?=<entml:(?:function_calls|invoke)\b)",
         re.IGNORECASE,
     )
 
@@ -250,8 +265,19 @@ def strip_fake_history_markup_for_display(content: str) -> Tuple[str, bool]:
     """流式 ``partial_text`` 用：完整块剥离 + 截断行尾未收齐的伪标签。"""
     cleaned, found = strip_fake_history_markup(content)
     invoke_m = _ENTML_INVOKE_OPEN_RE.search(cleaned)
-    if invoke_m and "</entml:invoke>" not in cleaned[invoke_m.start() :]:
-        return cleaned, found
+    fc_m = _ENTML_FUNCTION_CALLS_OPEN_RE.search(cleaned)
+    prot_m = None
+    if invoke_m and fc_m:
+        prot_m = invoke_m if invoke_m.start() <= fc_m.start() else fc_m
+    else:
+        prot_m = invoke_m or fc_m
+    if prot_m:
+        tail = cleaned[prot_m.start() :]
+        invoke_open = _ENTML_INVOKE_OPEN_RE.search(tail)
+        if invoke_open and "</entml:invoke>" not in tail[invoke_open.start() :]:
+            return cleaned, found
+        if _ENTML_FUNCTION_CALLS_OPEN_RE.search(tail) and _ENTML_FUNCTION_CALLS_CLOSE not in tail:
+            return cleaned, found
     tail = re.search(
         r"(?:^|\n)\s*(?:</?(?:assistant|tool)\b[^\n]*|</thinking>\s*(?:<(?:assistant|tool)\b[^\n]*)?)$",
         cleaned,

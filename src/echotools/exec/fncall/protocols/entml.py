@@ -287,11 +287,11 @@ class EntmlProtocol(ToolProtocol):
         parse_text, _ = strip_fake_history_markup(parse_text)
         tool_calls = parse_entml_tool_calls(parse_text, tools, schema_index)
         clean = text[:unclosed_open_at] if unclosed_open_at >= 0 else text
+        # 须在移除 invoke 之前剥离伪 history，否则未闭合 <tool> 会把 invoke 之后的可见回复误删。
+        clean, _ = strip_fake_history_markup(clean)
         if tool_calls:
             clean = BLOCK_RE.sub("", clean)
-        # 无论是否解析成功，都剥离工具相关残留，避免标签泄露；thinking 保留给后续 split。
         clean = strip_tool_entml_residue(clean)
-        clean, _ = strip_fake_history_markup(clean)
         return (clean, normalize_tool_calls(tool_calls, tools))
 
     def parse_fragment(

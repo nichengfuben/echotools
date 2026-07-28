@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.71] - 2026-07-28
+
+### Fixed
+
+- batch ``protocol.parse`` 须在移除 ``<entml:invoke>`` **之前**剥离伪 history，避免未闭合 ``<tool>`` 在二次 strip 时吞掉 invoke 之后的可见回复
+- 伪 history 保护区扩展至 ``<entml:function_calls>`` 包裹块；流式 ``partial_text`` 对未闭合 function_calls/invoke 不再截断尾部
+
+### Added
+
+- ``test_fake_history_markup_reply_protect``：invoke + 可见尾句 batch/stream parity、function_calls 包裹、invoke 后伪 tool 等 7+ 语料
+
 ## [2.3.70] - 2026-07-28
 
 ### Added
