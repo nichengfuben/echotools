@@ -52,17 +52,12 @@ def test_batch_no_fake_markup_leak(case: HistoryMarkupCase) -> None:
 
 
 @pytest.mark.parametrize("case", INVOKE_CASES, ids=lambda c: c.id)
-def test_batch_fake_block_not_parsed_as_tool(case: HistoryMarkupCase) -> None:
-    """伪 history 块前的 brace 行不得被 parse 成 tool_calls。"""
-    proto = get_protocol("entml")
-    tools = tools_for_markup_case(case)
-    split_at = case.response.find("<entml:invoke")
-    prefix = case.response if split_at < 0 else case.response[:split_at]
-    pre, pre_calls = proto.parse(prefix, tools)
-    assert not pre_calls, case.id
-    for bad in case.expect_clean_excludes:
-        if bad.startswith("{") or bad in ("Edit", "ghost", "secret.py"):
-            assert bad not in pre, f"{case.id}: prefix leaked {bad!r}"
+def test_batch_fake_block_not_duplicated_with_invoke(case: HistoryMarkupCase) -> None:
+    """全文含 entml invoke 时，伪 ``<tool>`` 块不得额外产生 tool_calls。"""
+    clean, calls = _batch_parse(case)
+    assert len(calls) == case.expect_call_count, case.id
+    if case.expect_names:
+        assert _names(calls) == list(case.expect_names), case.id
 
 
 @pytest.mark.parametrize("case", CASES, ids=CASE_IDS)

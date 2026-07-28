@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.78] - 2026-07-29
+
+### Fixed
+
+- entml 流式 ``get_ready_tool_calls``：增量解析跳过 ``<tool>`` brace 块，避免 history 伪块在 ``<entml:invoke>`` 到达前误触发（与 batch ``allow_brace=False`` 对齐）
+- entml 流式 ``finalize``：有 tool call 时仍剥离 ``<entml:thinking>``，修复 fault ``</thinking>`` 语料可见正文泄漏
+- entml 流式 partial_json：参数值内尖括号（如 ``docs/<draft>.md``）不再被 direct-child 解析误拆为额外字段
+- entml 流式 ``partial_text``：invoke 前缀 holdback（``_waiting_tail``）不再泄漏到可见正文
+
+## [2.3.77] - 2026-07-29
+
+### Added
+
+- entml ``<tool>...</tool>`` 容错：支持 ``<ToolName>{json}</ToolName>`` / ``<ToolName>…</tool>`` 及单行 ``{Tool: {...}}`` 解析为 tool_calls（thinking 区内不解析；同文已有 ``<entml:invoke>`` 时不解析 brace 伪块；多 brace / 带结果 tail 仍视为 history）
+
+### Fixed
+
+- 流式 ``finalize`` 在无 tool call 时对 ``partial_text``/返回值补做 ``strip_tool_entml_residue``，避免 orphan ``entml:`` 标签泄漏
+
+## [2.3.76] - 2026-07-28
+
+### Fixed
+
+- entml 流式 ``finalize`` / ``partial_text``：在含多段 ``<entml:thinking>`` 与伪 ``<assistant>``/``<tool>`` 的回复上，改为基于 ``_raw_buf`` 剥离伪 history（保留 thinking 保护区），修复可见正文被整段清空、只剩 thinking 的问题
+
+### Added
+
+- ``test_entml_stream_multi_thinking_fake_history_visible_reply``
+
+## [2.3.75] - 2026-07-28
+
+### Fixed
+
+- entml 批量/流式：支持 invoke 内直接子元素 ``<pattern>v</pattern>`` / ``<-n>true</-n>``（标签名即参数名，无 parameter 包裹）
+
+### Removed
+
+- entml 参数名归一容错：不再将 ``file_path`` / ``filepath`` 自动映射为 ``path``（参数名按模型输出原样解析）
+
+### Added
+
+- ``test_entml_parse_direct_child_tags_grep``：req-1785250814 语料 batch + 流式 parity
+- ``test_entml_parse_read_file_path_not_aliased``：确认不做参数名映射
+
 ## [2.3.74] - 2026-07-28
 
 ### Fixed

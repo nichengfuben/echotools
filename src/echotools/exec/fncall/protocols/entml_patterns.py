@@ -59,6 +59,17 @@ BARE_INVOKE_CHILD_OPEN_RE = re.compile(
     r"<entml:(description|timeout)>([\s\S]*)",
     re.DOTALL | re.IGNORECASE,
 )
+# invoke 内直接子元素：<pattern>v</pattern>、<-n>true</-n>（标签名即参数名）
+_INVOKE_DIRECT_TAG_NAME = r"(?:-\w+|[a-zA-Z_][\w.-]*)"
+INVOKE_DIRECT_CHILD_RE = re.compile(
+    rf"<(?!entml:)({_INVOKE_DIRECT_TAG_NAME})>([\s\S]*?)</\1>",
+    re.DOTALL,
+)
+INVOKE_DIRECT_CHILD_OPEN_RE = re.compile(
+    rf"<(?!entml:)({_INVOKE_DIRECT_TAG_NAME})>([\s\S]*)",
+    re.DOTALL,
+)
+INVOKE_DIRECT_CHILD_SKIP = frozenset({"parameter", "parameters"})
 SUB_TAG_RE = re.compile(
     r"<([^>]+)>([\s\S]*?)</\1>",
     re.DOTALL,

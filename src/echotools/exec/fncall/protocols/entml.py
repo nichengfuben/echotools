@@ -18,6 +18,7 @@ from echotools.exec.fncall.prompt.templates import (
 from echotools.exec.fncall.protocols.entml_invoke import (
     parse_entml_tool_calls,
 )
+from echotools.exec.fncall.protocols.entml_tool_blocks import parse_tool_block_calls
 from echotools.exec.fncall.protocols.entml_patterns import (
     BLOCK_RE,
     entml_invoke_open_may_be_streaming,
@@ -268,6 +269,8 @@ class EntmlProtocol(ToolProtocol):
         self,
         text: str,
         tools: Optional[List[Dict[str, Any]]] = None,
+        *,
+        include_tool_blocks: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         from echotools.exec.fncall.protocols.entml_think.parse import (
             _find_earliest_thinking_open,
@@ -284,8 +287,9 @@ class EntmlProtocol(ToolProtocol):
             )
             if unclosed_open_at >= 0:
                 parse_text = text[:unclosed_open_at]
-        parse_text, _ = strip_fake_history_markup(parse_text)
         tool_calls = parse_entml_tool_calls(parse_text, tools, schema_index)
+        if include_tool_blocks:
+            tool_calls.extend(parse_tool_block_calls(parse_text, tools, schema_index))
         clean = text[:unclosed_open_at] if unclosed_open_at >= 0 else text
         # 须在移除 invoke 之前剥离伪 history，否则未闭合 <tool> 会把 invoke 之后的可见回复误删。
         clean, _ = strip_fake_history_markup(clean)

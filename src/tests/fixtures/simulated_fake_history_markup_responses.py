@@ -314,6 +314,9 @@ FAKE_HISTORY_MARKUP_CASES: Tuple[HistoryMarkupCase, ...] = (
         ),
         expect_clean_contains=("以上是误输出",),
         expect_clean_excludes=("secret.py", "<tool>"),
+        expect_names=("Read",),
+        expect_args=({"path": "secret.py"},),
+        expect_call_count=1,
     ),
     HistoryMarkupCase(
         id="plain_thinking_pair_thinking_off",

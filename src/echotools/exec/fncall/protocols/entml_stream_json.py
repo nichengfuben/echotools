@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from .entml_patterns import (
     BARE_INVOKE_CHILD_OPEN_RE,
     BARE_INVOKE_CHILD_RE,
+    INVOKE_DIRECT_CHILD_OPEN_RE,
+    INVOKE_DIRECT_CHILD_RE,
+    INVOKE_DIRECT_CHILD_SKIP,
     PARAM_CLOSE_BARE,
     PARAM_CLOSE_ENTML,
     PARAM_OPEN_PATTERN,
@@ -213,6 +216,65 @@ def _parse_bare_invoke_entries(body: str) -> List[Tuple[str, str, bool, Optional
     return entries
 
 
+def _parameter_value_spans(body: str) -> List[Tuple[int, int]]:
+    """``<entml:parameter>`` 值区间（含流式未闭合 parameter 的 growing tail）。"""
+    if not body:
+        return []
+    spans: List[Tuple[int, int]] = []
+    i = 0
+    while i < len(body):
+        match = _PARAM_OPEN_RE.search(body, i)
+        if not match:
+            break
+        val_start = match.end()
+        close = find_valid_parameter_close(body, val_start, allow_end=True)
+        if close < 0:
+            spans.append((val_start, len(body)))
+            break
+        spans.append((val_start, close))
+        i = close + parameter_close_at(body, close)
+    return spans
+
+
+def _inside_parameter_value(pos: int, spans: List[Tuple[int, int]]) -> bool:
+    return any(start <= pos < end for start, end in spans)
+
+
+def _parse_direct_child_entries(body: str) -> List[Tuple[str, str, bool, Optional[str]]]:
+    """返回 [(key, value, is_complete, type_hint), ...]（直接子元素标签）。"""
+    if not body:
+        return []
+    param_spans = _parameter_value_spans(body)
+    tagged: List[Tuple[int, str, str, bool, Optional[str]]] = []
+    for match in INVOKE_DIRECT_CHILD_RE.finditer(body):
+        if _inside_parameter_value(match.start(), param_spans):
+            continue
+        key = normalize_entml_name(match.group(1))
+        if not key or key.lower() in INVOKE_DIRECT_CHILD_SKIP:
+            continue
+        tagged.append((match.start(), key, (match.group(2) or "").strip(), True, None))
+    for match in INVOKE_DIRECT_CHILD_OPEN_RE.finditer(body):
+        if _inside_parameter_value(match.start(), param_spans):
+            continue
+        key = normalize_entml_name(match.group(1))
+        if not key or key.lower() in INVOKE_DIRECT_CHILD_SKIP:
+            continue
+        close = f"</{key}>"
+        tail = match.group(2) or ""
+        if close in tail:
+            continue
+        tagged.append((match.start(), key, tail, False, None))
+    tagged.sort(key=lambda item: item[0])
+    seen: set[str] = set()
+    entries: List[Tuple[str, str, bool, Optional[str]]] = []
+    for _pos, key, value, is_complete, type_hint in tagged:
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append((key, value, is_complete, type_hint))
+    return entries
+
+
 def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool, Optional[str]]]:
     """返回 [(key, value, is_complete, type_hint), ...]。"""
     if not body:
@@ -303,6 +365,10 @@ def build_streaming_json_snapshot(
         if bare[0] not in seen_keys:
             entries.append(bare)
             seen_keys.add(bare[0])
+    for direct in _parse_direct_child_entries(inner):
+        if direct[0] not in seen_keys:
+            entries.append(direct)
+            seen_keys.add(direct[0])
     if not entries:
         return ""
 

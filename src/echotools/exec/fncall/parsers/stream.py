@@ -613,6 +613,44 @@ class FncallStreamParser:
         """可供工具解析的已缓冲文本（不含 thinking 过滤器内部 pending）。"""
         return "".join(self._text_parts) + self._waiting_tail + self._fncall_buf
 
+    def _stream_visible_buffer(self) -> str:
+        """与 batch ``parse`` 一致：未闭合 thinking 之后的正文不参与可见/剥离。"""
+        buf = self._raw_buf
+        if not buf:
+            return ""
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            _find_earliest_thinking_open,
+            has_unclosed_entml_thinking,
+        )
+
+        if has_unclosed_entml_thinking(
+            buf, thinking_enabled=self._thinking_enabled
+        ):
+            open_at, _ = _find_earliest_thinking_open(
+                buf, thinking_enabled=self._thinking_enabled
+            )
+            if open_at >= 0:
+                return buf[:open_at]
+        return buf
+
+    def _stream_display_text(self) -> str:
+        """流式可见正文：在完整 raw 缓冲上剥离伪 history（保留 thinking 保护区）。"""
+        from echotools.exec.fncall.shared.history_markup import (
+            strip_fake_history_markup_for_display,
+        )
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            split_entml_thinking,
+        )
+
+        buf = self._stream_visible_buffer()
+        if not buf:
+            return ""
+        cleaned, _ = strip_fake_history_markup_for_display(buf)
+        visible, _ = split_entml_thinking(
+            cleaned, thinking_enabled=self._thinking_enabled
+        )
+        return visible
+
     def finalize(self) -> Tuple[str, List[Dict[str, Any]]]:
         """结束流式解析，返回 (清理后文本, tool_calls 列表)。幂等。"""
         if self._finalized_result is not None:
@@ -632,14 +670,8 @@ class FncallStreamParser:
                 else:
                     self._text_parts.append(part)
 
-        # 统一从「可见正文 + fncall 缓冲」解析，避免漏检；thinking 已在过滤器中剥离
-        assembled = "".join(self._text_parts) + self._fncall_buf
-        from echotools.exec.fncall.shared.history_markup import (
-            strip_fake_history_markup,
-        )
-
-        assembled, _ = strip_fake_history_markup(assembled)
-        clean_text, tool_calls = self._protocol.parse(assembled, self._tools)
+        # 与 batch parse 同路径（须在含 thinking 标签的 raw 缓冲上剥离伪 history）。
+        clean_text, tool_calls = self._protocol.parse(self._raw_buf, self._tools)
 
         clean_fn = getattr(self._protocol, "clean_tool_tags", None)
         if callable(clean_fn):
@@ -650,19 +682,18 @@ class FncallStreamParser:
             )
             clean_text = strip_tool_entml_residue(clean_text)
 
-        # 兜底：剥离残留 <entml:thinking>（holdback 边界/分片异常时）
-        if self._thinking_filter is not None and clean_text:
+        if self._thinking_enabled:
             from echotools.exec.fncall.protocols.entml_think.parse import (
                 split_entml_thinking,
             )
-            clean_text, more_thinking = split_entml_thinking(
+
+            display_text, _ = split_entml_thinking(
                 clean_text, thinking_enabled=self._thinking_enabled
             )
-            if more_thinking:
-                self._thinking_parts.append(more_thinking)
-
-        self._text_parts = [clean_text] if clean_text else []
-        result = (clean_text, tool_calls)
+        else:
+            display_text = clean_text
+        self._text_parts = [display_text] if display_text else []
+        result = (display_text, tool_calls)
 
         self._finalized_result = result
         return result
@@ -680,13 +711,25 @@ class FncallStreamParser:
     @property
     def partial_text(self) -> str:
         """已确认的非 fncall 文本片段（可用于流式 UI 实时展示）。"""
-        from echotools.exec.fncall.shared.history_markup import (
-            strip_fake_history_markup_for_display,
-        )
+        if self._finalized_result is not None:
+            clean_text, _ = self._finalized_result
+            return clean_text
 
-        text = "".join(self._text_parts)
-        cleaned, _ = strip_fake_history_markup_for_display(text)
-        return cleaned
+        text = self._normalize_stream_chunk("".join(self._text_parts))
+        if text:
+            from echotools.exec.fncall.shared.history_markup import (
+                strip_fake_history_markup_for_display,
+            )
+
+            cleaned, _ = strip_fake_history_markup_for_display(text)
+            if cleaned:
+                return cleaned
+
+        if self._thinking_enabled and self._raw_buf:
+            lower = self._raw_buf.lower()
+            if "<entml:invoke" not in lower and "<entml:function_calls" not in lower:
+                return self._stream_display_text()
+        return ""
 
     @property
     def partial_thinking(self) -> str:
@@ -702,9 +745,11 @@ class FncallStreamParser:
             _, all_calls = self._finalized_result
         else:
             try:
+                parse_kwargs: Dict[str, Any] = {}
+                if getattr(self._protocol, "id", None) == "entml":
+                    parse_kwargs["include_tool_blocks"] = False
                 _, all_calls = self._protocol.parse(
-                    self._assembly_for_tool_parse(),
-                    self._tools,
+                    self._raw_buf, self._tools, **parse_kwargs
                 )
             except Exception:
                 return []

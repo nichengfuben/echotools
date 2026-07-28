@@ -1106,8 +1106,8 @@ def test_entml_parse_bare_parameter_tags_in_invoke() -> None:
         assert json.loads(stream_args[0]) == args, f"chunk={chunk}"
 
 
-def test_entml_parse_read_file_path_alias() -> None:
-    """Read 工具：模型输出 file_path 时映射为 schema 要求的 path。"""
+def test_entml_parse_read_file_path_not_aliased() -> None:
+    """Read 工具：参数名按模型输出原样保留，不做 file_path→path 映射。"""
     tools = [
         {
             "type": "function",
@@ -1135,10 +1135,64 @@ def test_entml_parse_read_file_path_alias() -> None:
     )
     calls = parse_entml_tool_calls(sample, tools, schema_index)
     args = json.loads(calls[0]["function"]["arguments"])
-    assert "file_path" not in args
-    assert args["path"] == "X:/Project/foo.py"
+    assert "path" not in args
+    assert args["file_path"] == "X:/Project/foo.py"
     assert args["line_offset"] == 122
     assert args["n_lines"] == 25
+
+
+def test_entml_parse_direct_child_tags_grep() -> None:
+    """Grep 直接子元素标签（req-1785250814），非 parameter 包裹。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Grep",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {"type": "string"},
+                        "path": {"type": "string"},
+                        "output_mode": {"type": "string"},
+                        "-n": {"type": "boolean"},
+                    },
+                    "required": ["pattern"],
+                },
+            },
+        }
+    ]
+    schema_index = _build_param_schema_index(tools)
+    sample = (
+        "让我用 Grep 直接确认搜索参数的传递逻辑，避免 Read 循环。\n\n"
+        '<entml:invoke name="Grep">\n'
+        "<pattern>search_enabled|search</pattern>\n"
+        "<path>X:/Project/Local/Provider-Deepseek-Adapter/provider_deepseek/core/adapter/helpers/client_helpers.py</path>\n"
+        "<output_mode>content</output_mode>\n"
+        "<-n>true</-n>\n"
+        "</entml:invoke>"
+    )
+    calls = parse_entml_tool_calls(sample, tools, schema_index)
+    assert len(calls) == 1
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert args == {
+        "pattern": "search_enabled|search",
+        "path": "X:/Project/Local/Provider-Deepseek-Adapter/provider_deepseek/core/adapter/helpers/client_helpers.py",
+        "output_mode": "content",
+        "-n": True,
+    }
+
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    for chunk in (1, 17, 9999):
+        p = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+        for i in range(0, len(sample), chunk):
+            p.feed(sample[i : i + chunk])
+            while p.consume_stream_delta():
+                pass
+        p.finalize()
+        stream_args = [s for s in p.stream_invoke_argument_snapshots() if s]
+        assert len(stream_args) == 1, f"chunk={chunk}"
+        assert json.loads(stream_args[0]) == args, f"chunk={chunk}"
 
 
 def test_entml_stream_same_tool_name_multiple_invokes() -> None:
@@ -1178,3 +1232,185 @@ def test_entml_stream_same_tool_name_multiple_invokes() -> None:
     parser.finalize()
     stream_args = [s for s in parser.stream_invoke_argument_snapshots() if s]
     assert stream_args == batch_args
+
+
+def test_entml_parse_tool_block_inner_tags() -> None:
+    """``<tool><TodoList>…</TodoList></tool>`` / ``<tool><Bash>…</tool>`` 误格式容错。"""
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "TodoList",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"todos": {"type": "array"}},
+                    "required": ["todos"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Bash",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "integer"},
+                    },
+                    "required": ["command"],
+                },
+            },
+        },
+    ]
+    sample = (
+        "<entml:thinking>\nplan\n</entml:thinking>\n"
+        "更新任务并运行测试。\n\n"
+        "<tool>\n"
+        "<TodoList>\n"
+        '{"todos": [{"title": "task-a", "status": "done"}]}\n'
+        "</tool>\n\n"
+        "<tool>\n"
+        "<Bash>\n"
+        '{"command": "python main.py", "timeout": 120}\n'
+        "</tool>"
+    )
+    from echotools.exec.fncall.protocols.entml_tool_blocks import parse_tool_block_calls
+
+    schema_index = _build_param_schema_index(tools)
+    batch = parse_entml_tool_calls(sample, tools, schema_index)
+    batch.extend(parse_tool_block_calls(sample, tools, schema_index))
+    assert len(batch) == 2
+    assert batch[0]["function"]["name"] == "TodoList"
+    assert batch[1]["function"]["name"] == "Bash"
+    assert json.loads(batch[1]["function"]["arguments"])["timeout"] == 120
+
+    for chunk in (1, 17, 64):
+        p = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+        for i in range(0, len(sample), chunk):
+            p.feed(sample[i : i + chunk])
+        stream_clean, stream_calls = p.finalize()
+        assert len(stream_calls) == 2, f"chunk={chunk}"
+        assert stream_calls[0]["function"]["name"] == "TodoList", f"chunk={chunk}"
+        assert stream_calls[1]["function"]["name"] == "Bash", f"chunk={chunk}"
+        assert len(p.partial_thinking) > 0, f"chunk={chunk}"
+        assert "更新任务" in p.partial_text or "更新任务" in stream_clean, f"chunk={chunk}"
+
+
+def test_entml_tool_block_brace_skipped_when_entml_invoke_present() -> None:
+    """同文含 ``<entml:invoke>`` 时，``{Edit: x}`` 伪块不解析；仅保留 invoke。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Edit",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
+            },
+        },
+    ]
+    sample = (
+        "<entml:thinking>\nplan\n</entml:thinking>\n"
+        "中间说明\n"
+        "<tool>\n{Edit: x}\n</tool>\n"
+        '<entml:invoke name="Read">\n'
+        '<entml:parameter name="path">src/main.py</entml:parameter>\n'
+        "</entml:invoke>\n"
+        "最终回复"
+    )
+    clean, calls = get_protocol("entml").parse(sample, tools)
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "Read"
+
+
+def test_entml_stream_finalize_strips_thinking_when_tool_calls() -> None:
+    """有 tool call 时 finalize 可见正文仍须剥离 thinking（含 fault ``</thinking>``）。"""
+    from pathlib import Path
+
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    sample_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785255721-dc06ea92d007.txt"
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus file not available")
+    sample = sample_path.read_text(encoding="utf-8")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Bash",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"command": {"type": "string"}},
+                    "required": ["command"],
+                },
+            },
+        }
+    ]
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+    parser.feed(sample)
+    clean, calls = parser.finalize()
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "Bash"
+    assert "<entml:thinking>" not in clean
+    assert "StreamAiPreviews" not in clean
+    assert len(parser.partial_thinking) > 500
+    assert "260727" in json.loads(calls[0]["function"]["arguments"])["command"]
+
+
+def test_entml_tool_block_bash_with_output_tail_batch_and_finalize() -> None:
+    """``<tool>{Bash:...}\\n输出...</tool>`` 无 invoke 时 batch/finalize 均解析 Bash。"""
+    from pathlib import Path
+
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    sample_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785255721-dc06ea92d007.txt"
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus file not available")
+    sample = sample_path.read_text(encoding="utf-8")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Bash",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "integer"},
+                    },
+                    "required": ["command"],
+                },
+            },
+        }
+    ]
+    _, batch_calls = get_protocol("entml").parse(sample, tools)
+    assert len(batch_calls) == 1
+    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert "260727" in batch_args["command"]
+
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+    parser.feed(sample)
+    _, stream_calls = parser.finalize()
+    assert len(stream_calls) == 1
+    stream_args = json.loads(stream_calls[0]["function"]["arguments"])
+    assert stream_args == batch_args
+

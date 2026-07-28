@@ -5,6 +5,9 @@ from typing import Any, Dict, List, Optional
 
 from .entml_patterns import (
     BARE_INVOKE_CHILD_RE,
+    INVOKE_DIRECT_CHILD_OPEN_RE,
+    INVOKE_DIRECT_CHILD_RE,
+    INVOKE_DIRECT_CHILD_SKIP,
     INVOKE_RE,
     PARAM_RE,
     PARAMETERS_RE,
@@ -13,7 +16,24 @@ from .entml_patterns import (
     normalize_entml_name,
     parse_sub_tags,
 )
-from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value, _apply_common_param_aliases
+from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value
+
+
+def _parse_direct_child_tags(
+    body: str,
+    args: Dict[str, Any],
+    func_props: Dict[str, Dict[str, Any]],
+) -> None:
+    """模型用 ``<key>value</key>`` 代替 ``<parameter name=\"key\">``。"""
+    for match in INVOKE_DIRECT_CHILD_RE.finditer(body):
+        key = normalize_entml_name(match.group(1))
+        if not key or key.lower() in INVOKE_DIRECT_CHILD_SKIP or key in args:
+            continue
+        raw = (match.group(2) or "").strip()
+        args[key] = coerce_entml_parameter_value(
+            raw,
+            func_props.get(key) or None,
+        )
 
 
 def _parse_bare_invoke_children(
@@ -70,7 +90,7 @@ def parse_invoke_args(
         )
 
     _parse_bare_invoke_children(body, args, func_props)
-    _apply_common_param_aliases(args, func_props)
+    _parse_direct_child_tags(body, args, func_props)
 
     return args
 

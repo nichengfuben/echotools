@@ -71,19 +71,6 @@ def coerce_entml_parameter_value(
     return stripped
 
 
-def _apply_common_param_aliases(
-    args: Dict[str, Any],
-    func_props: Dict[str, Dict[str, Any]],
-) -> None:
-    """模型常把 ``path`` 写成 ``file_path`` / ``filepath``，按 schema 归一。"""
-    if not func_props or "path" not in func_props or "path" in args:
-        return
-    for alias in ("file_path", "filepath", "filePath"):
-        if alias in args:
-            args["path"] = args.pop(alias)
-            return
-
-
 def coerce_entml_arguments(
     args: Dict[str, Any],
     func_name: str,
