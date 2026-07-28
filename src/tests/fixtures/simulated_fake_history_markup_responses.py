@@ -5,10 +5,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from fixtures.simulated_llm_tool_responses import TOOLS, _TOOL_BY_NAME
+from fixtures.simulated_llm_tool_responses import _TOOL_BY_NAME, TOOLS
 
 READ_TOOL: Dict[str, Any] = {
     "type": "function",
