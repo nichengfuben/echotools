@@ -25,6 +25,14 @@ _PLAIN_THINKING_OPEN_LINE_RE = re.compile(
     r"(?:^|\n)\s*<thinking\s*>\s*(?:\n|$)",
     re.IGNORECASE | re.MULTILINE,
 )
+_ENTML_INVOKE_OPEN_RE = re.compile(
+    r"<entml:invoke\b",
+    re.IGNORECASE,
+)
+_ENTML_INVOKE_BLOCK_RE = re.compile(
+    r"<entml:invoke\b[^>]*>[\s\S]*?</entml:invoke>",
+    re.IGNORECASE,
+)
 
 
 class HistoryMarkupDetectionResult:
@@ -65,6 +73,14 @@ def _paired_block_re(tag: str) -> re.Pattern[str]:
     )
 
 
+def _paired_block_anywhere_re(tag: str) -> re.Pattern[str]:
+    """``<tool>\\n…\\n</tool>`` 即使前缀无换行（流式分片边界）也剥离。"""
+    return re.compile(
+        rf"<{tag}\s*>\s*\n[\s\S]*?\n\s*</{tag}\s*>",
+        re.IGNORECASE,
+    )
+
+
 def _orphan_close_re(tag: str) -> re.Pattern[str]:
     return re.compile(
         rf"(?:^|\n)([\s\S]*?)\n\s*</{tag}\s*>\s*(?:\n|$)",
@@ -79,19 +95,77 @@ def _orphan_open_re(tag: str) -> re.Pattern[str]:
     )
 
 
-def _strip_fake_blocks_in_segment(segment: str) -> Tuple[str, bool]:
+def _split_entml_invoke_protected(segment: str) -> List[Tuple[str, bool]]:
+    """按 ``<entml:invoke>`` 切分；invoke 块（含未闭合尾部）不参与伪 history 剥离。"""
+    if not segment:
+        return []
+    parts: List[Tuple[str, bool]] = []
+    i = 0
+    while i < len(segment):
+        open_m = _ENTML_INVOKE_OPEN_RE.search(segment, i)
+        if not open_m:
+            parts.append((segment[i:], False))
+            break
+        if open_m.start() > i:
+            parts.append((segment[i : open_m.start()], False))
+        block_m = _ENTML_INVOKE_BLOCK_RE.match(segment, open_m.start())
+        if block_m:
+            parts.append((block_m.group(0), True))
+            i = block_m.end()
+        else:
+            parts.append((segment[open_m.start() :], True))
+            break
+    return parts
+
+
+def _open_before_entml_re(tag: str) -> re.Pattern[str]:
+    """``<tool>\\n…`` 未闭合但在 ``<entml:invoke`` 前 — 整段剥离。"""
+    return re.compile(
+        rf"<{tag}\s*>\s*\n[\s\S]*?(?=<entml:invoke\b)",
+        re.IGNORECASE,
+    )
+
+
+def _orphan_open_to_eof_re(tag: str) -> re.Pattern[str]:
+    """未闭合伪块直到段末（下一段为 ``<entml:invoke>`` 时）。"""
+    return re.compile(
+        rf"<{tag}\s*>\s*\n[\s\S]*$",
+        re.IGNORECASE,
+    )
+
+
+def _strip_fake_blocks_in_unprotected(
+    segment: str,
+    *,
+    followed_by_invoke: bool = False,
+) -> Tuple[str, bool]:
     if not segment:
         return segment, False
     found = False
     text = segment
     for tag in _FAKE_HISTORY_TAGS:
-        pair_re = _paired_block_re(tag)
+        for pair_re in (_paired_block_re(tag), _paired_block_anywhere_re(tag)):
+            while True:
+                new_text, n = pair_re.subn("", text, count=1)
+                if n == 0:
+                    break
+                found = True
+                text = new_text
+        before_entml = _open_before_entml_re(tag)
         while True:
-            new_text, n = pair_re.subn("", text, count=1)
+            new_text, n = before_entml.subn("", text, count=1)
             if n == 0:
                 break
             found = True
             text = new_text
+        if followed_by_invoke:
+            to_eof = _orphan_open_to_eof_re(tag)
+            while True:
+                new_text, n = to_eof.subn("", text, count=1)
+                if n == 0:
+                    break
+                found = True
+                text = new_text
         close_re = _orphan_close_re(tag)
         while True:
             new_text, n = close_re.subn("\n", text, count=1)
@@ -115,6 +189,28 @@ def _strip_fake_blocks_in_segment(segment: str) -> Tuple[str, bool]:
             text = new_text
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text, found
+
+
+def _strip_fake_blocks_in_segment(segment: str) -> Tuple[str, bool]:
+    if not segment:
+        return segment, False
+    parts = _split_entml_invoke_protected(segment)
+    if len(parts) == 1 and parts[0][1]:
+        return segment, False
+    out: List[str] = []
+    found = False
+    for idx, (chunk, protected) in enumerate(parts):
+        if protected:
+            out.append(chunk)
+            continue
+        next_is_invoke = idx + 1 < len(parts) and parts[idx + 1][1]
+        cleaned, hit = _strip_fake_blocks_in_unprotected(
+            chunk,
+            followed_by_invoke=next_is_invoke,
+        )
+        out.append(cleaned)
+        found = found or hit
+    return "".join(out), found
 
 
 def strip_fake_history_markup(content: str) -> Tuple[str, bool]:
@@ -153,12 +249,24 @@ def strip_fake_history_markup(content: str) -> Tuple[str, bool]:
 def strip_fake_history_markup_for_display(content: str) -> Tuple[str, bool]:
     """流式 ``partial_text`` 用：完整块剥离 + 截断行尾未收齐的伪标签。"""
     cleaned, found = strip_fake_history_markup(content)
+    invoke_m = _ENTML_INVOKE_OPEN_RE.search(cleaned)
+    if invoke_m and "</entml:invoke>" not in cleaned[invoke_m.start() :]:
+        return cleaned, found
     tail = re.search(
-        r"(?:^|\n)\s*(?:</?(?:assistant|tool)\b[^\n]*|</thinking>\s*)$",
+        r"(?:^|\n)\s*(?:</?(?:assistant|tool)\b[^\n]*|</thinking>\s*(?:<(?:assistant|tool)\b[^\n]*)?)$",
         cleaned,
         re.IGNORECASE | re.MULTILINE,
     )
     if tail:
         cleaned = cleaned[: tail.start()]
         found = True
+    else:
+        glued = re.search(
+            r"</thinking>\s*<(?:assistant|tool)\b[^\n]*$",
+            cleaned,
+            re.IGNORECASE,
+        )
+        if glued:
+            cleaned = cleaned[: glued.start()]
+            found = True
     return cleaned, found

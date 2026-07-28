@@ -166,7 +166,9 @@ def inject_fncall(
                 sections.append(format_entml_current_user_message(current_user_message))
             # thinking 放在最后，超限截断时优先保留在 send_text 尾部
             thinking_section = build_entml_thinking_section(
-                protocol_options, has_tools=False
+                protocol_options,
+                has_tools=False,
+                history_text=history_text,
             )
             if thinking_section:
                 sections.append(thinking_section)

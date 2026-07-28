@@ -153,6 +153,14 @@ def test_display_strip_truncates_incomplete_fake_open() -> None:
     assert "Edit" not in cleaned2
 
 
+def test_display_strip_truncates_glued_thinking_tool_tail() -> None:
+    partial = "● 验证通过。\n\n</thinking><tool"
+    cleaned, found = strip_fake_history_markup_for_display(partial)
+    assert found
+    assert cleaned == "● 验证通过。"
+    assert "<tool" not in cleaned
+
+
 class TestBatchParseFakeHistory:
     def test_batch_strips_fake_tool_block(self) -> None:
         proto = get_protocol("entml")

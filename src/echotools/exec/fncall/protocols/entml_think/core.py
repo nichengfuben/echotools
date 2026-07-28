@@ -80,6 +80,16 @@ After completed tool turns appear in conversation history inside <tool> blocks (
 _THINKING_BEHAVIOR_AUTO_NO_TOOLS = """\
 You decide whether extended thinking helps for each reply. When the question has hidden complexity or when you are uncertain, open a <entml:thinking> block before continuing and strongly prefer to do so rather than guessing."""
 
+_THINKING_BEHAVIOR_OFF_WITH_HISTORY_WITH_TOOLS = """\
+Extended thinking is disabled for this reply. Do NOT output a <entml:thinking> block.
+
+Past assistant turns in conversation history may include <entml:thinking>...</entml:thinking> blocks for context only. Do not imitate or continue those blocks. Reply with visible text and/or <entml:invoke> tool call(s) directly."""
+
+_THINKING_BEHAVIOR_OFF_WITH_HISTORY_NO_TOOLS = """\
+Extended thinking is disabled for this reply. Do NOT output a <entml:thinking> block.
+
+Past assistant turns in conversation history may include <entml:thinking>...</entml:thinking> blocks for context only. Do not imitate or continue those blocks. Reply with visible text directly."""
+
 
 def normalize_thinking_level(level: Any) -> Optional[str]:
     """将 echotools 思考挡位归一化为 none | low | medium | high | xhigh | max | auto。"""
@@ -181,14 +191,34 @@ def _format_thinking_behavior(injection_mode: str, *, has_tools: bool) -> str:
     return f"<thinking_behavior>\n{body}\n</thinking_behavior>"
 
 
+def _format_forced_no_thinking_behavior(*, has_tools: bool) -> str:
+    body = (
+        _THINKING_BEHAVIOR_OFF_WITH_HISTORY_WITH_TOOLS
+        if has_tools
+        else _THINKING_BEHAVIOR_OFF_WITH_HISTORY_NO_TOOLS
+    )
+    return f"<thinking_behavior>\n{body}\n</thinking_behavior>"
+
+
 def build_entml_thinking_section(
     protocol_options: Optional[Dict[str, Any]] = None,
     *,
     has_tools: bool = True,
+    history_text: str = "",
 ) -> str:
-    """按思考挡位构建注入块：thinking_mode + max_thinking_length + thinking_behavior。"""
+    """按思考挡位构建注入块：thinking_mode + max_thinking_length + thinking_behavior。
+
+    思考关闭时：默认不注入；若 history 含 ``<entml:thinking>`` 则仅注入强制不思考的
+    ``<thinking_behavior>``（不含 ``<entml:thinking_mode>``）。
+    """
+    from echotools.exec.fncall.protocols.entml_think.hist import (
+        history_text_contains_entml_thinking,
+    )
+
     resolved = resolve_thinking_injection(protocol_options)
     if resolved is None:
+        if history_text_contains_entml_thinking(history_text):
+            return _format_forced_no_thinking_behavior(has_tools=has_tools)
         return ""
 
     injection_mode, max_length = resolved

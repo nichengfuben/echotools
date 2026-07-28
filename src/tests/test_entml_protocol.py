@@ -162,6 +162,41 @@ def test_thinking_prompt_off() -> None:
     ) == ""
 
 
+def test_thinking_prompt_off_with_history_thinking_injects_no_think_behavior() -> None:
+    history = (
+        "<user>\nfirst\n</user>\n"
+        "<assistant>\n<entml:thinking>\nplan\n</entml:thinking>\nok\n</assistant>"
+    )
+    section = build_entml_thinking_section(
+        {"thinking_mode": "off"},
+        history_text=history,
+    )
+    assert "<entml:thinking_mode>" not in section
+    assert "<thinking_behavior>" in section
+    assert "Do NOT output a <entml:thinking> block" in section
+    assert "Do not imitate or continue those blocks" in section
+
+
+def test_thinking_prompt_off_without_history_thinking_stays_empty() -> None:
+    history = "<user>\nfirst\n</user>\n<assistant>\nok\n</assistant>"
+    assert build_entml_thinking_section(
+        {"thinking_mode": "off"},
+        history_text=history,
+    ) == ""
+
+
+def test_thinking_prompt_off_history_thinking_no_tools() -> None:
+    history = "<assistant>\n<entml:thinking>\np\n</entml:thinking>\nhi\n</assistant>"
+    section = build_entml_thinking_section(
+        {"thinking_level": "none"},
+        has_tools=False,
+        history_text=history,
+    )
+    assert "<thinking_behavior>" in section
+    assert "<entml:invoke>" not in section
+    assert "Reply with visible text directly" in section
+
+
 def test_thinking_prompt_on_without_max_length() -> None:
     section = build_entml_thinking_section({"thinking_mode": "on"})
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
@@ -249,6 +284,77 @@ def test_inject_no_tools_with_thinking_on() -> None:
     assert "<entml:invoke>" not in result
     # thinking 块必须在 current_user_message 之后
     assert result.index("</current_user_message>") < result.index("<entml:thinking_mode>")
+
+
+def test_inject_thinking_off_history_with_entml_thinking_injects_no_think_behavior() -> None:
+    proto = get_protocol("entml")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            },
+        }
+    ]
+    msgs = [
+        {"role": "user", "content": "查北京"},
+        {
+            "role": "assistant",
+            "reasoning": "先查天气。",
+            "content": "好的。",
+        },
+        {"role": "user", "content": "那上海呢？"},
+    ]
+    prompt = inject_fncall(
+        msgs,
+        tools,
+        proto,
+        protocol_options={
+            "thinking_mode": "off",
+            "include_thinking_in_history": True,
+        },
+    )[0]["content"]
+    assert "<entml:conversation_history>" in prompt
+    assert "<entml:thinking>" in prompt.split("<current_user_message>")[0]
+    assert "<entml:thinking_mode>" not in prompt
+    assert "<thinking_behavior>" in prompt
+    assert "Do NOT output a <entml:thinking> block" in prompt
+    assert prompt.rstrip().endswith("</thinking_behavior>")
+
+
+def test_inject_thinking_off_history_without_entml_thinking_unchanged() -> None:
+    proto = get_protocol("entml")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            },
+        }
+    ]
+    msgs = [
+        {"role": "user", "content": "查北京"},
+        {"role": "assistant", "content": "好的。"},
+        {"role": "user", "content": "那上海呢？"},
+    ]
+    prompt = inject_fncall(
+        msgs,
+        tools,
+        proto,
+        protocol_options={"thinking_mode": "off"},
+    )[0]["content"]
+    assert "<entml:thinking_mode>" not in prompt
+    assert "<thinking_behavior>" not in prompt
 
 
 def test_render_prompt_thinking_after_current_user() -> None:

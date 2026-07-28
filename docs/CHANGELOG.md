@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.70] - 2026-07-28
+
+### Added
+
+- 思考关闭且 ``conversation_history`` 含 ``<entml:thinking>`` 历史块时，注入强制不思考的 ``<thinking_behavior>``（无 ``<entml:thinking_mode>``）；无历史思考时保持不注入
+
+## [2.3.69] - 2026-07-28
+
+### Fixed
+
+- 伪 history 剥离建立 ``<entml:invoke>`` 保护区：未闭合/块内夹 invoke 时不再误删真实工具调用
+- 流式 ``_fncall_buf`` 与正文分片时，invoke 前未闭合伪 ``<tool>`` 块正确剥离
+
+### Added
+
+- ``test_fake_history_markup_invoke_preserve`` + 语料 ``unclosed_fake_tool_before_invoke`` 等 3 条
+
+## [2.3.68] - 2026-07-28
+
+### Fixed
+
+- 伪 ``<tool>`` / ``<assistant>`` 成对块：流式分片丢换行时仍可按 ``<tool>\\n…\\n</tool>`` 剥离
+- ``partial_text`` 截断 ``</thinking><tool`` 等分片边界粘连的未收齐伪标签
+
+### Added
+
+- 模拟模型伪 history 语料 ``simulated_fake_history_markup_responses``（17 条）
+- ``test_fake_history_markup_batch`` / ``test_fake_history_markup_stream`` 全方位 batch/stream/char-by-char/分片回归
+
 ## [2.3.67] - 2026-07-28
 
 ### Fixed

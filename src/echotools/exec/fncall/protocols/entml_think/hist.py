@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Mapping, Optional
 
 REASONING_KEYS = ("reasoning", "reasoning_content", "reasoning_details")
@@ -13,6 +14,17 @@ _THINKING_BLOCK_TYPES = frozenset({"thinking", "reasoning", "redacted_thinking"}
 
 _THINKING_BLOCK_OPEN = "<entml:thinking>"
 _THINKING_BLOCK_CLOSE = "</entml:thinking>"
+_THINKING_OPEN_DETECT_RE = re.compile(
+    r"<entml:thinking\b",
+    re.IGNORECASE,
+)
+
+
+def history_text_contains_entml_thinking(history_text: str) -> bool:
+    """conversation_history 正文是否含 ``<entml:thinking>`` 历史思考块。"""
+    if not history_text or not history_text.strip():
+        return False
+    return _THINKING_OPEN_DETECT_RE.search(history_text) is not None
 
 
 def format_entml_thinking_history_block(text: str) -> str:
