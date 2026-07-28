@@ -170,15 +170,64 @@ def test_fault_thinking_close_without_invoke_is_plain_text() -> None:
     assert "answer" in clean
 
 
-def test_orphan_thinking_close_without_open_reclassified_from_visible() -> None:
-    """漏写 ``<entml:thinking>`` 仅有闭标签时，闭标签前正文应进 thinking 而非 visible。"""
+def test_orphan_thinking_close_without_open_stays_visible() -> None:
+    """无 ``<entml:thinking>`` 开标签时不应把正文重分类为 thinking。"""
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     text = "plan step one\nplan step two\n</entml:thinking>\nvisible reply\n"
     for i in range(0, len(text), 9):
         parser.feed(text[i : i + 9])
-    assert "plan step one" in parser.partial_thinking
+    assert "plan step one" in parser.partial_text
+    assert "plan step one" not in parser.partial_thinking
     assert "visible reply" in parser.partial_text
-    assert "</entml:thinking>" not in parser.partial_text
+
+
+def test_todolist_array_param_streams_as_json_array_not_string() -> None:
+    """array 参数在 partial_json 中必须是 JSON 数组，而非字符串。"""
+    import json
+
+    todo_tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "TodoList",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "todos": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "title": {"type": "string"},
+                                    "status": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                    "required": ["todos"],
+                },
+            },
+        },
+    ]
+    todos_json = '[{"title": "测试 Bash 工具", "status": "in_progress"}]'
+    text = (
+        "<entml:thinking>\nplan\n</entml:thinking>\n"
+        '<entml:invoke name="TodoList">\n'
+        f'<entml:parameter name="todos">{todos_json}</entml:parameter>\n'
+        "</entml:invoke>"
+    )
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=todo_tools)
+    merged = ""
+    for i in range(0, len(text), 5):
+        parser.feed(text[i : i + 5])
+        d = parser.consume_stream_delta()
+        if d:
+            merged += d[1]
+    parsed = json.loads(merged)
+    assert isinstance(parsed["todos"], list)
+    assert parsed["todos"][0]["title"] == "测试 Bash 工具"
+    _, calls = parser.finalize()
+    assert json.loads(calls[0]["function"]["arguments"]) == parsed
 
 
 def test_prose_invoke_mention_preserved_in_visible_text() -> None:

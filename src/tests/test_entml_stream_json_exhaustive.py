@@ -138,6 +138,49 @@ def test_incomplete_param_suffix_strips_markup() -> None:
     assert encode_streaming_invoke_json(body) == '{"contents": "ok"}'
 
 
+TODO_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "TodoList",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "todos": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "status": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+                "required": ["todos"],
+            },
+        },
+    }
+]
+
+
+def test_array_param_stream_matches_batch_parse() -> None:
+    todos_json = '[{"title": "测试 Bash 工具", "status": "in_progress"}]'
+    text = (
+        '<entml:invoke name="TodoList">\n'
+        f'<entml:parameter name="todos">{todos_json}</entml:parameter>\n'
+        "</entml:invoke>"
+    )
+    proto = get_protocol("entml")
+    _, batch_calls = proto.parse(text, TODO_TOOLS)
+    _, stream_calls, merged = _feed_stream(text, TODO_TOOLS, chunk=3)
+    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
+    stream_args = json.loads(stream_calls[0]["function"]["arguments"])
+    merged_args = json.loads(merged)
+    assert isinstance(batch_args["todos"], list)
+    assert batch_args == stream_args == merged_args
+
+
 def test_stream_delta_every_prefix_no_invalid_escape() -> None:
     text = (
         '<entml:invoke name="Write">\n'

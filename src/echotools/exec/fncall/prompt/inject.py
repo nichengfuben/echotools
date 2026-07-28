@@ -64,8 +64,8 @@ def build_tools_prompt(
     lang: str,
     user_system_prompt: str,
     history_text: str,
-    current_user_message: str,
     loop_detection_threshold: int,
+    current_user_message: Optional[str] = None,
     protocol_options: Optional[Dict[str, Any]] = None,
     history_has_tool_calls: bool = False,
 ) -> str:
@@ -153,7 +153,8 @@ def inject_fncall(
                 )
             if history_text.strip():
                 sections.append(format_entml_conversation_history(history_text))
-            sections.append(format_entml_current_user_message(current_user_message))
+            if current_user_message is not None:
+                sections.append(format_entml_current_user_message(current_user_message))
             # thinking 放在最后，超限截断时优先保留在 send_text 尾部
             thinking_section = build_entml_thinking_section(
                 protocol_options, has_tools=False
@@ -162,14 +163,17 @@ def inject_fncall(
                 sections.append(thinking_section)
             prompt = "\n\n".join(sections)
         else:
-            prompt = build_no_tools_prompt(history_text, current_user_message)
+            prompt = build_no_tools_prompt(
+                history_text, current_user_message or "",
+            )
         if dump_prompt:
             _maybe_dump_prompt(prompt, dump_dir)
         return [{"role": "user", "content": prompt}]
 
     prompt = build_tools_prompt(
         protocol, tools, normalized, lang, user_system_prompt,
-        history_text, current_user_message, loop_detection_threshold, protocol_options,
+        history_text, loop_detection_threshold, current_user_message,
+        protocol_options,
         history_has_tool_calls=history_contains_tool_calls(history_messages),
     )
     if dump_prompt:

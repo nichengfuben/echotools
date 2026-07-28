@@ -43,16 +43,19 @@ def _assistant_history_content_blocks(
 
 def split_last_user_message(
     normalized: List[Dict[str, Any]],
-) -> Tuple[List[Dict[str, Any]], str]:
-    last_user_idx: Optional[int] = None
-    for i in range(len(normalized) - 1, -1, -1):
-        if (normalized[i].get("role") or "user") == "user":
-            last_user_idx = i
-            break
-    if last_user_idx is None:
-        return normalized, ""
-    history = normalized[:last_user_idx] + normalized[last_user_idx + 1 :]
-    current = normalize_content(normalized[last_user_idx].get("content", ""))
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """拆分历史与当前用户消息。
+
+    末条 role 为 user → (prefix, content)，构建 ``<current_user_message>``；
+    否则整段作为 history，current 为 None。
+    """
+    if not normalized:
+        return [], None
+    last = normalized[-1]
+    if (last.get("role") or "user") != "user":
+        return normalized, None
+    history = normalized[:-1]
+    current = normalize_content(last.get("content", ""))
     return history, current
 
 

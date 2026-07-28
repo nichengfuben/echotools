@@ -193,15 +193,23 @@ class TestCoercionUnit:
     def test_coerce_by_type_hint(self, raw, hint, expected) -> None:
         assert coerce_entml_parameter_value(raw, type_hint=hint) == expected
 
-    def test_schema_wins_over_type_hint(self) -> None:
-        # schema 优先；hint 被忽略
+    def test_type_hint_overrides_tool_schema(self) -> None:
+        # 模型 parameter type 优先于工具 schema
         assert (
             coerce_entml_parameter_value(
                 "42",
                 schema={"type": "string"},
                 type_hint="int",
             )
-            == "42"
+            == 42
+        )
+        assert (
+            coerce_entml_parameter_value(
+                "3",
+                schema={"type": "integer"},
+                type_hint="str",
+            )
+            == "3"
         )
 
     def test_default_no_schema_keeps_scalars_as_str(self) -> None:
@@ -662,7 +670,9 @@ class TestBuildMechanisms:
     def test_format_tool_descs_structure(self) -> None:
         out = format_entml_tool_descs(RICH_TOOLS)
         assert "### rich_tool" in out
-        assert 'Description: "All scalar and container types.\\nLine two."' in out
+        assert (
+            "Description:\nAll scalar and container types.\nLine two."
+        ) in out
         assert '"properties"' in out
         assert out.index('"properties"') < out.index('"type"')
         assert "```json" in out

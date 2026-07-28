@@ -171,7 +171,7 @@ class EntmlProtocol(ToolProtocol):
         user_system_prompt: str = "",
         history_text: str = "",
         loop_warning: str = "",
-        current_user_message: str = "",
+        current_user_message: Optional[str] = None,
         protocol_options: Optional[Dict[str, Any]] = None,
         history_has_tool_calls: bool = False,
     ) -> str:
@@ -197,7 +197,8 @@ class EntmlProtocol(ToolProtocol):
         if loop_warning:
             sections.append(f"<loop_warning>\n{loop_warning}\n</loop_warning>")
 
-        sections.append(format_entml_current_user_message(current_user_message))
+        if current_user_message is not None:
+            sections.append(format_entml_current_user_message(current_user_message))
 
         # thinking 放在最后，超限截断时优先保留在 send_text 尾部
         thinking_section = build_entml_thinking_section(

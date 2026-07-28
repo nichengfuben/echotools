@@ -206,7 +206,20 @@ def split_entml_thinking(text: str) -> Tuple[str, str]:
 
     clean = THINKING_BLOCK_RE.sub(_collect, text)
     thinking = "\n".join(part.strip() for part in parts if part.strip())
-    return clean.strip(), thinking
+    return strip_orphan_thinking_close_prefix(clean.strip()), thinking
+
+
+def strip_orphan_thinking_close_prefix(text: str) -> str:
+    """去掉可见正文开头的 orphan ``</entml:thinking>``（流式分片边界）。"""
+    if not text:
+        return text
+    return re.sub(
+        r"^\s*</entml:thinking>\s*",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
 
 
 def _hold_prefix(buffer: str, tag: str) -> Tuple[str, str]:
@@ -243,22 +256,6 @@ class EntmlThinkingStreamFilter:
         self._fault_watch = False
         self._fault_buffer = ""
         self._thinking_started = False
-
-    def _resolve_orphan_thinking_close(self, out: List[Tuple[str, str]]) -> bool:
-        """仅有 ``</entml:thinking>`` 闭标签、无开标签时，将闭标签前 pending 视为 thinking。"""
-        close_at = self._pending.find(_THINKING_CLOSE)
-        if close_at < 0:
-            return False
-        if self._pending.find(_THINKING_OPEN_PREFIX) >= 0:
-            return False
-        before = self._pending[:close_at]
-        if before:
-            emitted = self._emit_thinking_piece(before)
-            if emitted:
-                out.append(("thinking", emitted))
-        self._pending = self._pending[close_at + len(_THINKING_CLOSE) :]
-        self._thinking_started = False
-        return True
 
     def in_open_thinking(self) -> bool:
         """思考块已开始且尚未收到 ``</entml:thinking>``（含开/闭标签分片 hold）。"""
@@ -405,9 +402,6 @@ class EntmlThinkingStreamFilter:
 
     def _feed_before_block(self, out: List[Tuple[str, str]]) -> bool:
         """开标签之前或尚未进入块；返回 False 表示应退出 feed 主循环。"""
-        if self._resolve_orphan_thinking_close(out):
-            return True
-
         open_at = self._pending.find(_THINKING_OPEN_PREFIX)
         if open_at < 0:
             safe, self._pending = _hold_prefix(self._pending, _THINKING_OPEN_PREFIX)

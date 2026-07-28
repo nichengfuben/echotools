@@ -49,10 +49,10 @@ def parse_invoke_args(
         args[pname] = coerce_entml_parameter_value(
             pval,
             pschema or None,
-            type_hint=type_hint if not pschema else None,
+            type_hint=type_hint,
         )
 
-    return coerce_entml_arguments(args, name, schema_index)
+    return args
 
 
 def parse_entml_tool_calls(

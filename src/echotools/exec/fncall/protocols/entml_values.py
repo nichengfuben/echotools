@@ -32,18 +32,31 @@ def _schema_from_type_hint(type_hint: str) -> Optional[Dict[str, Any]]:
     return schema
 
 
+def resolve_entml_parameter_schema(
+    schema: Optional[Dict[str, Any]] = None,
+    type_hint: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """解析参数 effective schema：模型 ``type`` 属性优先，否则用工具 schema。"""
+    hint_schema = _schema_from_type_hint(type_hint) if type_hint else None
+    if hint_schema:
+        return hint_schema
+    if schema:
+        return schema
+    return None
+
+
 def coerce_entml_parameter_value(
     raw: str,
     schema: Optional[Dict[str, Any]] = None,
     type_hint: Optional[str] = None,
 ) -> Any:
-    """将 entml 参数文本按 schema、type 属性或默认 str 规则转为 Python 值。"""
-    if schema:
-        return _coerce_param_value(raw, schema)
+    """将 entml 参数文本转为 Python 值。
 
-    hint_schema = _schema_from_type_hint(type_hint) if type_hint else None
-    if hint_schema:
-        return _coerce_param_value(raw, hint_schema)
+    类型优先级：parameter 上的 ``type`` 属性 > 工具 JSON Schema > 默认 string。
+    """
+    effective = resolve_entml_parameter_schema(schema, type_hint)
+    if effective:
+        return _coerce_param_value(raw, effective)
 
     stripped = (raw or "").strip()
     if not stripped:

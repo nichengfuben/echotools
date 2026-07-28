@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from collections import deque
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from echotools.exec.protocol.base import ToolProtocol
 
@@ -53,7 +54,9 @@ class FncallStreamParser:
         self._thinking_filter = _make_thinking_filter(protocol)
         self._emitted_invoke_count: int = 0
         self._json_stream_encoder = None
-        self._pending_stream_delta: Optional[Tuple[str, str]] = None
+        self._pending_stream_deltas: Deque[Tuple[str, str]] = deque()
+        self._stream_invoke_emitted: List[str] = []
+        self._schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None
 
         # 三种情况：
         #   1. 协议实现了 get_stream_end_tags() 且返回非空列表  → 用声明的结束标记
@@ -78,6 +81,13 @@ class FncallStreamParser:
             elif tag.startswith("[") and not tag.startswith("[/"):
                 inner = tag.lstrip("[").split("]")[0]
                 self._end_tags.append(f"[/{inner}]")
+
+    def _get_schema_index(self) -> Optional[Dict[str, Dict[str, Dict[str, Any]]]]:
+        if self._schema_index is None and self._tools:
+            from echotools.exec.fncall.shared.coercion import _build_param_schema_index
+
+            self._schema_index = _build_param_schema_index(self._tools)
+        return self._schema_index
 
     def _emit_text(self, text: str) -> None:
         """将文本路由给思考过滤器（若启用）或直接追加到 _text_parts。"""
@@ -332,12 +342,116 @@ class FncallStreamParser:
                 return True
         return False
 
+    def _stream_active_invoke_slot(self) -> int:
+        """当前正在流式编码的 invoke 序号（0-based）。"""
+        from echotools.exec.fncall.protocols.entml_patterns import INVOKE_RE
+        from echotools.exec.fncall.protocols.entml_stream_json import (
+            _INVOKE_CLOSE,
+            _INVOKE_OPEN_PREFIX,
+            split_invoke_open,
+        )
+
+        complete = list(INVOKE_RE.finditer(self._fncall_buf))
+        complete_n = len(complete)
+        parsed = split_invoke_open(self._fncall_buf)
+        if parsed is None:
+            return max(0, complete_n - 1)
+        _name, body_start = parsed
+        body = self._fncall_buf[body_start:]
+        if _INVOKE_CLOSE in body:
+            return max(0, complete_n - 1)
+        open_pos = self._fncall_buf.rfind(_INVOKE_OPEN_PREFIX)
+        if complete and open_pos >= complete[-1].end():
+            return complete_n
+        return max(0, complete_n - 1)
+
+    def _merge_or_append_pending_delta(self, name: str, piece: str) -> None:
+        if not piece:
+            return
+        if self._pending_stream_deltas and self._pending_stream_deltas[-1][0] == name:
+            prev_name, prev_piece = self._pending_stream_deltas[-1]
+            self._pending_stream_deltas[-1] = (prev_name, prev_piece + piece)
+        else:
+            self._pending_stream_deltas.append((name, piece))
+
+    def _pending_body_for_name(self, name: str) -> str:
+        return "".join(p for n, p in self._pending_stream_deltas if n == name)
+
+    def _track_stream_delta(self, name: str, piece: str) -> None:
+        slot = self._stream_active_invoke_slot()
+        while len(self._stream_invoke_emitted) <= slot:
+            self._stream_invoke_emitted.append("")
+        self._stream_invoke_emitted[slot] += piece
+        self._merge_or_append_pending_delta(name, piece)
+
+    def _ensure_ready_invoke_stream_tails(
+        self, ready: List[Dict[str, Any]]
+    ) -> None:
+        """invoke ready 时补齐 partial_json 尾部，避免大 chunk 下缺 ``}``。"""
+        if not ready:
+            return
+        base = self._emitted_invoke_count - len(ready)
+        multi = len(ready) > 1
+        if multi:
+            self._pending_stream_deltas.clear()
+        for offset, call in enumerate(ready):
+            idx = base + offset
+            while len(self._stream_invoke_emitted) <= idx:
+                self._stream_invoke_emitted.append("")
+            final = call["function"]["arguments"]
+            prev = self._stream_invoke_emitted[idx]
+            if final.startswith(prev):
+                tail = final[len(prev) :]
+            elif not prev:
+                pname = call["function"]["name"]
+                pending_body = self._pending_body_for_name(pname) if not multi else ""
+                if final.startswith(pending_body):
+                    tail = final[len(pending_body) :]
+                elif not pending_body:
+                    tail = final
+                else:
+                    tail = ""
+            else:
+                tail = final if multi else ""
+            if tail:
+                name = call["function"]["name"]
+                if multi:
+                    self._pending_stream_deltas.append((name, tail))
+                else:
+                    self._merge_or_append_pending_delta(name, tail)
+            self._stream_invoke_emitted[idx] = final
+        if self._json_stream_encoder is not None:
+            from echotools.exec.fncall.protocols.entml_stream_json import (
+                _INVOKE_CLOSE,
+                build_streaming_json_snapshot,
+                split_invoke_open,
+            )
+
+            parsed = split_invoke_open(self._fncall_buf)
+            if parsed:
+                name, body_start = parsed
+                body = self._fncall_buf[body_start:]
+
+                if _INVOKE_CLOSE not in body:
+                    snap = build_streaming_json_snapshot(
+                        body,
+                        tool_name=name,
+                        schema_index=self._get_schema_index(),
+                    )
+                    self._json_stream_encoder.set_tool_context(
+                        name, self._get_schema_index()
+                    )
+                    self._json_stream_encoder._emitted = snap
+                else:
+                    self._json_stream_encoder.reset()
+            else:
+                self._json_stream_encoder.reset()
+
     def _sync_json_stream_encoder_emitted(self) -> None:
         """invoke 已 ready 后对齐 encoder，避免下一 chunk 重发整段 partial_json。"""
         if self._json_stream_encoder is None:
             return
         from echotools.exec.fncall.protocols.entml_stream_json import (
-            build_streaming_json_snapshot,
             split_invoke_open,
         )
 
@@ -345,29 +459,9 @@ class FncallStreamParser:
         if not parsed:
             self._json_stream_encoder.reset()
             return
-        _, body_start = parsed
+        name, body_start = parsed
         body = self._fncall_buf[body_start:]
-        self._json_stream_encoder._emitted = build_streaming_json_snapshot(body)
-
-    def _reclassify_orphan_thinking_close_in_text(self) -> None:
-        """将误进 visible 的「无开标签 + 闭标签」思考正文移回 thinking。"""
-        if self._thinking_filter is not None and self._thinking_filter.in_open_thinking():
-            return
-        from echotools.exec.fncall.protocols.entml_think.parse import (
-            _THINKING_CLOSE,
-            _THINKING_OPEN_PREFIX,
-        )
-
-        visible = "".join(self._text_parts)
-        if not visible or _THINKING_OPEN_PREFIX in visible:
-            return
-        close_at = visible.find(_THINKING_CLOSE)
-        if close_at < 0:
-            return
-        thinking_body = visible[:close_at]
-        after = visible[close_at + len(_THINKING_CLOSE) :].lstrip("\n")
-        self._thinking_parts.append(thinking_body)
-        self._text_parts = [after] if after else []
+        self._json_stream_encoder.poll(body)
 
     def feed(self, chunk: str) -> List[Dict[str, Any]]:
         """喂入新的流式文本块。
@@ -386,11 +480,12 @@ class FncallStreamParser:
         if self._state != self.DONE:
             self._feed_waiting(chunk)
 
-        self._pending_stream_delta = self._poll_streaming_tool_input_delta()
+        polled = self._poll_streaming_tool_input_delta()
+        if polled:
+            self._track_stream_delta(polled[0], polled[1])
         ready = self.get_ready_tool_calls()
-        if ready and self._json_stream_encoder is not None:
-            self._sync_json_stream_encoder_emitted()
-        self._reclassify_orphan_thinking_close_in_text()
+        if ready:
+            self._ensure_ready_invoke_stream_tails(ready)
         return ready
 
     def _poll_streaming_tool_input_delta(self) -> Optional[Tuple[str, str]]:
@@ -399,8 +494,11 @@ class FncallStreamParser:
             return None
         if self._state not in (self.IN_FUNCTION_CALLS,):
             return None
+        from echotools.exec.fncall.protocols.entml_patterns import INVOKE_RE
         from echotools.exec.fncall.protocols.entml_stream_json import (
+            _INVOKE_CLOSE,
             EntmlInvokeJsonStreamEncoder,
+            build_streaming_json_snapshot,
             split_invoke_open,
         )
 
@@ -409,18 +507,43 @@ class FncallStreamParser:
             return None
         name, body_start = parsed
         body = self._fncall_buf[body_start:]
+        complete = list(INVOKE_RE.finditer(self._fncall_buf))
+        complete_n = len(complete)
+        if _INVOKE_CLOSE in body:
+            if complete_n <= self._emitted_invoke_count:
+                return None
+            # 同一 chunk 内多个 invoke 同时闭合时，由 ensure 按序入队，避免只 poll 最后一个
+            if complete_n - self._emitted_invoke_count > 1:
+                return None
+            slot = max(0, complete_n - 1)
+            schema_index = self._get_schema_index()
+            final = build_streaming_json_snapshot(
+                body,
+                tool_name=name,
+                schema_index=schema_index,
+            )
+            while len(self._stream_invoke_emitted) <= slot:
+                self._stream_invoke_emitted.append("")
+            if self._stream_invoke_emitted[slot] == final:
+                return None
+        schema_index = self._get_schema_index()
         if self._json_stream_encoder is None:
-            self._json_stream_encoder = EntmlInvokeJsonStreamEncoder()
+            self._json_stream_encoder = EntmlInvokeJsonStreamEncoder(
+                tool_name=name,
+                schema_index=schema_index,
+            )
+        else:
+            self._json_stream_encoder.set_tool_context(name, schema_index)
         delta = self._json_stream_encoder.poll(body)
         if not delta:
             return None
         return (name, delta)
 
     def consume_stream_delta(self) -> Optional[Tuple[str, str]]:
-        """取出本轮 ``feed`` 产生的 streaming partial_json 增量。"""
-        delta = self._pending_stream_delta
-        self._pending_stream_delta = None
-        return delta
+        """取出本轮 ``feed`` 产生的 streaming partial_json 增量（FIFO，可多段）。"""
+        if not self._pending_stream_deltas:
+            return None
+        return self._pending_stream_deltas.popleft()
 
     @property
     def streaming_invoke_closed(self) -> bool:
@@ -438,7 +561,6 @@ class FncallStreamParser:
         if self.streaming_invoke_closed:
             return None
         from echotools.exec.fncall.protocols.entml_stream_json import (
-            _INVOKE_CLOSE,
             EntmlInvokeJsonStreamEncoder,
             build_streaming_json_snapshot,
             split_invoke_open,
@@ -449,12 +571,23 @@ class FncallStreamParser:
             return None
         name, body_start = parsed
         body = self._fncall_buf[body_start:]
-        snapshot = build_streaming_json_snapshot(body + _INVOKE_CLOSE)
+        schema_index = self._get_schema_index()
+        snapshot = build_streaming_json_snapshot(
+            body,
+            tool_name=name,
+            schema_index=schema_index,
+            force_close=True,
+        )
         if not snapshot:
             return None
         if self._json_stream_encoder is None:
-            self._json_stream_encoder = EntmlInvokeJsonStreamEncoder()
-        delta = self._json_stream_encoder.poll(body + _INVOKE_CLOSE)
+            self._json_stream_encoder = EntmlInvokeJsonStreamEncoder(
+                tool_name=name,
+                schema_index=schema_index,
+            )
+        else:
+            self._json_stream_encoder.set_tool_context(name, schema_index)
+        delta = self._json_stream_encoder.poll(body, force_close=True)
         if not delta:
             return None
         return (name, delta)

@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.60] - 2026-07-28
+
+### Changed
+
+- ``split_last_user_message``：移除回声启发式；仅末条 role 为 ``user`` 时构建 ``<current_user_message>``，否则全部归入 ``<entml:conversation_history>``
+
+## [2.3.58] - 2026-07-28
+
+### Fixed
+
+- entml 工具 parameters JSON：``description`` 字段改为可读文本（内嵌引号不再输出 ``\\"``，换行为物理换行）；``pattern`` 等非 description 字段保持 JSON 转义
+
+## [2.3.57] - 2026-07-28
+
+### Fixed
+
+- entml prompt：仅当消息列表**最后一条**为 ``user`` 时才构建 ``<current_user_message>``；末条为 assistant/tool 等时，全部内容归入 ``<entml:conversation_history>``，避免用户消息被误提为 current 且其后 assistant 轮次顺序错乱
+
+## [2.3.56] - 2026-07-28
+
+### Fixed
+
+- entml 工具 Description：字面量 ``\\n`` 转为真实换行；``\\_`` / ``\\*`` 还原；改为 ``Description:\\n{正文}`` 纯文本排版，不再包 JSON 字符串引号
+
+## [2.3.55] - 2026-07-28
+
+### Fixed
+
+- 流式 ``consume_stream_delta``：pending 改为 FIFO 队列，同一 ``feed`` 可产出多段 delta（并行多 invoke 不再只保留最后一段）
+- 同一 chunk 内多个 ``</entml:invoke>`` 同时闭合时跳过 poll，由 ``_ensure_ready_invoke_stream_tails`` 按 invoke 顺序入队，避免 JSON 块顺序颠倒或漏发第一个 tool
+
+## [2.3.54] - 2026-07-28
+
+### Fixed
+
+- 流式 partial_json：array/object 参数按 schema 原样嵌入 JSON（``todos`` 等为数组而非字符串），修复 TodoList 等 ``/todos must be array`` 校验失败
+- 流式中断时 ``complete_stream_delta_if_needed`` 用 ``force_close`` 补齐合法 JSON 尾缀
+- thinking 仅在出现 ``<entml:thinking>`` 开标签时解析；移除无开标签 orphan 闭标签重分类
+
 ## [2.3.53] - 2026-07-28
 
 ### Fixed

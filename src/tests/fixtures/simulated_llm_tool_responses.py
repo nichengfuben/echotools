@@ -25,6 +25,10 @@ class SimulatedCase:
     expect_thinking: Optional[str] = None
     # 若为 False，表示本条允许解析失败（仍不得标签泄露）
     expect_success: bool = True
+    # 模型输出分支标签（用于矩阵测试分组）
+    branch: str = "misc"
+    # 除 TOOLS 外还需挂载的工具 schema 名
+    extra_tools: tuple = ()
 
 
 TOOLS: List[Dict[str, Any]] = [
@@ -95,11 +99,105 @@ TOOLS: List[Dict[str, Any]] = [
     },
 ]
 
+# Claude Code / rogator 链路常见工具（不在默认 TOOLS 内）
+AGENT_TOOLS: List[Dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_time",
+            "description": "Get current time",
+            "parameters": {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "Write",
+            "description": "Write a file",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "contents": {"type": "string"},
+                },
+                "required": ["file_path", "contents"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "Bash",
+            "description": "Run bash",
+            "parameters": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "PowerShell",
+            "description": "Run PowerShell",
+            "parameters": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "TodoList",
+            "description": "Manage todos",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "todos": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "status": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+                "required": ["todos"],
+            },
+        },
+    },
+]
+
+_TOOL_BY_NAME: Dict[str, Dict[str, Any]] = {
+    t["function"]["name"]: t for t in TOOLS + AGENT_TOOLS
+}
+
+
+def tools_for_case(case: SimulatedCase) -> List[Dict[str, Any]]:
+    """返回解析/流式测试应使用的完整 tools 列表。"""
+    names = {t["function"]["name"] for t in TOOLS}
+    out = list(TOOLS)
+    for name in case.extra_tools:
+        if name not in names and name in _TOOL_BY_NAME:
+            out.append(_TOOL_BY_NAME[name])
+            names.add(name)
+    return out
+
 
 SIMULATED_LLM_RESPONSES: List[SimulatedCase] = [
     SimulatedCase(
         id="canonical_bare_invoke",
         description="规范裸 invoke，无 thinking",
+        branch="canonical_bare",
         response=(
             "我先查一下杭州天气。\n"
             '<entml:invoke name="get_weather">\n'
@@ -114,6 +212,7 @@ SIMULATED_LLM_RESPONSES: List[SimulatedCase] = [
     SimulatedCase(
         id="parallel_two_tools_bare",
         description="规范裸 invoke 并行两工具（与提示词示例一致）",
+        branch="parallel_multi_invoke",
         response=(
             "稍等，我同时查天气和景点。\n"
             '<entml:invoke name="get_weather">\n'
@@ -481,11 +580,222 @@ SIMULATED_LLM_RESPONSES: List[SimulatedCase] = [
         expect_args=[{"city": "杭州", "unit": "c"}],
         expect_clean_substrings=["参考历史：", "[get_weather: 杭州 | c]", "我再确认一次实时天气。"],
     ),
+    # --- 模型分支：Claude Code / rogator 常见 agent 工具 ---
+    SimulatedCase(
+        id="agent_write_windows_path",
+        description="Write：Windows 绝对路径 + 含引号 contents",
+        branch="agent_write",
+        extra_tools=("Write",),
+        response=(
+            "写入文件。\n"
+            '<entml:invoke name="Write">\n'
+            '<entml:parameter name="file_path">C:\\Users\\dev\\project\\main.py</entml:parameter>\n'
+            '<entml:parameter name="contents">print("hello")</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["Write"],
+        expect_args=[
+            {
+                "file_path": "C:\\Users\\dev\\project\\main.py",
+                "contents": 'print("hello")',
+            }
+        ],
+        expect_clean_substrings=["写入文件。"],
+    ),
+    SimulatedCase(
+        id="agent_bash_pipeline",
+        description="Bash：管道 + 引号 + 反斜杠",
+        branch="agent_bash",
+        extra_tools=("Bash",),
+        response=(
+            '<entml:invoke name="Bash">\n'
+            '<entml:parameter name="command">cd /tmp && grep -r "foo\\bar" . | head -5</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["Bash"],
+        expect_args=[{"command": 'cd /tmp && grep -r "foo\\bar" . | head -5'}],
+    ),
+    SimulatedCase(
+        id="agent_powershell_cmdlet",
+        description="PowerShell：Write-Output + 路径",
+        branch="agent_powershell",
+        extra_tools=("PowerShell",),
+        response=(
+            '<entml:invoke name="PowerShell">\n'
+            '<entml:parameter name="command">Write-Output "C:\\Users\\dev"</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["PowerShell"],
+        expect_args=[{"command": 'Write-Output "C:\\Users\\dev"'}],
+    ),
+    SimulatedCase(
+        id="agent_todolist_array",
+        description="TodoList：todos 必须为 JSON array",
+        branch="agent_todolist",
+        extra_tools=("TodoList",),
+        response=(
+            '<entml:invoke name="TodoList">\n'
+            '<entml:parameter name="todos">[{"title": "测试 Bash 工具", "status": "in_progress"}]</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["TodoList"],
+        expect_args=[
+            {"todos": [{"title": "测试 Bash 工具", "status": "in_progress"}]},
+        ],
+    ),
+    SimulatedCase(
+        id="agent_parallel_write_bash",
+        description="并行 Write + Bash（规范双 invoke）",
+        branch="parallel_agent",
+        extra_tools=("Write", "Bash"),
+        response=(
+            '<entml:invoke name="Write">\n'
+            '<entml:parameter name="file_path">notes.txt</entml:parameter>\n'
+            '<entml:parameter name="contents">ok</entml:parameter>\n'
+            "</entml:invoke>\n"
+            '<entml:invoke name="Bash">\n'
+            '<entml:parameter name="command">echo ok</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["Write", "Bash"],
+        expect_args=[
+            {"file_path": "notes.txt", "contents": "ok"},
+            {"command": "echo ok"},
+        ],
+    ),
+    SimulatedCase(
+        id="agent_thinking_then_bash",
+        description="thinking 闭合后再 Bash",
+        branch="thinking_then_agent",
+        extra_tools=("Bash",),
+        response=(
+            "<entml:thinking>\n需要先执行 echo。\n</entml:thinking>\n"
+            "开始执行。\n"
+            '<entml:invoke name="Bash">\n'
+            '<entml:parameter name="command">echo hello</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["Bash"],
+        expect_args=[{"command": "echo hello"}],
+        expect_clean_substrings=["开始执行。"],
+        expect_thinking="需要先执行 echo。",
+    ),
+    SimulatedCase(
+        id="agent_bash_inside_thinking",
+        description="thinking 块内 invoke（流式 hold 后仍应解析）",
+        branch="thinking_invoke_hold",
+        extra_tools=("Bash",),
+        response=(
+            "<entml:thinking>\n计划：\n"
+            '<entml:invoke name="Bash">\n'
+            '<entml:parameter name="command">echo in-thinking</entml:parameter>\n'
+            "</entml:invoke>\n"
+            "</entml:thinking>\n"
+            "可见回复。"
+        ),
+        expect_names=["Bash"],
+        expect_args=[{"command": "echo in-thinking"}],
+        expect_clean_substrings=["可见回复。"],
+        expect_thinking="计划：",
+    ),
+    SimulatedCase(
+        id="prompt_canonical_two_invoke_template",
+        description="与提示词模板完全一致的双 invoke 串",
+        branch="canonical_bare",
+        response=(
+            '<entml:invoke name="get_weather">\n'
+            '<entml:parameter name="city">上海</entml:parameter>\n'
+            "</entml:invoke>\n"
+            '<entml:invoke name="search_web">\n'
+            '<entml:parameter name="query">上海 天气</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["get_weather", "search_web"],
+        expect_args=[{"city": "上海"}, {"query": "上海 天气"}],
+    ),
+    SimulatedCase(
+        id="model_type_str_overrides_schema_int",
+        description="模型 type=str 优先于 schema integer",
+        branch="type_hint_priority",
+        response=(
+            '<entml:invoke name="get_weather">\n'
+            '<entml:parameter name="city">杭州</entml:parameter>\n'
+            '<entml:parameter type="str" name="days">3</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["get_weather"],
+        expect_args=[{"city": "杭州", "days": "3"}],
+    ),
+    SimulatedCase(
+        id="model_type_int_on_limit",
+        description="模型 type=int 与 schema integer 一致",
+        branch="type_hint_priority",
+        response=(
+            '<entml:invoke name="search_web">\n'
+            '<entml:parameter type="int" name="limit">7</entml:parameter>\n'
+            "</entml:invoke>"
+        ),
+        expect_names=["search_web"],
+        expect_args=[{"limit": 7}],
+    ),
+    SimulatedCase(
+        id="real_world_thinking_then_get_time",
+        description="真实语料：thinking 长文 + 正文推荐 + get\\_time invoke",
+        branch="thinking_then_agent",
+        extra_tools=("get_time",),
+        response=(
+            "<entml:thinking>\n\n"
+            "用户要求给出上午和下午各一个景点，同时并行调用工具获取当前时间。"
+            "根据历史对话，我已经知道了杭州天气和几个热门景点。"
+            "现在需要给出两个具体建议，并调用 get\\_time 工具确认当前时间。"
+            "我会并行调用 get\\_time 获取当前时间，然后给出推荐。\n\n"
+            "</entml:thinking>\n\n\n\n"
+            "好的，我推荐上午去**灵隐寺**（清净幽深，适合清晨游览），"
+            "下午去**雷峰塔**（俯瞰西湖全景，傍晚时分尤其美）。"
+            "我先确认一下当前时间，方便您安排行程。\n\n\n\n"
+            '<entml:invoke name="get\\_time">\n\n'
+            '<entml:parameter name="city">杭州</entml:parameter>\n\n'
+            "</entml:invoke>\n"
+        ),
+        expect_names=["get_time"],
+        expect_args=[{"city": "杭州"}],
+        expect_clean_substrings=["灵隐寺", "雷峰塔", "确认一下当前时间"],
+        expect_thinking="get\\_time",
+    ),
 ]
+
+# 矩阵测试必须覆盖的分支
+REQUIRED_MODEL_BRANCHES = frozenset(
+    {
+        "canonical_bare",
+        "parallel_multi_invoke",
+        "parallel_agent",
+        "agent_write",
+        "agent_bash",
+        "agent_powershell",
+        "agent_todolist",
+        "thinking_then_agent",
+        "thinking_invoke_hold",
+        "type_hint_priority",
+    }
+)
 
 
 def iter_simulated_cases():
     return list(SIMULATED_LLM_RESPONSES)
+
+
+def iter_cases_with_tools() -> List[SimulatedCase]:
+    """至少解析出一个 tool 的语料。"""
+    return [c for c in SIMULATED_LLM_RESPONSES if c.expect_names]
+
+
+def iter_cases_by_branch(branch: str) -> List[SimulatedCase]:
+    return [c for c in SIMULATED_LLM_RESPONSES if c.branch == branch]
+
+
+def covered_model_branches() -> frozenset:
+    return frozenset(c.branch for c in SIMULATED_LLM_RESPONSES if c.expect_names)
 
 
 def iter_bare_invoke_cases():

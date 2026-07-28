@@ -299,6 +299,47 @@ def test_inject_with_history_entml_tags() -> None:
     assert "<current_user_message>\nnew\n</current_user_message>" in content
 
 
+def test_inject_no_current_user_when_last_is_assistant() -> None:
+    """末条非 user 时：用户消息进 history，不构建 <current_user_message>。"""
+    proto = get_protocol("entml")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search",
+                "description": "Search",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+    msgs = [
+        {"role": "user", "content": "old question"},
+        {"role": "assistant", "content": "partial reply"},
+        {"role": "user", "content": "follow up"},
+        {"role": "assistant", "content": "still composing"},
+    ]
+    content = inject_fncall(msgs, tools, proto)[0]["content"]
+    assert "<entml:conversation_history>" in content
+    assert "<user>\nfollow up\n</user>" in content
+    assert "<assistant>\nstill composing\n</assistant>" in content
+    assert "<current_user_message>" not in content
+
+
+def test_inject_thinking_after_history_when_no_current_user() -> None:
+    proto = get_protocol("entml")
+    msgs = [
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": "a"},
+    ]
+    content = inject_fncall(
+        msgs, [], proto, protocol_options={"thinking_mode": "on"},
+    )[0]["content"]
+    assert "<current_user_message>" not in content
+    assert content.index("<entml:conversation_history>") < content.index(
+        "<entml:thinking_mode>"
+    )
+
+
 def test_entml_history_clarify_always_english() -> None:
     proto = get_protocol("entml")
     tools = [
@@ -572,7 +613,7 @@ def test_entml_instruction_matches_spec_format() -> None:
     assert "```text" not in prompt
     assert "### ask_user_input_v0" in prompt
     assert "**ask_user_input_v0**" not in prompt
-    assert 'Description: "Ask user"' in prompt
+    assert "Description:\nAsk user" in prompt
     assert '"name": "ask_user_input_v0"' not in prompt
     assert "<entml:function_calls>" not in prompt
     assert '<entml:invoke name="$FUNCTION_NAME">' in prompt
