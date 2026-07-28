@@ -53,6 +53,27 @@ _BASH_TOOLS = [
     }
 ]
 
+_GREP_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "Grep",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string"},
+                    "path": {"type": "string"},
+                    "glob": {"type": "string"},
+                    "output_mode": {"type": "string"},
+                    "-n": {"type": "boolean"},
+                    "head_limit": {"type": "integer"},
+                },
+                "required": ["pattern"],
+            },
+        },
+    }
+]
+
 _AGENT_TOOLS = [
     {
         "type": "function",
@@ -206,6 +227,22 @@ def _corpus_cases() -> List[CorpusCase]:
             expect_call_names=("Read",),
             expect_display_contains=("原因", "PoW"),
         ),
+        CorpusCase(
+            id="req-1785260732_thinking_then_bash_only",
+            path=_QWEN_LOGS / "req-1785260732-7dffd1cd4122.txt",
+            tools=_BASH_TOOLS,
+            expect_call_names=("Bash",),
+            expect_display_contains=(),
+            expect_thinking_nonempty=True,
+        ),
+        CorpusCase(
+            id="req-1785261134_bare_parameter_grep",
+            path=_QWEN_LOGS / "req-1785261134-166e5f5aae53.txt",
+            tools=_GREP_TOOLS,
+            expect_call_names=("Grep",),
+            expect_display_contains=(),
+            expect_thinking_nonempty=True,
+        ),
     ]
     return [c for c in candidates if c.path.is_file()]
 
@@ -356,3 +393,106 @@ def test_req_1785259051_read_scalar_and_no_angle_leak() -> None:
     assert len(stream_calls) == 1
     assert stream_clean.strip() == batch_clean.strip()
     assert len(stream_thinking) > 100
+
+
+def _assert_no_partial_angle_leak(
+    parser: FncallStreamParser,
+    *,
+    case_id: str,
+    step: str,
+) -> None:
+    pt = parser.partial_text
+    assert pt not in ("<", "<e", "<en", "<ent", "<entm", "<entml", "<entml:"), (
+        f"{case_id}/{step}: partial_text leaked angle prefix: {pt!r}"
+    )
+    assert _TAG_LEAK_RE.search(pt) is None, (
+        f"{case_id}/{step}: entml tag in partial_text: {pt!r}"
+    )
+    if pt.strip() in ("<", ">"):
+        pytest.fail(f"{case_id}/{step}: lone markup char in partial_text: {pt!r}")
+
+
+def test_req_1785260732_thinking_bash_no_partial_leak() -> None:
+    """回归：thinking+tool 无可见回复时，流式 partial_text 不得泄漏 ``<`` / orphan 闭标签。"""
+    path = _QWEN_LOGS / "req-1785260732-7dffd1cd4122.txt"
+    if not path.is_file():
+        pytest.skip("corpus not available")
+    text = path.read_text(encoding="utf-8")
+    batch_clean, batch_calls = _batch_parse(text, _BASH_TOOLS)
+    assert len(batch_calls) == 1
+    assert batch_calls[0]["function"]["name"] == "Bash"
+    assert "GetCompletion" in batch_calls[0]["function"]["arguments"]
+    assert batch_clean.strip() == ""
+    assert "entml:" not in batch_clean.lower()
+
+    for chunk_size in (1, 3, 7, 17, 64):
+        parser = FncallStreamParser(protocol=get_protocol("entml"), tools=_BASH_TOOLS)
+        if chunk_size <= 0:
+            parser.feed(text)
+            _assert_no_partial_angle_leak(
+                parser, case_id="req-1785260732", step="whole"
+            )
+        else:
+            for i in range(0, len(text), chunk_size):
+                parser.feed(text[i : i + chunk_size])
+                _assert_no_partial_angle_leak(
+                    parser,
+                    case_id="req-1785260732",
+                    step=f"chunk{chunk_size}@{i}",
+                )
+        stream_clean, stream_calls = parser.finalize()
+        stream_thinking = parser.partial_thinking
+        assert len(stream_calls) == 1
+        assert stream_calls[0]["function"]["name"] == "Bash"
+        assert stream_clean.strip() == batch_clean.strip()
+        assert len(stream_thinking) > 500
+
+    # Qwen SSE 分 phase：thinking 已走 reasoning 通道，answer 以 orphan 闭标签开头
+    import re
+
+    m = re.match(r"<entml:thinking>[\s\S]*?</entml:thinking>([\s\S]*)", text)
+    assert m
+    answer_only = "</entml:thinking>" + m.group(1)
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=_BASH_TOOLS)
+    for i, ch in enumerate(answer_only):
+        parser.feed(ch)
+        _assert_no_partial_angle_leak(
+            parser, case_id="req-1785260732/qwen-split", step=f"@{i}"
+        )
+    stream_clean, stream_calls = parser.finalize()
+    assert len(stream_calls) == 1
+    assert stream_clean.strip() == ""
+
+
+def test_req_1785261134_bare_parameter_stream_json_parity() -> None:
+    """回归：裸 ``<parameter>`` 流式 partial_json 不得把 ``</parameter>`` 拼进 JSON 值。"""
+    path = _QWEN_LOGS / "req-1785261134-166e5f5aae53.txt"
+    if not path.is_file():
+        pytest.skip("corpus not available")
+    text = path.read_text(encoding="utf-8")
+    batch_clean, batch_calls = _batch_parse(text, _GREP_TOOLS)
+    assert len(batch_calls) == 1
+    assert batch_calls[0]["function"]["name"] == "Grep"
+    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert "createConnectTransport" in batch_args["pattern"]
+    assert batch_args["-n"] is True
+    assert batch_clean.strip() == ""
+
+    for chunk_size in (1, 7, 17, 64):
+        parser = FncallStreamParser(protocol=get_protocol("entml"), tools=_GREP_TOOLS)
+        merged = ""
+        for i in range(0, len(text), chunk_size):
+            parser.feed(text[i : i + chunk_size])
+            while True:
+                delta = parser.consume_stream_delta()
+                if not delta:
+                    break
+                merged += delta[1]
+            assert "</parameter>" not in merged, (
+                f"chunk={chunk_size}@{i}: </parameter> leaked into stream JSON"
+            )
+        stream_clean, stream_calls = parser.finalize()
+        assert len(stream_calls) == 1
+        assert merged == stream_calls[0]["function"]["arguments"]
+        assert json.loads(merged) == batch_args
+        assert stream_clean.strip() == batch_clean.strip()

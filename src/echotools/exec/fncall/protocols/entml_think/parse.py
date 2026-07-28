@@ -18,6 +18,10 @@ _THINKING_OPEN_PREFIX = "<entml:thinking"
 _PLAIN_THINKING_OPEN_PREFIX = "<thinking"
 _THINKING_CLOSE = "</entml:thinking>"
 _FAULT_THINKING_CLOSE = "</thinking>"
+_ORPHAN_CLOSE_PREFIXES = (
+    "</entml:thinking",
+    "</thinking",
+)
 # 与 thinking 共享 `<entml:` 前缀的其它标签：歧义 holdback 应交由工具流式状态机处理
 _AMBIGUOUS_ENTML_PREFIXES = (
     "<entml:invoke",
@@ -27,7 +31,7 @@ _AMBIGUOUS_ENTML_PREFIXES = (
 )
 _INVOKE_PREFIX = "<entml:invoke"
 _FUNCTION_CALLS_PREFIX = "<entml:function_calls"
-_LEADING_HOLD_PREFIXES = _AMBIGUOUS_ENTML_PREFIXES + (
+_LEADING_HOLD_PREFIXES = _AMBIGUOUS_ENTML_PREFIXES + _ORPHAN_CLOSE_PREFIXES + (
     _THINKING_OPEN_PREFIX,
     _FUNCTION_CALLS_PREFIX,
     "<tool",
@@ -76,6 +80,54 @@ def stream_safe_visible_prefix(
         if open_at >= 0:
             return buf[:open_at]
     return buf
+
+
+def trailing_entml_tag_holdback_len(text: str) -> int:
+    """buffer 尾部是 entml/thinking 标签真前缀时，应 hold 的字节数。"""
+    if not text:
+        return 0
+    lt = text.rfind("<")
+    if lt < 0:
+        return 0
+    tail = text[lt:]
+    candidates: List[str] = list(_LEADING_HOLD_PREFIXES) + [
+        _THINKING_CLOSE,
+        _FAULT_THINKING_CLOSE,
+    ]
+    for tag in candidates:
+        if tag.startswith(tail) and tail != tag:
+            return len(tail)
+    return 0
+
+
+def clean_stream_partial_visible(
+    text: str,
+    *,
+    has_calls: bool = False,
+    thinking_enabled: bool = True,
+) -> str:
+    """流式 ``partial_text``：去掉 orphan thinking 闭标签与未收齐 entml 前缀/后缀。"""
+    if not text:
+        return ""
+    text = strip_orphan_thinking_close_prefix(text)
+    hold_head = leading_entml_tag_holdback_len(
+        text, thinking_enabled=thinking_enabled
+    )
+    if hold_head >= len(text):
+        return ""
+    text = text[hold_head:]
+    tail_hold = trailing_entml_tag_holdback_len(text)
+    if tail_hold:
+        text = text[:-tail_hold]
+    if has_calls:
+        text = text.rstrip()
+    if not text.strip():
+        return ""
+    if re.search(r"</?entml:", text, re.IGNORECASE):
+        text = re.sub(r"</?entml:[^>]*>", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"</?entml:\w*$", "", text, flags=re.IGNORECASE)
+        text = text.rstrip()
+    return text
 
 
 def find_complete_entml_invoke_open(buffer: str) -> int:
@@ -308,6 +360,7 @@ def split_entml_thinking(
     text: str,
     *,
     thinking_enabled: bool = True,
+    preserve_visible_whitespace: bool = False,
 ) -> Tuple[str, str]:
     """从文本中剥离 thinking 块，返回 (正文, 思考链拼接)。"""
     if not text:
@@ -346,7 +399,11 @@ def split_entml_thinking(
 
     clean = "".join(clean_parts)
     thinking = "\n".join(part.strip() for part in parts if part.strip())
-    return strip_orphan_thinking_close_prefix(clean.strip()), thinking
+    if preserve_visible_whitespace:
+        visible = strip_orphan_thinking_close_prefix(clean)
+    else:
+        visible = strip_orphan_thinking_close_prefix(clean.strip())
+    return visible, thinking
 
 
 def strip_orphan_thinking_close_prefix(text: str) -> str:

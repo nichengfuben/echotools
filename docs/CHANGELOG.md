@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.81] - 2026-07-29
+
+### Fixed
+
+- entml 流式 ``partial_text``：改从 raw 缓冲在 invoke 前截断推导，修复 char-by-char 分片丢失换行导致 orphan ``</assistant>`` 泄漏
+- entml 流式 ``partial_text``：invoke 开标签 holdback 时保留尾部空白（``hello <entml:inv`` → ``hello ``）
+- entml 流式 partial_json：裸 ``</parameter>`` 在 buffer 末尾时可正确闭合（req-1785261134 parity）
+- entml 流式 ``partial_text`` / thinking 边界：修复 thinking 结束后 orphan ``</entml:thinking>``、``<`` 前缀泄漏（req-1785260732）
+- entml 伪 history 流式展示：``glued_open`` / ``partial_fake_close`` 仅匹配行首，保留正文内 ``<tool>`` 提及
+
+### Added
+
+- ``test_entml_batch_stream_comprehensive``：req-1785260732 / req-1785261134 回归
+- ``test_stream_partial_json_parity``：bare ``</parameter>`` buffer 末尾 snapshot 测试
+
 ## [2.3.80] - 2026-07-29
 
 ### Fixed

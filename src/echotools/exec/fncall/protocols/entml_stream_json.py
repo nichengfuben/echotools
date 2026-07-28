@@ -171,18 +171,32 @@ def _parameter_json_fragment(
     return f'"{_json_string_body(streaming_val)}'
 
 
+def _resolve_parameter_close(body: str, val_start: int) -> int:
+    """定位 parameter 闭合下标；流式 buffer 末尾的 bare ``</parameter>`` 亦视为已闭合。"""
+    close = find_valid_parameter_close(body, val_start, allow_end=False)
+    if close >= 0:
+        return close
+    close_end = find_valid_parameter_close(body, val_start, allow_end=True)
+    if close_end < 0:
+        return -1
+    after = body[close_end + parameter_close_at(body, close_end) :]
+    if not after.strip() and body.startswith(PARAM_CLOSE_BARE, close_end):
+        return close_end
+    return -1
+
+
 def _incomplete_parameter_raw(body: str, val_start: int) -> str:
     """流式未闭合 parameter 的原始值（不含尚未确认的尾部结构闭合 token）。"""
     tail = body[val_start:]
-    close = find_valid_parameter_close(body, val_start, allow_end=False)
+    close = _resolve_parameter_close(body, val_start)
     if close >= 0:
         return body[val_start:close]
-    token = _PARAM_CLOSE
-    idx = tail.rfind(token)
-    if idx >= 0:
-        after = tail[idx + len(token) :]
-        if not after.strip():
-            return tail[:idx]
+    for token in (_PARAM_CLOSE, PARAM_CLOSE_BARE):
+        idx = tail.rfind(token)
+        if idx >= 0:
+            after = tail[idx + len(token) :]
+            if not after.strip():
+                return tail[:idx]
     return _strip_incomplete_markup_suffix(tail)
 
 
@@ -293,7 +307,7 @@ def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool, Optional[s
         key = normalize_entml_name(pname)
         type_hint = extract_parameter_type_attr(attrs)
         val_start = match.end()
-        close = find_valid_parameter_close(body, val_start, allow_end=False)
+        close = _resolve_parameter_close(body, val_start)
         if close < 0:
             entries.append(
                 (

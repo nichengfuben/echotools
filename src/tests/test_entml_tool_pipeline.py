@@ -573,7 +573,7 @@ class TestStreamPipeline:
         assert not parser.has_calls
         parser.feed('<entml:invoke name="rich_tool">')
         assert parser.has_calls
-        assert parser.partial_text == "前文\n"
+        assert parser.partial_text == "前文"
         parser.feed(
             '<entml:parameter name="s">x</entml:parameter></entml:invoke>\n'
             "</entml:function_calls>"

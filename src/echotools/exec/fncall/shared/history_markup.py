@@ -90,6 +90,14 @@ def _paired_block_anywhere_re(tag: str) -> re.Pattern[str]:
     )
 
 
+def _paired_block_glued_brace_re(tag: str) -> re.Pattern[str]:
+    """``<tool>{Tool: ...}</tool>`` 无内嵌换行伪块（流式分片常压成单行）。"""
+    return re.compile(
+        rf"<{tag}\s*>\s*\{{[\s\S]*?\}}\s*</{tag}\s*>",
+        re.IGNORECASE,
+    )
+
+
 def _orphan_close_re(tag: str) -> re.Pattern[str]:
     return re.compile(
         rf"(?:^|\n)([\s\S]*?)\n\s*</{tag}\s*>\s*(?:\n|$)",
@@ -159,7 +167,11 @@ def _strip_fake_blocks_in_unprotected(
     found = False
     text = segment
     for tag in _FAKE_HISTORY_TAGS:
-        for pair_re in (_paired_block_re(tag), _paired_block_anywhere_re(tag)):
+        for pair_re in (
+            _paired_block_re(tag),
+            _paired_block_anywhere_re(tag),
+            _paired_block_glued_brace_re(tag),
+        ):
             while True:
                 new_text, n = pair_re.subn("", text, count=1)
                 if n == 0:
@@ -295,4 +307,21 @@ def strip_fake_history_markup_for_display(content: str) -> Tuple[str, bool]:
         if glued:
             cleaned = cleaned[: glued.start()]
             found = True
+    glued_open = re.search(
+        r"(?:^|\n)\s*<(?:assistant|tool)\b[^>]*>?\s*(?:\{[^\n<]*)?$",
+        cleaned,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if glued_open:
+        cleaned = cleaned[: glued_open.start()]
+        found = True
+    partial_fake_close = re.search(
+        r"(?:^|\n)\s*<(?:assistant|tool)\b[^>]*>"
+        r"(?:[\s\S]*?(?:</(?:assistant|tool)\b[^>]*)?)?$",
+        cleaned,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if partial_fake_close:
+        cleaned = cleaned[: partial_fake_close.start()]
+        found = True
     return cleaned, found

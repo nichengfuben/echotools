@@ -106,9 +106,20 @@ class FncallStreamParser:
                 if kind == "thinking":
                     self._thinking_parts.append(part)
                 else:
-                    self._text_parts.append(part)
+                    self._append_content_text(part)
         else:
-            self._text_parts.append(text)
+            self._append_content_text(text)
+
+    def _trim_trailing_visible_whitespace(self) -> None:
+        """invoke 开始前去掉尾部空白可见段（thinking-only 回复常见 ``\\n\\n``）。"""
+        while self._text_parts and not self._text_parts[-1].strip():
+            self._text_parts.pop()
+        if self._text_parts:
+            trimmed = self._text_parts[-1].rstrip()
+            if trimmed:
+                self._text_parts[-1] = trimmed
+            else:
+                self._text_parts.pop()
 
     @staticmethod
     def _split_safe_text(
@@ -159,9 +170,12 @@ class FncallStreamParser:
     def _append_content_text(self, text: str) -> None:
         if not text:
             return
-        from echotools.exec.fncall.protocols.entml_think.parse import _THINKING_CLOSE
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            _THINKING_CLOSE,
+            strip_orphan_thinking_close_prefix,
+        )
 
-        remainder = text
+        remainder = strip_orphan_thinking_close_prefix(text)
         while True:
             stripped = remainder.strip()
             if not stripped:
@@ -196,6 +210,7 @@ class FncallStreamParser:
             self._thinking_filter._pending = ""
 
     def _begin_function_calls(self, buffer_from: str, *, pos: int) -> None:
+        self._trim_trailing_visible_whitespace()
         self._fncall_buf = buffer_from[pos:]
         self._drain_thinking_holdback_to_fncall()
         self._detected = True
@@ -616,11 +631,17 @@ class FncallStreamParser:
     def _stream_visible_buffer(self) -> str:
         """与 batch ``parse`` 一致：未闭合 thinking 之后的正文不参与可见/剥离。"""
         from echotools.exec.fncall.protocols.entml_think.parse import (
+            clean_stream_partial_visible,
             stream_safe_visible_prefix,
         )
 
-        return stream_safe_visible_prefix(
+        buf = stream_safe_visible_prefix(
             self._raw_buf,
+            thinking_enabled=self._thinking_enabled,
+        )
+        return clean_stream_partial_visible(
+            buf,
+            has_calls=self.has_calls,
             thinking_enabled=self._thinking_enabled,
         )
 
@@ -642,6 +663,48 @@ class FncallStreamParser:
         )
         return visible
 
+    def _stream_partial_display_text(self) -> str:
+        """流式 ``partial_text``：在 invoke 起点前截断 raw，保留尾部 holdback 空白。"""
+        from echotools.exec.fncall.shared.history_markup import (
+            strip_fake_history_markup_for_display,
+        )
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            clean_stream_partial_visible,
+            split_entml_thinking,
+            stream_safe_visible_prefix,
+        )
+
+        raw = self._raw_buf
+        if not raw:
+            return ""
+
+        lower = raw.lower()
+        cut = len(raw)
+        for marker in ("<entml:invoke", "<entml:function_calls"):
+            pos = lower.find(marker)
+            if pos >= 0:
+                cut = min(cut, pos)
+        segment = raw[:cut]
+
+        buf = stream_safe_visible_prefix(
+            segment,
+            thinking_enabled=self._thinking_enabled,
+        )
+        buf = clean_stream_partial_visible(
+            buf,
+            has_calls=self.has_calls,
+            thinking_enabled=self._thinking_enabled,
+        )
+        if not buf:
+            return ""
+        cleaned, _ = strip_fake_history_markup_for_display(buf)
+        visible, _ = split_entml_thinking(
+            cleaned,
+            thinking_enabled=self._thinking_enabled,
+            preserve_visible_whitespace=True,
+        )
+        return visible
+
     def finalize(self) -> Tuple[str, List[Dict[str, Any]]]:
         """结束流式解析，返回 (清理后文本, tool_calls 列表)。幂等。"""
         if self._finalized_result is not None:
@@ -659,7 +722,7 @@ class FncallStreamParser:
                 if kind == "thinking":
                     self._thinking_parts.append(part)
                 else:
-                    self._text_parts.append(part)
+                    self._append_content_text(part)
 
         # 与 batch parse 同路径（须在含 thinking 标签的 raw 缓冲上剥离伪 history）。
         clean_text, tool_calls = self._protocol.parse(
@@ -710,27 +773,35 @@ class FncallStreamParser:
             clean_text, _ = self._finalized_result
             return clean_text
 
-        text = self._normalize_stream_chunk("".join(self._text_parts))
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            clean_stream_partial_visible,
+        )
+
+        if self._thinking_enabled and self._raw_buf:
+            return clean_stream_partial_visible(
+                self._stream_partial_display_text(),
+                has_calls=self.has_calls,
+                thinking_enabled=self._thinking_enabled,
+            )
+
+        text = clean_stream_partial_visible(
+            self._normalize_stream_chunk("".join(self._text_parts)),
+            has_calls=self.has_calls,
+            thinking_enabled=self._thinking_enabled,
+        )
         if text:
             from echotools.exec.fncall.shared.history_markup import (
                 strip_fake_history_markup_for_display,
             )
 
             cleaned, _ = strip_fake_history_markup_for_display(text)
+            cleaned = clean_stream_partial_visible(
+                cleaned,
+                has_calls=self.has_calls,
+                thinking_enabled=self._thinking_enabled,
+            )
             if cleaned:
                 return cleaned
-
-        if self._thinking_enabled and self._raw_buf:
-            lower = self._raw_buf.lower()
-            if "<entml:invoke" not in lower and "<entml:function_calls" not in lower:
-                display = self._stream_display_text()
-                if display:
-                    from echotools.exec.fncall.shared.history_markup import (
-                        strip_fake_history_markup_for_display,
-                    )
-
-                    cleaned, _ = strip_fake_history_markup_for_display(display)
-                    return cleaned
         return ""
 
     @property

@@ -50,6 +50,41 @@ def test_force_close_matches_batch_on_truncated_invoke() -> None:
     assert json.loads(merged) == {"file_path": "C:\\Users\\partial"}
 
 
+def test_bare_parameter_close_at_buffer_end_snapshot() -> None:
+    """裸 ``<parameter>`` 在 buffer 末尾闭合时，streaming snapshot 应视为参数已完成。"""
+    from echotools.exec.fncall.protocols.entml_stream_json import (
+        build_streaming_json_snapshot,
+    )
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Grep",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {"type": "string"},
+                        "path": {"type": "string"},
+                    },
+                    "required": ["pattern"],
+                },
+            },
+        }
+    ]
+    body = (
+        '<parameter name="pattern">foo|bar</parameter>'
+    )
+    snap = build_streaming_json_snapshot(
+        body,
+        tool_name="Grep",
+        schema_index=_build_param_schema_index(tools),
+    )
+    assert "</parameter>" not in snap
+    assert snap == '{"pattern": "foo|bar"'
+    assert json.loads(snap + "}") == {"pattern": "foo|bar"}
+
+
 def test_parameters_block_no_stream_until_closed() -> None:
     body = (
         "<entml:parameters>\n"
