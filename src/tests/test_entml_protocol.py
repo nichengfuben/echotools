@@ -215,7 +215,7 @@ def test_thinking_prompt_auto() -> None:
     assert "<thinking_behavior>" in section
     assert "You decide whether extended thinking helps" in section
     assert "<tool>" in section
-    assert "[tool_name: value]" in section
+    assert "{tool_name: value}" in section or "{tool_name:" in section
     assert "Never skip the thinking block" not in section
 
 
@@ -396,7 +396,7 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
         {"role": "user", "content": "summarize"},
     ]
     content = inject_fncall(msgs, tools, proto)[0]["content"]
-    assert "[search: docs]" in content
+    assert "{search: docs}" in content or '"query": "docs"' in content
     assert "<tool>" in content
     assert "found 3" in content
     assert "IMPORTANT: Completed tool turns in conversation history" in content
@@ -530,8 +530,8 @@ def test_entml_multi_tool_history_blocks() -> None:
     assert "<assistant>" in history
     assert "<assistant>\nchecking time and attractions\n</assistant>" in history
     assert "<tool>" not in history.split("</assistant>")[0].split("<assistant>")[-1]
-    assert "[get_time: Hangzhou]" in history
-    assert "[search_web: West Lake spots]" in history
+    assert "{get_time: Hangzhou}" in history
+    assert "{search_web: West Lake spots}" in history
     assert "2026-07-26 14:30 CST" in history
     assert "Broken Bridge, Leifeng Pagoda" in history
     assert "→ Result:" not in history
@@ -540,14 +540,81 @@ def test_entml_multi_tool_history_blocks() -> None:
 
     turn_block = (
         "<tool>\n"
-        "[get_time: Hangzhou]\n"
+        "{get_time: Hangzhou}\n"
         "2026-07-26 14:30 CST\n"
-        "[search_web: West Lake spots]\n"
+        "{search_web: West Lake spots}\n"
         "Broken Bridge, Leifeng Pagoda\n"
         "</tool>"
     )
     assert turn_block in history
     assert "</assistant>\n\n<tool>" in history
+
+
+def test_entml_history_multiline_tool_uses_json_object() -> None:
+    """多行参数写入 history 时用 {Tool: json}，不用方括号或 entml:invoke。"""
+    proto = get_protocol("entml")
+    contents = 'print("hello")\nline2'
+    args = {"file_path": "x.py", "contents": contents}
+    block = proto.format_assistant_tool_turn_block(
+        [
+            {
+                "id": "call_w1",
+                "type": "function",
+                "function": {
+                    "name": "Write",
+                    "arguments": json.dumps(args, ensure_ascii=False),
+                },
+            }
+        ],
+        {},
+    )
+    expected = f"{{Write: {json.dumps(args, ensure_ascii=False)}}}"
+    assert expected in block
+    assert "[Write:" not in block
+    assert "<entml:invoke" not in block
+
+
+def test_entml_history_bash_multi_param_json_braces() -> None:
+    """多参数 Bash：{Bash: {\"command\": ..., \"description\": ...}}。"""
+    proto = get_protocol("entml")
+    args = {
+        "command": "grep -oP 'https?://' /tmp/x.js | head -30",
+        "description": "Find URLs",
+    }
+    block = proto.format_assistant_tool_turn_block(
+        [
+            {
+                "id": "call_b1",
+                "type": "function",
+                "function": {
+                    "name": "Bash",
+                    "arguments": json.dumps(args, ensure_ascii=False),
+                },
+            }
+        ],
+        {},
+    )
+    assert block == f"<tool>\n{{Bash: {json.dumps(args, ensure_ascii=False)}}}\n</tool>"
+    assert "[Bash:" not in block
+
+
+def test_entml_history_simple_glob_stays_scalar_braces() -> None:
+    """单行简单参数：{Glob: pattern}。"""
+    proto = get_protocol("entml")
+    block = proto.format_assistant_tool_turn_block(
+        [
+            {
+                "id": "call_g1",
+                "type": "function",
+                "function": {
+                    "name": "Glob",
+                    "arguments": json.dumps({"pattern": "**/cursor"}),
+                },
+            }
+        ],
+        {},
+    )
+    assert block == "<tool>\n{Glob: **/cursor}\n</tool>"
 
 
 @pytest.mark.parametrize(

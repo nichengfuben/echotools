@@ -15,9 +15,22 @@ INVOKE_RE = re.compile(
     re.DOTALL,
 )
 # 允许 name / type 等属性任意顺序；单/双引号均可。
+# 闭合标签后必须是下一 parameter / invoke 结束 / parameters 结束。
+# 批量解析允许参数块在 body 末尾（$）；流式未闭合 invoke 不允许 $，避免 chunk 落在假闭合上误判。
+_PARAM_CLOSE_FOLLOWERS = r"(?:<entml:parameter\b|</entml:invoke>|</entml:parameters>)"
+_PARAM_CLOSE_LOOKAHEAD = rf"(?=\s*{_PARAM_CLOSE_FOLLOWERS})"
+_PARAM_CLOSE_LOOKAHEAD_EOL = rf"(?=\s*(?:{_PARAM_CLOSE_FOLLOWERS}|$))"
 PARAM_RE = re.compile(
-    r"<entml:parameter\b([^>]*)>([\s\S]*?)</entml:parameter>",
-    re.DOTALL,
+    rf"<entml:parameter\b([^>]*)>([\s\S]*?)</entml:parameter>{_PARAM_CLOSE_LOOKAHEAD_EOL}",
+    re.DOTALL | re.IGNORECASE,
+)
+_PARAM_CLOSE_VALID_RE = re.compile(
+    rf"</entml:parameter>{_PARAM_CLOSE_LOOKAHEAD_EOL}",
+    re.IGNORECASE,
+)
+_PARAM_CLOSE_VALID_STREAM_RE = re.compile(
+    rf"</entml:parameter>{_PARAM_CLOSE_LOOKAHEAD}",
+    re.IGNORECASE,
 )
 _ATTR_NAME_RE = re.compile(
     r"""\bname\s*=\s*(?P<q>["'])(?P<v>.*?)(?P=q)""",
@@ -119,6 +132,33 @@ def _strip_orphan_non_invoke_tool_tags(content: str) -> str:
         content,
         flags=re.DOTALL,
     )
+
+
+_FOLLOWER_PREFIXES = ("<entml:parameter", "</entml:invoke", "</entml:parameters")
+
+
+def _parameter_close_follower_ok(after: str, *, allow_end: bool) -> bool:
+    stripped = after.lstrip()
+    if not stripped:
+        return allow_end
+    for prefix in _FOLLOWER_PREFIXES:
+        if stripped.startswith(prefix) or prefix.startswith(stripped):
+            return True
+    return False
+
+
+def find_valid_parameter_close(body: str, search_from: int = 0, *, allow_end: bool = True) -> int:
+    """返回 ``</entml:parameter>`` 在 ``body`` 中的起始下标；忽略参数值内的假闭合。"""
+    pos = search_from
+    token = "</entml:parameter>"
+    while True:
+        close = body.find(token, pos)
+        if close < 0:
+            return -1
+        after = body[close + len(token) :]
+        if _parameter_close_follower_ok(after, allow_end=allow_end):
+            return close
+        pos = close + 1
 
 
 def extract_attr_value(attrs: str, attr_name: str = "name") -> Optional[str]:

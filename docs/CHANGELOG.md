@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.63] - 2026-07-28
+
+### Fixed
+
+- entml 流式 ``partial_json``：参数值内假 ``</entml:parameter>`` 不再截断大 payload；``find_valid_parameter_close`` 结构性感知闭合
+- conversation history 工具行格式：多参数/复杂值用 ``{ToolName: json}``，单简单标量用 ``{ToolName: value}``（不再错误输出方括号）
+- ``format_entml_parameter_value`` 用于 history 渲染，正确处理多行与嵌套引号
+
 ## [2.3.62] - 2026-07-28
 
 ### Fixed

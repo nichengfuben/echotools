@@ -64,14 +64,19 @@ def _stream_deltas(text: str, *, chunk: int = 1) -> Tuple[str, List[str]]:
 def _feed_stream(text: str, tools: List[Dict[str, Any]], *, chunk: int = 3) -> Tuple[str, List[Dict[str, Any]], str]:
     proto = get_protocol("entml")
     parser = FncallStreamParser(protocol=proto, tools=tools)
-    delta_parts: List[str] = []
+    merged = ""
     for i in range(0, len(text), chunk):
         parser.feed(text[i : i + chunk])
-        d = parser.consume_stream_delta()
-        if d:
-            delta_parts.append(d[1])
+        while True:
+            d = parser.consume_stream_delta()
+            if not d:
+                break
+            merged += d[1]
+    comp = parser.complete_stream_delta_if_needed()
+    if comp:
+        merged += comp[1]
     clean, calls = parser.finalize()
-    return clean, calls, "".join(delta_parts)
+    return clean, calls, merged
 
 
 @pytest.mark.parametrize(
@@ -129,6 +134,24 @@ def test_special_chars_in_stream_match_batch_parse() -> None:
         stream_calls[0]["function"]["arguments"]
     )
     json.loads(merged)
+
+
+def test_parameter_value_may_contain_fake_close_tag() -> None:
+    """Write contents 含 </entml:parameter> 子串时不得提前截断。"""
+    contents = 'doc = "</entml:parameter>"\n' * 3
+    text = (
+        '<entml:invoke name="Write">\n'
+        '<entml:parameter name="path">out.py</entml:parameter>\n'
+        f'<entml:parameter name="contents">{contents}</entml:parameter>\n'
+        "</entml:invoke>"
+    )
+    proto = get_protocol("entml")
+    _, batch_calls = proto.parse(text, WRITE_TOOL)
+    parsed = json.loads(batch_calls[0]["function"]["arguments"])
+    assert parsed["contents"] == contents.strip()
+    _, stream_calls, merged = _feed_stream(text, WRITE_TOOL, chunk=5)
+    assert json.loads(merged) == parsed
+    assert json.loads(stream_calls[0]["function"]["arguments"]) == parsed
 
 
 def test_incomplete_param_suffix_strips_markup() -> None:
@@ -240,5 +263,6 @@ def test_json_stream_encoder_without_invoke_close_stays_open() -> None:
     ]:
         body += part
         merged += enc.poll(body)
-    assert merged == '{"contents": "hello"'
+    assert merged == '{"contents": "hello'
+    assert not merged.endswith('"')
     assert not merged.endswith("}")

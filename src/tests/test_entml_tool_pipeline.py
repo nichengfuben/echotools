@@ -705,8 +705,8 @@ class TestBuildMechanisms:
             },
         )
         assert block.startswith("<tool>")
-        assert "[search: 西湖 | 2]" in block
-        assert "[search: 灵隐]" in block
+        assert '{search: {"query": "西湖", "limit": 2}}' in block
+        assert "{search: 灵隐}" in block
         assert "结果A" in block and "结果B" in block
         assert "→ Result:" not in block
 
@@ -724,7 +724,7 @@ class TestBuildMechanisms:
                 }
             ]
         )
-        assert lines == "[rich_tool: x | [1, 2]]"
+        assert lines == '{rich_tool: {"s": "x", "arr": [1, 2]}}'
 
     def test_render_prompt_section_order(self) -> None:
         proto = _proto()
@@ -770,7 +770,7 @@ class TestBuildMechanisms:
         ]
         content = inject_fncall(msgs, SEARCH_TOOLS, proto)[0]["content"]
         assert "<tool>" in content
-        assert "[search: q]" in content
+        assert "{search: q}" in content
         assert "found" in content
         assert "<current_user_message>\nnext\n</current_user_message>" in content
         assert "IMPORTANT:" in content

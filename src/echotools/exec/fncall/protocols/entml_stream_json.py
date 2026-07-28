@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .entml_patterns import (
     extract_attr_value,
     extract_parameter_type_attr,
+    find_valid_parameter_close,
     normalize_entml_name,
 )
 from .entml_values import coerce_entml_parameter_value
@@ -156,6 +157,21 @@ def _parameter_json_fragment(
     return f'"{_json_string_body(streaming_val)}'
 
 
+def _incomplete_parameter_raw(body: str, val_start: int) -> str:
+    """流式未闭合 parameter 的原始值（不含尚未确认的尾部结构闭合 token）。"""
+    tail = body[val_start:]
+    close = find_valid_parameter_close(body, val_start, allow_end=False)
+    if close >= 0:
+        return body[val_start:close]
+    token = _PARAM_CLOSE
+    idx = tail.rfind(token)
+    if idx >= 0:
+        after = tail[idx + len(token) :]
+        if not after.strip():
+            return tail[:idx]
+    return _strip_incomplete_markup_suffix(tail)
+
+
 def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool, Optional[str]]]:
     """返回 [(key, value, is_complete, type_hint), ...]。"""
     if not body:
@@ -174,12 +190,12 @@ def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool, Optional[s
         key = normalize_entml_name(pname)
         type_hint = extract_parameter_type_attr(attrs)
         val_start = match.end()
-        close = body.find(_PARAM_CLOSE, val_start)
+        close = find_valid_parameter_close(body, val_start, allow_end=False)
         if close < 0:
             entries.append(
                 (
                     key,
-                    _strip_incomplete_markup_suffix(body[val_start:]),
+                    _incomplete_parameter_raw(body, val_start),
                     False,
                     type_hint,
                 )

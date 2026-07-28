@@ -72,19 +72,24 @@ def _parse_tool_call_args(tc: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
     return name, args
 
 
+def _is_simple_scalar(value: Any) -> bool:
+    """单行、无引号/括号/尖括号的短字符串，可省略 JSON 对象外壳。"""
+    if not isinstance(value, str):
+        return False
+    if not value or "\n" in value or "\r" in value:
+        return False
+    if any(ch in value for ch in ('"', "{", "}", "[", "]", "<", ">")):
+        return False
+    return True
+
+
 def _render_tool_call_line(name: str, args: Dict[str, Any]) -> str:
-    """将单次工具调用渲染为紧凑行，例如 [get_weather: 杭州 | c]。"""
-    values: List[str] = []
-    for v in args.values():
-        if isinstance(v, str):
-            values.append(v)
-        else:
-            values.append(_json.dumps(v, ensure_ascii=False))
-    if not values:
-        return f"[{name}:]"
-    if len(values) == 1:
-        return f"[{name}: {values[0]}]"
-    return f"[{name}: {' | '.join(values)}]"
+    """History 内已完成工具调用：{ToolName: json}；单简单标量可写 {ToolName: value}。"""
+    if len(args) == 1:
+        val = next(iter(args.values()))
+        if _is_simple_scalar(val):
+            return f"{{{name}: {val}}}"
+    return f"{{{name}: {_json.dumps(args, ensure_ascii=False)}}}"
 
 
 def _render_tool_history_block(body: str) -> str:

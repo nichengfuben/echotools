@@ -75,7 +75,7 @@ You MUST output a <entml:thinking> block before any other content in every reply
 _THINKING_BEHAVIOR_AUTO_WITH_TOOLS = """\
 You decide whether extended thinking helps for each reply. When the question has hidden complexity, when tool results need interpretation, or when you are uncertain, open a <entml:thinking> block before continuing and strongly prefer to do so rather than guessing.
 
-After completed tool turns appear in conversation history inside <tool> blocks (for example a line like [tool_name: value] followed by its result), strongly consider outputting a <entml:thinking> block before your next visible reply or tool call."""
+After completed tool turns appear in conversation history inside <tool> blocks (for example a line like {tool_name: {"param": "value"}} followed by its result), strongly consider outputting a <entml:thinking> block before your next visible reply or tool call."""
 
 _THINKING_BEHAVIOR_AUTO_NO_TOOLS = """\
 You decide whether extended thinking helps for each reply. When the question has hidden complexity or when you are uncertain, open a <entml:thinking> block before continuing and strongly prefer to do so rather than guessing."""

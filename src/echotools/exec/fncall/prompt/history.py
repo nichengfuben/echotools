@@ -83,11 +83,12 @@ def _clean_entml_tags(content: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+from echotools.exec.fncall.protocols.entml_invoke import format_entml_parameter_value
+
+
 def _render_parameter_value(v: Any) -> str:
     """将参数值渲染为适合嵌入 XML parameter 标签的字符串。"""
-    if isinstance(v, str):
-        return v
-    return json.dumps(v, ensure_ascii=False)
+    return format_entml_parameter_value(v)
 
 
 def _render_tool_call(tc: Dict[str, Any]) -> str:
