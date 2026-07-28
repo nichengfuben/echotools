@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.64] - 2026-07-28
+
+### Fixed
+
+- 未闭合 ``<entml:thinking>`` 块内内容（含 invoke 标记）一律视为思考正文，不解析为工具调用
+- 仅三种容错闭合生效：标准 ``</entml:thinking>``、``</thinking>`` 后接 invoke、plain ``<thinking>`` 开标签
+- 批量 ``parse()`` 先剥离 thinking 块再解析工具；未开思考时不启用流式 thinking 过滤器
+
 ## [2.3.63] - 2026-07-28
 
 ### Fixed

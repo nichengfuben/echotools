@@ -278,18 +278,16 @@ def _scenarios() -> List[ParserScenario]:
             id="invoke_inside_unclosed_thinking",
             text=f"<entml:thinking>\nplan\n{READ_INVOKE}\n",
             tools=[READ_TOOL],
-            expect_names=("Read",),
-            expect_args=({"path": READ_PATH},),
-            expect_thinking_contains=("plan",),
+            expect_call_count=0,
+            expect_thinking_contains=("plan", READ_INVOKE),
             stream_only=True,
         ),
         ParserScenario(
             id="invoke_and_example_inside_closed_thinking",
             text=example_in_thinking,
             tools=[READ_TOOL],
-            expect_names=("Read",),
-            expect_args=({"path": READ_PATH},),
-            expect_thinking_contains=("格式示例", "$FUNCTION_NAME"),
+            expect_call_count=0,
+            expect_thinking_contains=("格式示例", "$FUNCTION_NAME", "Read"),
             stream_only=True,
         ),
         ParserScenario(
@@ -561,25 +559,25 @@ def test_invoke_index_inside_unclosed_thinking() -> None:
     assert not invoke_index_inside_unclosed_thinking(closed, pos3)
 
 
-def test_large_chunk_invoke_inside_unclosed_thinking_parsed() -> None:
-    """回归：首包很大且含 thinking 内完整 invoke 时应解析工具。"""
+def test_large_chunk_invoke_inside_unclosed_thinking_not_parsed() -> None:
+    """未闭合 thinking 内完整 invoke 仍视为思考正文。"""
     text = f"<entml:thinking>\nplan\n{READ_INVOKE}\n"
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=[READ_TOOL])
     parser.feed(text[:64])
     assert parser._thinking_filter is not None
     parser.feed(text[64:])
     _, calls = parser.finalize()
-    assert len(calls) == 1
-    assert calls[0]["function"]["name"] == "Read"
+    assert len(calls) == 0
+    assert READ_INVOKE in parser.partial_thinking
 
 
-def test_batch_thinking_invoke_stream_parses_complete_inside() -> None:
-    """流式与批量均解析 thinking 内已闭合的真实 invoke。"""
+def test_invoke_after_thinking_close_parses_not_inside_block() -> None:
+    """thinking 闭合后、块外的 invoke 才解析。"""
     proto = get_protocol("entml")
-    inside = f"<entml:thinking>\nplan\n{READ_INVOKE}\n</entml:thinking>\n"
-    _, batch_calls = proto.parse(inside, [READ_TOOL])
-    assert len(batch_calls) >= 1
-    stream_clean, stream_calls, _ = _stream_parse(inside, [READ_TOOL], 8)
+    text = f"<entml:thinking>\nplan\n</entml:thinking>\n{READ_INVOKE}\n"
+    _, batch_calls = proto.parse(text, [READ_TOOL])
+    assert len(batch_calls) == 1
+    stream_clean, stream_calls, _ = _stream_parse(text, [READ_TOOL], 8)
     assert len(stream_calls) == 1
     assert stream_calls[0]["function"]["name"] == "Read"
 

@@ -262,8 +262,19 @@ class EntmlProtocol(ToolProtocol):
         text: str,
         tools: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[str, List[Dict[str, Any]]]:
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            _find_earliest_thinking_open,
+            has_unclosed_entml_thinking,
+            split_entml_thinking,
+        )
+
         schema_index = _build_param_schema_index(tools) if tools else None
-        tool_calls = parse_entml_tool_calls(text, tools, schema_index)
+        parse_text, _thinking = split_entml_thinking(text, thinking_enabled=True)
+        if has_unclosed_entml_thinking(parse_text, thinking_enabled=True):
+            open_at, _ = _find_earliest_thinking_open(parse_text, thinking_enabled=True)
+            if open_at >= 0:
+                parse_text = parse_text[:open_at]
+        tool_calls = parse_entml_tool_calls(parse_text, tools, schema_index)
         clean = text
         if tool_calls:
             clean = BLOCK_RE.sub("", text)

@@ -13,6 +13,8 @@ from echotools.exec.protocol.base import ToolProtocol
 
 # 懒导入：仅 entml 协议需要
 def _make_thinking_filter(protocol: ToolProtocol, *, thinking_enabled: bool = True):
+    if not thinking_enabled:
+        return None
     if getattr(protocol, "id", None) == "entml":
         from echotools.exec.fncall.protocols.entml_think.parse import (
             EntmlThinkingStreamFilter,

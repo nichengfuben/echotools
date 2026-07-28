@@ -55,16 +55,17 @@ def test_split_entml_thinking_ignores_unclosed_block() -> None:
     assert INVOKE in content
 
 
-def test_invoke_inside_unclosed_thinking_is_parsed_when_complete() -> None:
-    """thinking 内完整的真实 invoke 应切出并解析（占位符示例除外）。"""
+def test_invoke_inside_unclosed_thinking_not_parsed_as_tool() -> None:
+    """未闭合 thinking 内的 invoke 一律视为思考正文，不解析为工具。"""
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     stream = f"<entml:thinking>\nplan {INVOKE}\n"
     for i in range(0, len(stream), 7):
         parser.feed(stream[i : i + 7])
-    assert parser.has_calls
+    assert not parser.has_calls
+    assert "plan" in parser.partial_thinking
     clean, calls = parser.finalize()
-    assert len(calls) == 1
-    assert calls[0]["function"]["name"] == "get_weather"
+    assert len(calls) == 0
+    assert INVOKE in parser.partial_thinking
 
 
 def test_invoke_after_thinking_close_is_parsed() -> None:
@@ -97,15 +98,17 @@ def test_no_thinking_invoke_still_works() -> None:
     assert "Sure" in clean
 
 
-def test_stream_thinking_invoke_inside_parsed_when_complete() -> None:
+def test_stream_thinking_invoke_inside_stays_in_thinking_until_close() -> None:
+    """thinking 未闭合时 invoke 留在思考链；闭合后 invoke 若在块外才解析。"""
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     parser.feed("<entml:thinking>\n")
     parser.feed("line one\n")
     assert "line one" in parser.partial_thinking
     assert not parser.has_calls
     parser.feed(f"mention {INVOKE}\n")
+    assert not parser.has_calls
+    parser.feed(f"</entml:thinking>\n{INVOKE}\nanswer")
     assert parser.has_calls
-    parser.feed("</entml:thinking>\nanswer")
     clean, calls = parser.finalize()
     assert len(calls) == 1
     assert calls[0]["function"]["name"] == "get_weather"
@@ -250,10 +253,8 @@ def test_prose_invoke_mention_preserved_in_thinking_stream() -> None:
     assert "<entml:invoke>" in parser.partial_thinking
 
 
-def test_stream_delta_not_duplicated_after_invoke_in_thinking() -> None:
-    """thinking 内 invoke ready 后，下一 chunk 不应重发整段 partial_json。"""
-    import json
-
+def test_stream_delta_not_emitted_for_invoke_inside_unclosed_thinking() -> None:
+    """未闭合 thinking 内的 invoke 不应产生 tool_calls 流式 delta。"""
     bash_tools = [
         {
             "type": "function",
@@ -280,10 +281,10 @@ def test_stream_delta_not_duplicated_after_invoke_in_thinking() -> None:
         delta = parser.consume_stream_delta()
         if delta:
             merged += delta[1]
-    json.loads(merged)
-    assert merged.count('"command"') == 1
+    assert merged == ""
+    assert not parser.has_calls
     _, calls = parser.finalize()
-    assert len(calls) == 1
+    assert len(calls) == 0
 
 
 def test_fault_thinking_close_stays_open_while_waiting_for_invoke() -> None:

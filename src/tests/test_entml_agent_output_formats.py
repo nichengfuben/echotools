@@ -120,15 +120,15 @@ def test_fault_thinking_close_then_invoke() -> None:
     assert json.loads(calls[0]["function"]["arguments"]) == {}
 
 
-def test_invoke_inside_unclosed_thinking_parsed_when_complete() -> None:
+def test_invoke_inside_unclosed_thinking_not_parsed_as_tool() -> None:
     text = f"<entml:thinking>\nplan {VALID_INVOKE}\n"
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     for i in range(0, len(text), 4):
         parser.feed(text[i : i + 4])
-    assert parser.has_calls
+    assert not parser.has_calls
     clean, calls = parser.finalize()
-    assert len(calls) == 1
-    assert calls[0]["function"]["name"] == "Read"
+    assert len(calls) == 0
+    assert VALID_INVOKE in parser.partial_thinking
 
 
 def test_multiline_parameter_preserved() -> None:

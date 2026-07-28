@@ -682,7 +682,7 @@ SIMULATED_LLM_RESPONSES: List[SimulatedCase] = [
     ),
     SimulatedCase(
         id="agent_bash_inside_thinking",
-        description="thinking 块内 invoke（流式 hold 后仍应解析）",
+        description="thinking 块内 invoke 视为思考正文，不解析为工具",
         branch="thinking_invoke_hold",
         extra_tools=("Bash",),
         response=(
@@ -693,8 +693,8 @@ SIMULATED_LLM_RESPONSES: List[SimulatedCase] = [
             "</entml:thinking>\n"
             "可见回复。"
         ),
-        expect_names=["Bash"],
-        expect_args=[{"command": "echo in-thinking"}],
+        expect_names=[],
+        expect_args=[],
         expect_clean_substrings=["可见回复。"],
         expect_thinking="计划：",
     ),
