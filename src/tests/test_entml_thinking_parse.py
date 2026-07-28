@@ -92,3 +92,43 @@ def test_entml_thinking_hold_close_prefix() -> None:
     content = "".join(t for k, t in parts if k == "content")
     assert thinking == "ab"
     assert content == "cd"
+
+
+def test_plain_thinking_open_entml_close_batch() -> None:
+    text = "<thinking>\nplan step\n</entml:thinking>\nanswer"
+    content, thinking = split_entml_thinking(text)
+    assert thinking == "plan step"
+    assert "answer" in content
+    assert "<thinking>" not in content
+
+
+def test_plain_thinking_open_fault_close_batch() -> None:
+    text = "<thinking>\nplan step\n</thinking>\nanswer"
+    content, thinking = split_entml_thinking(text)
+    assert thinking == "plan step"
+    assert "answer" in content
+
+
+def test_plain_thinking_stream_entml_close() -> None:
+    filt = EntmlThinkingStreamFilter()
+    parts = []
+    for chunk in ["<thinking>\nplan", "\n</entml:thinking>\n", "hello"]:
+        parts.extend(filt.feed(chunk))
+    parts.extend(filt.finalize())
+    thinking = "".join(t for k, t in parts if k == "thinking")
+    content = "".join(t for k, t in parts if k == "content")
+    assert thinking.strip() == "plan"
+    assert "hello" in content
+
+
+def test_plain_thinking_stream_fault_close() -> None:
+    filt = EntmlThinkingStreamFilter()
+    parts = []
+    for chunk in ["<thinking>\nplan\n</thinking>\n", "hello"]:
+        parts.extend(filt.feed(chunk))
+    parts.extend(filt.finalize())
+    thinking = "".join(t for k, t in parts if k == "thinking")
+    content = "".join(t for k, t in parts if k == "content")
+    assert thinking.strip() == "plan"
+    assert "hello" in content
+    assert not filt.in_open_thinking()

@@ -295,3 +295,36 @@ def test_fault_thinking_close_stays_open_while_waiting_for_invoke() -> None:
     filt.feed(INVOKE)
     kinds = [k for k, _ in filt.feed("")]
     assert "content" in kinds or filt.in_open_thinking() is False
+
+
+def test_plain_thinking_open_then_invoke_stream() -> None:
+    """plain ``<thinking>`` 开标签 + ``</thinking>`` 闭合后应能解析工具。"""
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    text = f"<thinking>\nplan\n</thinking>\n{INVOKE}"
+    for i in range(0, len(text), 7):
+        parser.feed(text[i : i + 7])
+    clean, calls = parser.finalize()
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "get_weather"
+    assert "plan" in parser.partial_thinking
+    assert "Hangzhou" in clean or len(calls) == 1
+
+
+def test_plain_thinking_open_entml_close_then_invoke() -> None:
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    text = f"<thinking>\nplan\n</entml:thinking>\n{INVOKE}"
+    parser.feed(text)
+    clean, calls = parser.finalize()
+    assert len(calls) == 1
+    assert "plan" in parser.partial_thinking
+
+
+def test_entml_open_fault_close_then_invoke_still_works(chunk: int = 3) -> None:
+    """``<entml:thinking>`` + ``</thinking>`` + 工具：fault 闭合。"""
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    text = f"<entml:thinking>\nplan\n</thinking>\n{INVOKE}"
+    for i in range(0, len(text), chunk):
+        parser.feed(text[i : i + chunk])
+    clean, calls = parser.finalize()
+    assert len(calls) == 1
+    assert "plan" in parser.partial_thinking

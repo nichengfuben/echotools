@@ -16,6 +16,7 @@ THINKING_BLOCK_RE = re.compile(
 )
 
 _THINKING_OPEN_PREFIX = "<entml:thinking"
+_PLAIN_THINKING_OPEN_PREFIX = "<thinking"
 _THINKING_CLOSE = "</entml:thinking>"
 _FAULT_THINKING_CLOSE = "</thinking>"
 # 与 thinking 共享 `<entml:` 前缀的其它标签：歧义 holdback 应交由工具流式状态机处理
@@ -116,6 +117,73 @@ def find_ambiguous_entml_tool_prefix(buffer: str) -> int:
     return earliest
 
 
+def _find_plain_thinking_open(text: str, start: int = 0) -> int:
+    """返回 plain ``<thinking>`` 开标签起始下标（``<entml:thinking>`` 内不含此子串）。"""
+    return text.find(_PLAIN_THINKING_OPEN_PREFIX, start)
+
+
+def _find_earliest_thinking_open(text: str, start: int = 0) -> Tuple[int, bool]:
+    """返回 ``(开标签下标, 是否 plain)``；无则 ``(-1, False)``。"""
+    entml_at = text.find(_THINKING_OPEN_PREFIX, start)
+    plain_at = _find_plain_thinking_open(text, start)
+    if entml_at < 0 and plain_at < 0:
+        return -1, False
+    if entml_at < 0:
+        return plain_at, True
+    if plain_at < 0:
+        return entml_at, False
+    if plain_at < entml_at:
+        return plain_at, True
+    return entml_at, False
+
+
+def _find_thinking_close(
+    text: str,
+    body_start: int,
+    *,
+    opened_plain: bool,
+) -> Tuple[int, int]:
+    """返回 ``(闭标签下标, 闭标签长度)``；未找到则 ``(-1, 0)``。"""
+    if opened_plain:
+        entml_close = text.find(_THINKING_CLOSE, body_start)
+        fault_close = text.find(_FAULT_THINKING_CLOSE, body_start)
+        candidates: List[Tuple[int, int]] = []
+        if entml_close >= 0:
+            candidates.append((entml_close, len(_THINKING_CLOSE)))
+        if fault_close >= 0:
+            candidates.append((fault_close, len(_FAULT_THINKING_CLOSE)))
+        if not candidates:
+            return -1, 0
+        close_at, close_len = min(candidates, key=lambda item: item[0])
+        return close_at, close_len
+
+    entml_close = text.find(_THINKING_CLOSE, body_start)
+    fault_close = text.find(_FAULT_THINKING_CLOSE, body_start)
+    if entml_close >= 0 and (fault_close < 0 or entml_close <= fault_close):
+        return entml_close, len(_THINKING_CLOSE)
+    if fault_close < 0:
+        return -1, 0
+
+    after_fault = fault_close + len(_FAULT_THINKING_CLOSE)
+    invoke_rel = find_complete_entml_invoke_open(text[after_fault:])
+    entml_after = text.find(_THINKING_CLOSE, after_fault)
+    if invoke_rel >= 0:
+        invoke_abs = after_fault + invoke_rel
+        if entml_after < 0 or invoke_abs < entml_after:
+            return fault_close, len(_FAULT_THINKING_CLOSE)
+    if entml_after >= 0:
+        return entml_after, len(_THINKING_CLOSE)
+    return -1, 0
+
+
+def _hold_thinking_open_prefixes(buffer: str) -> Tuple[str, str]:
+    """hold ``<entml:thinking`` 或 plain ``<thinking`` 的真前缀。"""
+    safe, hold = _hold_prefix(buffer, _THINKING_OPEN_PREFIX)
+    if hold:
+        return safe, hold
+    return _hold_prefix(safe, _PLAIN_THINKING_OPEN_PREFIX)
+
+
 def _hold_ambiguous_tool_markup(buffer: str) -> Tuple[str, str]:
     """thinking 块内：hold 可能长成真实工具调用的 markup（非 prose ``<entml:invoke>`` 提及）。"""
     if not buffer:
@@ -144,67 +212,94 @@ def _hold_ambiguous_tool_markup(buffer: str) -> Tuple[str, str]:
 
 
 def has_unclosed_entml_thinking(text: str) -> bool:
-    """buffer 中是否存在尚未闭合的 <entml:thinking> 块（含开标签未收齐）。"""
+    """buffer 中是否存在尚未闭合的 thinking 块（含开标签未收齐）。"""
     if not text:
         return False
     i = 0
     while i < len(text):
-        open_at = text.find(_THINKING_OPEN_PREFIX, i)
+        open_at, opened_plain = _find_earliest_thinking_open(text, i)
         if open_at < 0:
             break
         gt = text.find(">", open_at)
         if gt < 0:
             return True
-        close_at = text.find(_THINKING_CLOSE, gt + 1)
+        body_start = gt + 1
+        close_at, close_len = _find_thinking_close(
+            text, body_start, opened_plain=opened_plain
+        )
         if close_at < 0:
             return True
-        i = close_at + len(_THINKING_CLOSE)
-    max_keep = len(_THINKING_OPEN_PREFIX) - 1
+        i = close_at + close_len
+    max_keep = max(len(_THINKING_OPEN_PREFIX), len(_PLAIN_THINKING_OPEN_PREFIX)) - 1
     check_len = min(len(text), max_keep)
     for length in range(check_len, 0, -1):
         suffix = text[-length:]
-        if not (
-            _THINKING_OPEN_PREFIX.startswith(suffix) and suffix != _THINKING_OPEN_PREFIX
+        if (
+            _THINKING_OPEN_PREFIX.startswith(suffix)
+            and suffix != _THINKING_OPEN_PREFIX
         ):
-            continue
-        # `<e` / `<entml:` 等对 invoke 同样是真前缀 → 不在此抢占
-        if any(other.startswith(suffix) for other in _AMBIGUOUS_ENTML_PREFIXES):
-            continue
-        return True
+            if any(other.startswith(suffix) for other in _AMBIGUOUS_ENTML_PREFIXES):
+                continue
+            return True
+        if (
+            _PLAIN_THINKING_OPEN_PREFIX.startswith(suffix)
+            and suffix != _PLAIN_THINKING_OPEN_PREFIX
+        ):
+            return True
     return False
 
 
 def invoke_index_inside_unclosed_thinking(text: str, invoke_at: int) -> bool:
-    """``invoke_at`` 是否落在尚未正式 ``</entml:thinking>`` 闭合的块内。
-
-    已出现容错 ``</thinking>`` 且 invoke 在其后的段落，视为 thinking 外。
-    """
+    """``invoke_at`` 是否落在尚未闭合的 thinking 块内。"""
     if invoke_at < 0:
         return False
-    think_open = text.find(_THINKING_OPEN_PREFIX)
+    think_open, opened_plain = _find_earliest_thinking_open(text)
     if think_open < 0 or invoke_at <= think_open:
         return False
-    entml_close = text.find(_THINKING_CLOSE, think_open)
-    if entml_close >= 0:
-        return invoke_at < entml_close
-    fault_at = text.find(_FAULT_THINKING_CLOSE, think_open)
-    if fault_at >= 0:
-        return invoke_at < fault_at + len(_FAULT_THINKING_CLOSE)
-    return True
+    gt = text.find(">", think_open)
+    if gt < 0:
+        return True
+    body_start = gt + 1
+    close_at, close_len = _find_thinking_close(
+        text, body_start, opened_plain=opened_plain
+    )
+    if close_at < 0:
+        return True
+    return invoke_at < close_at + close_len
 
 
 def split_entml_thinking(text: str) -> Tuple[str, str]:
-    """从文本中剥离 <entml:thinking> 块，返回 (正文, 思考链拼接)。"""
+    """从文本中剥离 thinking 块，返回 (正文, 思考链拼接)。"""
     if not text:
         return "", ""
 
     parts: List[str] = []
+    clean_parts: List[str] = []
+    i = 0
+    while i < len(text):
+        open_at, opened_plain = _find_earliest_thinking_open(text, i)
+        if open_at < 0:
+            clean_parts.append(text[i:])
+            break
 
-    def _collect(match: re.Match[str]) -> str:
-        parts.append(match.group(1))
-        return ""
+        clean_parts.append(text[i:open_at])
+        gt = text.find(">", open_at)
+        if gt < 0:
+            clean_parts.append(text[open_at:])
+            break
 
-    clean = THINKING_BLOCK_RE.sub(_collect, text)
+        body_start = gt + 1
+        close_at, close_len = _find_thinking_close(
+            text, body_start, opened_plain=opened_plain
+        )
+        if close_at < 0:
+            clean_parts.append(text[open_at:])
+            break
+
+        parts.append(text[body_start:close_at])
+        i = close_at + close_len
+
+    clean = "".join(clean_parts)
     thinking = "\n".join(part.strip() for part in parts if part.strip())
     return strip_orphan_thinking_close_prefix(clean.strip()), thinking
 
@@ -244,6 +339,7 @@ class EntmlThinkingStreamFilter:
     def __init__(self) -> None:
         self._pending = ""
         self._in_block = False
+        self._opened_plain = False
         # 当前 thinking 块是否已输出过任何内容（用于首片去前导空白）
         self._thinking_started = False
         # 见到 ``</thinking>`` 后暂存，仅当后续出现 invoke 才视为闭合；否则当纯文本
@@ -253,20 +349,21 @@ class EntmlThinkingStreamFilter:
     def clear_invoke_handoff_state(self) -> None:
         """invoke 已交给正文/工具解析后，结束 thinking / fault 观察状态。"""
         self._in_block = False
+        self._opened_plain = False
         self._fault_watch = False
         self._fault_buffer = ""
         self._thinking_started = False
 
     def in_open_thinking(self) -> bool:
-        """思考块已开始且尚未收到 ``</entml:thinking>``（含开/闭标签分片 hold）。"""
+        """思考块已开始且尚未闭合（含开/闭标签分片 hold）。"""
         if self._in_block or self._fault_watch:
             return True
-        open_at = self._pending.find(_THINKING_OPEN_PREFIX)
+        open_at, _ = _find_earliest_thinking_open(self._pending)
         if open_at >= 0:
             gt = self._pending.find(">", open_at)
             if gt < 0:
                 return True
-        _, hold = _hold_prefix(self._pending, _THINKING_OPEN_PREFIX)
+        _, hold = _hold_thinking_open_prefixes(self._pending)
         if hold:
             return True
         return False
@@ -279,6 +376,7 @@ class EntmlThinkingStreamFilter:
         if invoke_at < len(_FAULT_THINKING_CLOSE):
             return False
         self._in_block = False
+        self._opened_plain = False
         self._fault_watch = False
         self._thinking_started = False
         self._pending = self._fault_buffer[len(_FAULT_THINKING_CLOSE) :]
@@ -296,6 +394,7 @@ class EntmlThinkingStreamFilter:
         if emitted:
             out.append(("thinking", emitted))
         self._in_block = False
+        self._opened_plain = False
         self._fault_watch = False
         self._thinking_started = False
         self._pending = self._fault_buffer[close_at + len(_THINKING_CLOSE) :]
@@ -323,12 +422,15 @@ class EntmlThinkingStreamFilter:
                     out.append(("thinking", emitted))
             out.append(("content", invoke_block))
             self._in_block = False
+            self._opened_plain = False
             self._fault_watch = False
             self._fault_buffer = ""
             self._thinking_started = False
             rest = after.lstrip()
             if rest.startswith(_THINKING_CLOSE):
                 rest = rest[len(_THINKING_CLOSE) :].lstrip()
+            if rest.startswith(_FAULT_THINKING_CLOSE):
+                rest = rest[len(_FAULT_THINKING_CLOSE) :].lstrip()
             self._pending = rest
             return True
         return False
@@ -361,6 +463,7 @@ class EntmlThinkingStreamFilter:
                 if emitted:
                     out.append(("thinking", emitted))
             self._in_block = False
+            self._opened_plain = False
             self._fault_watch = False
             self._fault_buffer = ""
             self._thinking_started = False
@@ -373,6 +476,17 @@ class EntmlThinkingStreamFilter:
         fault_at = self._pending.find(_FAULT_THINKING_CLOSE)
         if fault_at >= 0:
             before = self._pending[:fault_at]
+            if self._opened_plain:
+                emitted = self._emit_thinking_piece(before)
+                if emitted:
+                    out.append(("thinking", emitted))
+                self._in_block = False
+                self._opened_plain = False
+                self._fault_watch = False
+                self._fault_buffer = ""
+                self._thinking_started = False
+                self._pending = self._pending[fault_at + len(_FAULT_THINKING_CLOSE) :]
+                return True
             emitted = self._emit_thinking_piece(before)
             if emitted:
                 out.append(("thinking", emitted))
@@ -402,9 +516,9 @@ class EntmlThinkingStreamFilter:
 
     def _feed_before_block(self, out: List[Tuple[str, str]]) -> bool:
         """开标签之前或尚未进入块；返回 False 表示应退出 feed 主循环。"""
-        open_at = self._pending.find(_THINKING_OPEN_PREFIX)
+        open_at, opened_plain = _find_earliest_thinking_open(self._pending)
         if open_at < 0:
-            safe, self._pending = _hold_prefix(self._pending, _THINKING_OPEN_PREFIX)
+            safe, self._pending = _hold_thinking_open_prefixes(self._pending)
             if safe:
                 out.append(("content", safe))
             return False
@@ -418,6 +532,7 @@ class EntmlThinkingStreamFilter:
             return False
 
         self._in_block = True
+        self._opened_plain = opened_plain
         self._thinking_started = False
         self._pending = self._pending[gt + 1 :]
         return True
@@ -471,6 +586,7 @@ class EntmlThinkingStreamFilter:
                 self._fault_buffer = ""
                 self._fault_watch = False
                 self._in_block = False
+                self._opened_plain = False
                 self._thinking_started = False
         if self._in_block:
             if not self._try_emit_actionable_invoke_from_in_block(out):
@@ -479,6 +595,7 @@ class EntmlThinkingStreamFilter:
                     out.append(("thinking", emitted))
                 self._pending = ""
             self._in_block = False
+            self._opened_plain = False
             self._thinking_started = False
         if self._pending:
             content, thinking = split_entml_thinking(self._pending)
@@ -490,6 +607,7 @@ class EntmlThinkingStreamFilter:
                 out.append(("content", self._pending))
         self._pending = ""
         self._in_block = False
+        self._opened_plain = False
         self._fault_watch = False
         self._fault_buffer = ""
         self._thinking_started = False

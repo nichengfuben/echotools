@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.61] - 2026-07-28
+
+### Fixed
+
+- thinking 容错（开启思考模式时）：
+  - 标准 ``<entml:thinking>…</entml:thinking>`` 不变
+  - ``<entml:thinking>…</thinking>`` 后接工具调用时，以 ``</thinking>`` 闭合思考块
+  - 仅出现 plain ``<thinking>`` 开标签时同样进入思考块；``</entml:thinking>`` 与 ``</thinking>`` 均可闭合
+
 ## [2.3.60] - 2026-07-28
 
 ### Changed
