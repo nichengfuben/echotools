@@ -5,15 +5,21 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from .entml_patterns import (
+    BARE_INVOKE_CHILD_OPEN_RE,
+    BARE_INVOKE_CHILD_RE,
+    PARAM_CLOSE_BARE,
+    PARAM_CLOSE_ENTML,
+    PARAM_OPEN_PATTERN,
     extract_attr_value,
     extract_parameter_type_attr,
     find_valid_parameter_close,
     normalize_entml_name,
+    parameter_close_at,
 )
 from .entml_values import coerce_entml_parameter_value
 
-_PARAM_OPEN_RE = re.compile(r"<entml:parameter\b([^>]*)>", re.IGNORECASE)
-_PARAM_CLOSE = "</entml:parameter>"
+_PARAM_OPEN_RE = re.compile(rf"{PARAM_OPEN_PATTERN}([^>]*)>", re.IGNORECASE)
+_PARAM_CLOSE = PARAM_CLOSE_ENTML
 _PARAMETERS_OPEN = "<entml:parameters>"
 _PARAMETERS_CLOSE = "</entml:parameters>"
 _INVOKE_CLOSE = "</entml:invoke>"
@@ -41,7 +47,7 @@ def _strip_incomplete_markup_suffix(value: str) -> str:
     if lt < 0:
         return value
     tail = value[lt:]
-    for tag in (_PARAM_CLOSE, _PARAMETERS_CLOSE, _INVOKE_CLOSE):
+    for tag in (_PARAM_CLOSE, PARAM_CLOSE_BARE, _PARAMETERS_CLOSE, _INVOKE_CLOSE):
         if tag.startswith(tail) and tail != tag:
             return value[:lt]
     return value
@@ -102,8 +108,13 @@ def _synthetic_close_body(inner: str) -> str:
     if matches:
         last = matches[-1]
         after = closed[last.end() :]
-        if _PARAM_CLOSE not in after:
-            closed = closed + _PARAM_CLOSE
+        open_snip = closed[last.start() : last.end()].lower()
+        if open_snip.startswith("<parameter") and not open_snip.startswith("<entml:"):
+            need = PARAM_CLOSE_BARE
+        else:
+            need = _PARAM_CLOSE
+        if need not in after and find_valid_parameter_close(closed, last.end(), allow_end=True) < 0:
+            closed = closed + need
     return closed
 
 
@@ -172,6 +183,36 @@ def _incomplete_parameter_raw(body: str, val_start: int) -> str:
     return _strip_incomplete_markup_suffix(tail)
 
 
+def _parse_bare_invoke_entries(body: str) -> List[Tuple[str, str, bool, Optional[str]]]:
+    """返回 [(key, value, is_complete, type_hint), ...]（按 body 内出现顺序）。"""
+    if not body:
+        return []
+    tagged: List[Tuple[int, str, str, bool, Optional[str]]] = []
+    for match in BARE_INVOKE_CHILD_RE.finditer(body):
+        key = normalize_entml_name(match.group(1))
+        if not key:
+            continue
+        tagged.append((match.start(), key, (match.group(2) or "").strip(), True, None))
+    for match in BARE_INVOKE_CHILD_OPEN_RE.finditer(body):
+        key = normalize_entml_name(match.group(1))
+        if not key:
+            continue
+        close = f"</entml:{key}>"
+        tail = match.group(2) or ""
+        if close in tail:
+            continue
+        tagged.append((match.start(), key, tail, False, None))
+    tagged.sort(key=lambda item: item[0])
+    seen: set[str] = set()
+    entries: List[Tuple[str, str, bool, Optional[str]]] = []
+    for _pos, key, value, is_complete, type_hint in tagged:
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append((key, value, is_complete, type_hint))
+    return entries
+
+
 def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool, Optional[str]]]:
     """返回 [(key, value, is_complete, type_hint), ...]。"""
     if not body:
@@ -202,7 +243,7 @@ def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool, Optional[s
             )
             break
         entries.append((key, body[val_start:close].strip(), True, type_hint))
-        i = close + len(_PARAM_CLOSE)
+        i = close + parameter_close_at(body, close)
     return entries
 
 
@@ -257,6 +298,11 @@ def build_streaming_json_snapshot(
         return params_snap
 
     entries = _parse_parameter_entries(inner)
+    seen_keys = {key for key, *_rest in entries}
+    for bare in _parse_bare_invoke_entries(inner):
+        if bare[0] not in seen_keys:
+            entries.append(bare)
+            seen_keys.add(bare[0])
     if not entries:
         return ""
 

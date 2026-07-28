@@ -17,11 +17,18 @@ INVOKE_RE = re.compile(
 # 允许 name / type 等属性任意顺序；单/双引号均可。
 # 闭合标签后必须是下一 parameter / invoke 结束 / parameters 结束。
 # 批量解析允许参数块在 body 末尾（$）；流式未闭合 invoke 不允许 $，避免 chunk 落在假闭合上误判。
-_PARAM_CLOSE_FOLLOWERS = r"(?:<entml:parameter\b|</entml:invoke>|</entml:parameters>)"
+# 模型偶发省略 entml: 前缀：<parameter name="...">...</parameter>
+_BARE_PARAM_OPEN_TAG = r"<parameter\b(?![s>])"
+PARAM_OPEN_PATTERN = rf"(?:<entml:parameter\b|{_BARE_PARAM_OPEN_TAG})"
+PARAM_CLOSE_ENTML = "</entml:parameter>"
+PARAM_CLOSE_BARE = "</parameter>"
+# 闭合标签后必须是 invoke 内合法兄弟节点（含裸 description/timeout 等）。
+_INVOKE_SIBLING_OPEN = r"<entml:(?!parameter\b|parameters\b|invoke\b)\w+\b"
+_PARAM_CLOSE_FOLLOWERS = rf"(?:{PARAM_OPEN_PATTERN}|{_INVOKE_SIBLING_OPEN}|</entml:invoke>|</entml:parameters>|{re.escape(PARAM_CLOSE_BARE)})"
 _PARAM_CLOSE_LOOKAHEAD = rf"(?=\s*{_PARAM_CLOSE_FOLLOWERS})"
 _PARAM_CLOSE_LOOKAHEAD_EOL = rf"(?=\s*(?:{_PARAM_CLOSE_FOLLOWERS}|$))"
 PARAM_RE = re.compile(
-    rf"<entml:parameter\b([^>]*)>([\s\S]*?)</entml:parameter>{_PARAM_CLOSE_LOOKAHEAD_EOL}",
+    rf"{PARAM_OPEN_PATTERN}([^>]*)>([\s\S]*?)(?:{re.escape(PARAM_CLOSE_ENTML)}|{re.escape(PARAM_CLOSE_BARE)}){_PARAM_CLOSE_LOOKAHEAD_EOL}",
     re.DOTALL | re.IGNORECASE,
 )
 _PARAM_CLOSE_VALID_RE = re.compile(
@@ -42,6 +49,15 @@ _PARAM_TYPE_ATTR_RE = re.compile(
 PARAMETERS_RE = re.compile(
     r"<entml:parameters>([\s\S]*?)</entml:parameters>",
     re.DOTALL,
+)
+# invoke 内裸子标签（非 parameter 包裹），如 Claude Code 输出的 description/timeout。
+BARE_INVOKE_CHILD_RE = re.compile(
+    r"<entml:(description|timeout)>([\s\S]*?)</entml:\1>",
+    re.DOTALL | re.IGNORECASE,
+)
+BARE_INVOKE_CHILD_OPEN_RE = re.compile(
+    r"<entml:(description|timeout)>([\s\S]*)",
+    re.DOTALL | re.IGNORECASE,
 )
 SUB_TAG_RE = re.compile(
     r"<([^>]+)>([\s\S]*?)</\1>",
@@ -134,7 +150,28 @@ def _strip_orphan_non_invoke_tool_tags(content: str) -> str:
     )
 
 
-_FOLLOWER_PREFIXES = ("<entml:parameter", "</entml:invoke", "</entml:parameters")
+_FOLLOWER_PREFIXES = (
+    "<entml:parameter",
+    "<parameter",
+    "</entml:invoke",
+    "</entml:parameters",
+    "</parameter",
+    "<entml:description",
+    "<entml:timeout",
+)
+
+
+def parameter_close_at(body: str, close_pos: int) -> int:
+    """``close_pos`` 处 parameter 闭合标签的字节长度（entml 或 bare）。"""
+    if body.startswith(PARAM_CLOSE_ENTML, close_pos):
+        return len(PARAM_CLOSE_ENTML)
+    if body.startswith(PARAM_CLOSE_BARE, close_pos):
+        if close_pos >= len("</entml:") and body.startswith(
+            PARAM_CLOSE_ENTML, close_pos - len("</entml:")
+        ):
+            return 0
+        return len(PARAM_CLOSE_BARE)
+    return 0
 
 
 def _parameter_close_follower_ok(after: str, *, allow_end: bool) -> bool:
@@ -148,17 +185,28 @@ def _parameter_close_follower_ok(after: str, *, allow_end: bool) -> bool:
 
 
 def find_valid_parameter_close(body: str, search_from: int = 0, *, allow_end: bool = True) -> int:
-    """返回 ``</entml:parameter>`` 在 ``body`` 中的起始下标；忽略参数值内的假闭合。"""
+    """返回 parameter 闭合标签在 ``body`` 中的起始下标；忽略参数值内的假闭合。"""
     pos = search_from
-    token = "</entml:parameter>"
-    while True:
-        close = body.find(token, pos)
-        if close < 0:
+    while pos < len(body):
+        next_entml = body.find(PARAM_CLOSE_ENTML, pos)
+        next_bare = body.find(PARAM_CLOSE_BARE, pos)
+        if next_entml < 0 and next_bare < 0:
             return -1
-        after = body[close + len(token) :]
+        candidates = []
+        if next_entml >= 0:
+            candidates.append(next_entml)
+        if next_bare >= 0 and parameter_close_at(body, next_bare) > 0:
+            candidates.append(next_bare)
+        if not candidates:
+            pos = min(x for x in (next_entml, next_bare) if x >= 0) + 1
+            continue
+        close = min(candidates)
+        close_len = parameter_close_at(body, close)
+        after = body[close + close_len :]
         if _parameter_close_follower_ok(after, allow_end=allow_end):
             return close
         pos = close + 1
+    return -1
 
 
 def extract_attr_value(attrs: str, attr_name: str = "name") -> Optional[str]:

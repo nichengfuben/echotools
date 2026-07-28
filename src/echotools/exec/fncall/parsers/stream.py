@@ -62,7 +62,7 @@ class FncallStreamParser:
         )
         self._emitted_invoke_count: int = 0
         self._json_stream_encoder = None
-        self._pending_stream_deltas: Deque[Tuple[str, str]] = deque()
+        self._pending_stream_deltas: Deque[Tuple[str, str, int]] = deque()
         self._stream_invoke_emitted: List[str] = []
         self._schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None
 
@@ -377,14 +377,14 @@ class FncallStreamParser:
             return complete_n
         return max(0, complete_n - 1)
 
-    def _merge_or_append_pending_delta(self, name: str, piece: str) -> None:
+    def _merge_or_append_pending_delta(self, name: str, piece: str, slot: int) -> None:
         if not piece:
             return
-        if self._pending_stream_deltas and self._pending_stream_deltas[-1][0] == name:
-            prev_name, prev_piece = self._pending_stream_deltas[-1]
-            self._pending_stream_deltas[-1] = (prev_name, prev_piece + piece)
+        if self._pending_stream_deltas and self._pending_stream_deltas[-1][2] == slot:
+            prev_name, prev_piece, prev_slot = self._pending_stream_deltas[-1]
+            self._pending_stream_deltas[-1] = (prev_name, prev_piece + piece, prev_slot)
         else:
-            self._pending_stream_deltas.append((name, piece))
+            self._pending_stream_deltas.append((name, piece, slot))
 
     def _pending_body_for_name(self, name: str) -> str:
         return "".join(p for n, p in self._pending_stream_deltas if n == name)
@@ -394,7 +394,7 @@ class FncallStreamParser:
         while len(self._stream_invoke_emitted) <= slot:
             self._stream_invoke_emitted.append("")
         self._stream_invoke_emitted[slot] += piece
-        self._merge_or_append_pending_delta(name, piece)
+        self._merge_or_append_pending_delta(name, piece, slot)
 
     def _ensure_ready_invoke_stream_tails(
         self, ready: List[Dict[str, Any]]
@@ -428,9 +428,9 @@ class FncallStreamParser:
             if tail:
                 name = call["function"]["name"]
                 if multi:
-                    self._pending_stream_deltas.append((name, tail))
+                    self._pending_stream_deltas.append((name, tail, idx))
                 else:
-                    self._merge_or_append_pending_delta(name, tail)
+                    self._merge_or_append_pending_delta(name, tail, idx)
             self._stream_invoke_emitted[idx] = final
         if self._json_stream_encoder is not None:
             from echotools.exec.fncall.protocols.entml_stream_json import (
@@ -555,7 +555,12 @@ class FncallStreamParser:
         """取出本轮 ``feed`` 产生的 streaming partial_json 增量（FIFO，可多段）。"""
         if not self._pending_stream_deltas:
             return None
-        return self._pending_stream_deltas.popleft()
+        name, piece, _slot = self._pending_stream_deltas.popleft()
+        return (name, piece)
+
+    def stream_invoke_argument_snapshots(self) -> List[str]:
+        """各 invoke slot 已流式发出的 arguments JSON 累积（与 batch 对齐）。"""
+        return list(self._stream_invoke_emitted)
 
     @property
     def streaming_invoke_closed(self) -> bool:

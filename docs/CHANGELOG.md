@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.73] - 2026-07-28
+
+### Fixed
+
+- entml 批量/流式：支持 invoke 内裸 ``<parameter name="...">``（无 ``entml:`` 前缀），修复 arguments 为空导致工具 required 校验失败
+
+### Added
+
+- ``test_entml_parse_bare_parameter_tags_in_invoke``：Edit 语料 batch + 多 chunk 流式 parity
+
+## [2.3.72] - 2026-07-28
+
+### Fixed
+
+- entml 批量/流式解析：支持 invoke 内裸 ``<entml:description>`` / ``<entml:timeout>`` 子标签（非 parameter 包裹）
+- ``PARAM_RE`` 闭合 lookahead 允许 description/timeout 等 invoke 兄弟节点，避免参数值截断导致 ``arguments: {}``
+- 流式 delta 按 invoke slot 分队列，同名连续多 invoke 不再拼成一条 JSON
+
+### Added
+
+- ``stream_invoke_argument_snapshots()``：各 invoke slot 流式 arguments 快照
+- ``test_entml_parse_bare_description_timeout_tags``、``test_entml_stream_same_tool_name_multiple_invokes``
+
 ## [2.3.71] - 2026-07-28
 
 ### Fixed

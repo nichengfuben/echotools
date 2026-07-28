@@ -1022,3 +1022,124 @@ def test_inject_include_thinking_in_history() -> None:
     assert "<entml:thinking>" in with_history
     assert "应先调用 get_weather 获取实时数据。" in with_history
     assert "那上海呢？" in with_history
+
+
+def test_entml_parse_bare_description_timeout_tags() -> None:
+    """Claude Code 风格：invoke 内裸 <entml:description>/<entml:timeout>。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Bash",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "description": {"type": "string"},
+                        "timeout": {"type": "integer"},
+                    },
+                },
+            },
+        }
+    ]
+    schema_index = _build_param_schema_index(tools)
+    sample = (
+        '<entml:invoke name="Bash">'
+        '<entml:parameter name="command" type="str">echo hi</entml:parameter>'
+        "<entml:description>Run echo</entml:description>"
+        "<entml:timeout>300000</entml:timeout>"
+        "</entml:invoke>"
+    )
+    calls = parse_entml_tool_calls(sample, tools, schema_index)
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert args["command"] == "echo hi"
+    assert args["description"] == "Run echo"
+    assert args["timeout"] == 300000
+
+
+def test_entml_parse_bare_parameter_tags_in_invoke() -> None:
+    """invoke 内裸 <parameter>（无 entml: 前缀），与 Edit 工具报错语料一致。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Edit",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                    },
+                    "required": ["path", "old_string", "new_string"],
+                },
+            },
+        }
+    ]
+    schema_index = _build_param_schema_index(tools)
+    sample = (
+        '<entml:invoke name="Edit">'
+        '<parameter name="path">X:/Project/Local/Provider-Deepseek-Adapter/main.py</parameter>'
+        '<parameter name="old_string">model = "deepseek-v4-flash"</parameter>'
+        '<parameter name="new_string">model = "deepseek-v4-pro"</parameter>'
+        "</entml:invoke>"
+    )
+    calls = parse_entml_tool_calls(sample, tools, schema_index)
+    assert len(calls) == 1
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert args["path"] == "X:/Project/Local/Provider-Deepseek-Adapter/main.py"
+    assert args["old_string"] == 'model = "deepseek-v4-flash"'
+    assert args["new_string"] == 'model = "deepseek-v4-pro"'
+
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+    for chunk in (1, 64, 9999):
+        p = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+        for i in range(0, len(sample), chunk):
+            p.feed(sample[i : i + chunk])
+            while p.consume_stream_delta():
+                pass
+        p.finalize()
+        stream_args = [s for s in p.stream_invoke_argument_snapshots() if s]
+        assert len(stream_args) == 1, f"chunk={chunk}"
+        assert json.loads(stream_args[0]) == args, f"chunk={chunk}"
+
+
+def test_entml_stream_same_tool_name_multiple_invokes() -> None:
+    """同名连续 invoke 的流式 arguments 与 batch 一致。"""
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "WebSearch",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
+            },
+        }
+    ]
+    sample = (
+        '<entml:invoke name="WebSearch">'
+        '<entml:parameter name="query" type="str">one</entml:parameter>'
+        "</entml:invoke>"
+        '<entml:invoke name="WebSearch">'
+        '<entml:parameter name="query" type="str">two</entml:parameter>'
+        "</entml:invoke>"
+        '<entml:invoke name="WebSearch">'
+        '<entml:parameter name="query" type="str">three</entml:parameter>'
+        "</entml:invoke>"
+    )
+    batch = parse_entml_tool_calls(sample, tools, _build_param_schema_index(tools))
+    batch_args = [c["function"]["arguments"] for c in batch]
+
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+    parser.feed(sample)
+    while parser.consume_stream_delta():
+        pass
+    parser.finalize()
+    stream_args = [s for s in parser.stream_invoke_argument_snapshots() if s]
+    assert stream_args == batch_args

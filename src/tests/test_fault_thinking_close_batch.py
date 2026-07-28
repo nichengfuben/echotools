@@ -6,11 +6,6 @@ import json
 from typing import Any, Dict, List
 
 import pytest
-from fixtures.simulated_fault_thinking_responses import (
-    FaultThinkingCase,
-    iter_fault_thinking_cases,
-    tools_for_fault_case,
-)
 
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.protocols.entml_think.parse import (
@@ -18,6 +13,11 @@ from echotools.exec.fncall.protocols.entml_think.parse import (
     has_unclosed_entml_thinking,
     invoke_index_inside_unclosed_thinking,
     split_entml_thinking,
+)
+from fixtures.simulated_fault_thinking_responses import (
+    FaultThinkingCase,
+    iter_fault_thinking_cases,
+    tools_for_fault_case,
 )
 
 CASES = iter_fault_thinking_cases()

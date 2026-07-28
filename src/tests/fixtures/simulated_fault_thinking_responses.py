@@ -5,10 +5,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from fixtures.simulated_llm_tool_responses import _TOOL_BY_NAME, TOOLS
+from fixtures.simulated_llm_tool_responses import AGENT_TOOLS, TOOLS, _TOOL_BY_NAME
 
 
 @dataclass(frozen=True)

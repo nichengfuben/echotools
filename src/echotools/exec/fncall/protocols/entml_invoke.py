@@ -4,6 +4,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from .entml_patterns import (
+    BARE_INVOKE_CHILD_RE,
     INVOKE_RE,
     PARAM_RE,
     PARAMETERS_RE,
@@ -13,6 +14,22 @@ from .entml_patterns import (
     parse_sub_tags,
 )
 from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value
+
+
+def _parse_bare_invoke_children(
+    body: str,
+    args: Dict[str, Any],
+    func_props: Dict[str, Dict[str, Any]],
+) -> None:
+    for match in BARE_INVOKE_CHILD_RE.finditer(body):
+        key = normalize_entml_name(match.group(1))
+        if not key or key in args:
+            continue
+        raw = (match.group(2) or "").strip()
+        args[key] = coerce_entml_parameter_value(
+            raw,
+            func_props.get(key) or None,
+        )
 
 
 def parse_invoke_args(
@@ -51,6 +68,8 @@ def parse_invoke_args(
             pschema or None,
             type_hint=type_hint,
         )
+
+    _parse_bare_invoke_children(body, args, func_props)
 
     return args
 
