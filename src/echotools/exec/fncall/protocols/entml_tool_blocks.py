@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from .entml_patterns import INVOKE_RE, normalize_entml_name
 from .entml_values import coerce_entml_arguments
 
+_TOOL_BLOCK_OPEN_RE = re.compile(r"<tool\s*>", re.IGNORECASE)
+_TOOL_BLOCK_CLOSE_RE = re.compile(
+    r"(?:</tool\s*>|</system\b[^>]*>|</assistant\s*>)",
+    re.IGNORECASE,
+)
+# legacy 整段匹配（测试/简单场景）
 _TOOL_BLOCK_RE = re.compile(
     r"<tool\s*>\s*([\s\S]*?)\s*</tool\s*>",
     re.IGNORECASE,
@@ -18,8 +24,9 @@ _INNER_TOOL_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 _BRACE_TOOL_HEAD_RE = re.compile(r"\{([A-Za-z][A-Za-z0-9_]*)\s*:\s*")
-# 工具结果常见行号泄漏（Read 伪块）
+# 工具结果常见行号泄漏（Read 伪块）— 仅用于多块 brace 判定
 _OUTPUT_LINE_RE = re.compile(r"^\s*\d+\s+\S", re.MULTILINE)
+_SCALAR_ARG_KEYS = ("path", "command", "pattern", "query", "file_path")
 
 
 def _known_tool_names(
@@ -53,25 +60,116 @@ def _args_from_parsed(name: str, parsed: Any) -> Dict[str, Any]:
     return {"value": parsed}
 
 
+def _args_from_scalar(
+    name: str,
+    scalar: str,
+    schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
+) -> Dict[str, Any]:
+    """``{Read: path/to/file}`` / ``{Bash: echo hi}`` 等标量行。"""
+    func_props = (schema_index or {}).get(name) or {}
+    if len(func_props) == 1:
+        key = next(iter(func_props))
+        return {key: scalar}
+    for key in _SCALAR_ARG_KEYS:
+        if key in func_props:
+            return {key: scalar}
+    return {"value": scalar}
+
+
+def _looks_like_file_path(value: str) -> bool:
+    text = (value or "").strip()
+    if not text:
+        return False
+    if "/" in text or "\\" in text:
+        return True
+    if len(text) >= 2 and text[1] == ":" and text[0].isalpha():
+        return True
+    return False
+
+
 def _extract_first_brace_tool_call(body: str) -> Optional[Tuple[str, Any]]:
-    """从正文提取首个 ``{Tool: json}``（允许后面跟工具输出 tail）。"""
+    """从正文提取首个 ``{Tool: json|scalar}``（允许后面跟工具输出 tail）。"""
     match = _BRACE_TOOL_HEAD_RE.search(body)
     if not match:
         return None
     name = normalize_entml_name(match.group(1))
     rest = body[match.end() :].lstrip()
-    if not rest or rest[0] not in "{[":
+    if not rest:
         return None
-    try:
-        parsed, end = json.JSONDecoder().raw_decode(rest)
-    except json.JSONDecodeError:
+    if rest[0] in "{[":
+        try:
+            parsed, end = json.JSONDecoder().raw_decode(rest)
+        except json.JSONDecodeError:
+            return None
+        after = rest[end:].lstrip()
+        if after.startswith("}"):
+            after = after[1:].lstrip()
+        # JSON + 行号 tail 为 history Read 伪块；标量 path + tail 仍解析（模型误格式真调用）
+        if after and _OUTPUT_LINE_RE.search(after):
+            return None
+        return name, parsed
+    close = rest.find("}")
+    if close < 0:
         return None
-    after = rest[end:].lstrip()
-    if after.startswith("}"):
-        after = after[1:].lstrip()
-    if after and _OUTPUT_LINE_RE.search(after):
+    scalar = rest[:close].strip()
+    if not scalar:
         return None
-    return name, parsed
+    after = rest[close + 1 :]
+    has_output_tail = bool(_OUTPUT_LINE_RE.search(after))
+    # 标量行：仅 path 型 Read/Glob 或带 Read 行号 tail；``{Bash: echo hi}`` 视为 history
+    if not has_output_tail and not _looks_like_file_path(scalar):
+        return None
+    return name, scalar
+
+
+def _iter_tool_block_spans(text: str) -> Iterator[Tuple[int, int, str]]:
+    """yield ``(open_start, close_end, body)``。"""
+    if not text or "<tool" not in text.lower():
+        return
+    pos = 0
+    while True:
+        open_m = _TOOL_BLOCK_OPEN_RE.search(text, pos)
+        if not open_m:
+            break
+        body_start = open_m.end()
+        close_m = _TOOL_BLOCK_CLOSE_RE.search(text, body_start)
+        if close_m:
+            close_end = close_m.end()
+            close_tag = text[close_m.start() : close_m.end()].lower()
+            if close_tag.startswith("</system"):
+                after = text[close_end:]
+                footer = re.match(
+                    r"[^\n<]*(?:</system\s*>)?",
+                    after,
+                    re.IGNORECASE,
+                )
+                if footer:
+                    close_end += footer.end()
+                after = text[close_end:]
+                asst = re.search(r"^\s*</assistant\s*>", after, re.IGNORECASE | re.MULTILINE)
+                if asst:
+                    close_end += asst.end()
+            yield open_m.start(), close_end, text[body_start : close_m.start()]
+            pos = close_end
+        else:
+            yield open_m.start(), len(text), text[body_start:]
+            break
+
+
+def strip_tool_block_spans(text: str) -> str:
+    """移除 ``<tool>…`` 块（含误用的 ``</system>`` / ``</assistant>`` 闭合）。"""
+    if not text or "<tool" not in text.lower():
+        return text
+    parts: List[str] = []
+    last = 0
+    for open_start, close_end, _body in _iter_tool_block_spans(text):
+        parts.append(text[last:open_start])
+        last = close_end
+    parts.append(text[last:])
+    out = "".join(parts)
+    out = re.sub(r"^\s*<assistant\s*>\s*\n+", "", out, count=1, flags=re.IGNORECASE)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
 
 
 def _parse_inner_tag_calls(
@@ -114,7 +212,11 @@ def _parse_brace_calls(
     name, value = parsed
     if known and name not in known:
         return []
-    args = coerce_entml_arguments(_args_from_parsed(name, value), name, schema_index)
+    if isinstance(value, str):
+        args = _args_from_scalar(name, value, schema_index)
+    else:
+        args = _args_from_parsed(name, value)
+    args = coerce_entml_arguments(args, name, schema_index)
     return [(name, args)]
 
 
@@ -152,9 +254,9 @@ def parse_tool_block_calls(
 
     allow_brace = not bool(INVOKE_RE.search(text))
     tool_calls: List[Dict[str, Any]] = []
-    for match in _TOOL_BLOCK_RE.finditer(text):
+    for _open, _close, body in _iter_tool_block_spans(text):
         for name, args in parse_tool_block_body(
-            match.group(1),
+            body,
             tools=tools,
             schema_index=schema_index,
             allow_brace_format=allow_brace,

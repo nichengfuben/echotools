@@ -26,6 +26,56 @@ _AMBIGUOUS_ENTML_PREFIXES = (
     "<entml:parameters",
 )
 _INVOKE_PREFIX = "<entml:invoke"
+_FUNCTION_CALLS_PREFIX = "<entml:function_calls"
+_LEADING_HOLD_PREFIXES = _AMBIGUOUS_ENTML_PREFIXES + (
+    _THINKING_OPEN_PREFIX,
+    _FUNCTION_CALLS_PREFIX,
+    "<tool",
+    "<assistant",
+)
+
+
+def leading_entml_tag_holdback_len(
+    text: str,
+    *,
+    thinking_enabled: bool = True,
+) -> int:
+    """buffer 开头是 entml/thinking/invoke 标签真前缀时，应 hold 的字节数。"""
+    if not text:
+        return 0
+    prefixes: List[str] = list(_LEADING_HOLD_PREFIXES)
+    if thinking_enabled:
+        prefixes.append(_PLAIN_THINKING_OPEN_PREFIX)
+    for prefix in prefixes:
+        if text.startswith(prefix):
+            return 0
+    max_hold = max(len(prefix) - 1 for prefix in prefixes)
+    for length in range(min(len(text), max_hold), 0, -1):
+        head = text[:length]
+        if any(prefix.startswith(head) and head != prefix for prefix in prefixes):
+            return length
+    return 0
+
+
+def stream_safe_visible_prefix(
+    text: str,
+    *,
+    thinking_enabled: bool = True,
+) -> str:
+    """流式 UI 可安全展示的 prefix（不含未收齐的 entml/thinking 开标签）。"""
+    if not text:
+        return ""
+    hold = leading_entml_tag_holdback_len(text, thinking_enabled=thinking_enabled)
+    if hold >= len(text):
+        return ""
+    buf = text[hold:]
+    if has_unclosed_entml_thinking(buf, thinking_enabled=thinking_enabled):
+        open_at, _ = _find_earliest_thinking_open(
+            buf, thinking_enabled=thinking_enabled
+        )
+        if open_at >= 0:
+            return buf[:open_at]
+    return buf
 
 
 def find_complete_entml_invoke_open(buffer: str) -> int:

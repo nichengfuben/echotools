@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.80] - 2026-07-29
+
+### Fixed
+
+- entml 流式 ``partial_text``：未收齐的 ``<entml:thinking`` / invoke 开标签前缀不再泄漏为可见 ``<``
+- entml ``<tool>`` 容错：支持 ``{Read: path}`` 标量行、``</system>`` 误闭合及 Read 输出 tail；解析后剥离 mimic 块并保留 ``</assistant>`` 之后正文
+- entml batch ``parse()``：先剥离 thinking / 已解析 tool 块，再剥离伪 history，避免真实回复被整段清空
+
+## [2.3.79] - 2026-07-29
+
+### Fixed
+
+- entml batch ``parse()``：thinking 剥离移至 invoke 移除之前，修复 fault ``</thinking>`` 语料泄漏 ``<entml:thinking>`` 标签；返回可见正文不再含 entml 标签
+
+### Added
+
+- ``test_entml_batch_stream_comprehensive``：模拟语料 / fault thinking / 伪 history / Qwen 真实日志语料的全方位 batch+stream parity 与标签泄漏回归（多 chunk 分片）
+
 ## [2.3.78] - 2026-07-29
 
 ### Fixed

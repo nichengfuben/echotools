@@ -18,7 +18,10 @@ from echotools.exec.fncall.prompt.templates import (
 from echotools.exec.fncall.protocols.entml_invoke import (
     parse_entml_tool_calls,
 )
-from echotools.exec.fncall.protocols.entml_tool_blocks import parse_tool_block_calls
+from echotools.exec.fncall.protocols.entml_tool_blocks import (
+    parse_tool_block_calls,
+    strip_tool_block_spans,
+)
 from echotools.exec.fncall.protocols.entml_patterns import (
     BLOCK_RE,
     entml_invoke_open_may_be_streaming,
@@ -151,12 +154,13 @@ class EntmlProtocol(ToolProtocol):
     _THINKING_PREFIX = "<entml:thinking"
 
     def get_trigger_tags(self) -> List[str]:
-        # invoke / thinking 前缀 holdback，避免 `<e` 歧义被提前吐出
+        # invoke / thinking / 伪 history tool 前缀 holdback，避免 `<e` / `<t` 歧义被提前吐出
         return [
             self._TRIGGER,
             self._TRIGGER_PREFIX,
             self._THINKING_PREFIX,
             f"{self._THINKING_PREFIX}>",
+            "<tool",
         ]
 
     def normalize_stream_buffer(self, buffer: str) -> str:
@@ -271,6 +275,7 @@ class EntmlProtocol(ToolProtocol):
         tools: Optional[List[Dict[str, Any]]] = None,
         *,
         include_tool_blocks: bool = True,
+        thinking_enabled: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         from echotools.exec.fncall.protocols.entml_think.parse import (
             _find_earliest_thinking_open,
@@ -279,6 +284,7 @@ class EntmlProtocol(ToolProtocol):
         )
 
         schema_index = _build_param_schema_index(tools) if tools else None
+        # 工具解析始终按 thinking 开启语义分流（fault ``</thinking>`` 等）；可见正文再按 thinking_enabled 剥离。
         parse_text, _thinking = split_entml_thinking(text, thinking_enabled=True)
         unclosed_open_at = -1
         if has_unclosed_entml_thinking(text, thinking_enabled=True):
@@ -288,10 +294,18 @@ class EntmlProtocol(ToolProtocol):
             if unclosed_open_at >= 0:
                 parse_text = text[:unclosed_open_at]
         tool_calls = parse_entml_tool_calls(parse_text, tools, schema_index)
+        tool_block_calls: List[Dict[str, Any]] = []
         if include_tool_blocks:
-            tool_calls.extend(parse_tool_block_calls(parse_text, tools, schema_index))
+            tool_block_calls = parse_tool_block_calls(parse_text, tools, schema_index)
+            tool_calls.extend(tool_block_calls)
         clean = text[:unclosed_open_at] if unclosed_open_at >= 0 else text
-        # 须在移除 invoke 之前剥离伪 history，否则未闭合 <tool> 会把 invoke 之后的可见回复误删。
+        if thinking_enabled:
+            # fault ``</thinking>`` 须借后续 invoke 判定闭合；thinking 剥离必须在 invoke 移除之前。
+            visible, _ = split_entml_thinking(clean, thinking_enabled=True)
+            clean = visible
+        if tool_block_calls:
+            clean = strip_tool_block_spans(clean)
+        # 须在移除 invoke 之前剥离伪 history，且须晚于已解析的 ``<tool>`` 块剥离。
         clean, _ = strip_fake_history_markup(clean)
         if tool_calls:
             clean = BLOCK_RE.sub("", clean)

@@ -615,23 +615,14 @@ class FncallStreamParser:
 
     def _stream_visible_buffer(self) -> str:
         """与 batch ``parse`` 一致：未闭合 thinking 之后的正文不参与可见/剥离。"""
-        buf = self._raw_buf
-        if not buf:
-            return ""
         from echotools.exec.fncall.protocols.entml_think.parse import (
-            _find_earliest_thinking_open,
-            has_unclosed_entml_thinking,
+            stream_safe_visible_prefix,
         )
 
-        if has_unclosed_entml_thinking(
-            buf, thinking_enabled=self._thinking_enabled
-        ):
-            open_at, _ = _find_earliest_thinking_open(
-                buf, thinking_enabled=self._thinking_enabled
-            )
-            if open_at >= 0:
-                return buf[:open_at]
-        return buf
+        return stream_safe_visible_prefix(
+            self._raw_buf,
+            thinking_enabled=self._thinking_enabled,
+        )
 
     def _stream_display_text(self) -> str:
         """流式可见正文：在完整 raw 缓冲上剥离伪 history（保留 thinking 保护区）。"""
@@ -671,7 +662,11 @@ class FncallStreamParser:
                     self._text_parts.append(part)
 
         # 与 batch parse 同路径（须在含 thinking 标签的 raw 缓冲上剥离伪 history）。
-        clean_text, tool_calls = self._protocol.parse(self._raw_buf, self._tools)
+        clean_text, tool_calls = self._protocol.parse(
+            self._raw_buf,
+            self._tools,
+            thinking_enabled=self._thinking_enabled,
+        )
 
         clean_fn = getattr(self._protocol, "clean_tool_tags", None)
         if callable(clean_fn):
@@ -728,7 +723,14 @@ class FncallStreamParser:
         if self._thinking_enabled and self._raw_buf:
             lower = self._raw_buf.lower()
             if "<entml:invoke" not in lower and "<entml:function_calls" not in lower:
-                return self._stream_display_text()
+                display = self._stream_display_text()
+                if display:
+                    from echotools.exec.fncall.shared.history_markup import (
+                        strip_fake_history_markup_for_display,
+                    )
+
+                    cleaned, _ = strip_fake_history_markup_for_display(display)
+                    return cleaned
         return ""
 
     @property
@@ -748,6 +750,7 @@ class FncallStreamParser:
                 parse_kwargs: Dict[str, Any] = {}
                 if getattr(self._protocol, "id", None) == "entml":
                     parse_kwargs["include_tool_blocks"] = False
+                    parse_kwargs["thinking_enabled"] = self._thinking_enabled
                 _, all_calls = self._protocol.parse(
                     self._raw_buf, self._tools, **parse_kwargs
                 )

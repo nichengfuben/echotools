@@ -395,10 +395,10 @@ class TestParseBoundaries:
         )
         clean, calls = _parse(text)
         assert _args(calls)[0] == {"s": "x", "i": 2}
-        display, thinking = split_entml_thinking(clean)
+        assert clean == "答："
+        _, thinking = split_entml_thinking(text)
         assert thinking == "plan"
-        assert display == "答："
-        assert "entml:" not in display
+        assert "entml:" not in clean
 
     def test_parse_invoke_args_direct(self) -> None:
         index = _build_param_schema_index(RICH_TOOLS)

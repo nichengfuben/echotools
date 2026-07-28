@@ -119,7 +119,8 @@ def test_entml_parse_variants_no_tag_leak(sample: str, expected_args: list) -> N
     assert "</entml" not in clean
 
 
-def test_entml_parse_preserves_thinking_for_split() -> None:
+def test_entml_parse_display_has_no_thinking_tags() -> None:
+    """batch parse 返回可见正文；thinking 须从原文 split，不在 clean 中。"""
     proto = get_protocol("entml")
     text = (
         "<entml:thinking>plan the call</entml:thinking>\n"
@@ -130,11 +131,11 @@ def test_entml_parse_preserves_thinking_for_split() -> None:
     )
     clean, calls = proto.parse(text, WEATHER_TOOLS)
     assert _args(calls) == [{"city": "杭州"}]
-    assert "<entml:thinking>" in clean
-    display, thinking = split_entml_thinking(clean)
+    assert "<entml:thinking>" not in clean
+    assert "entml:" not in clean
+    assert "好的。" in clean
+    _, thinking = split_entml_thinking(text)
     assert thinking == "plan the call"
-    assert "entml:" not in display
-    assert "好的。" in display
 
 
 def test_entml_parse_complex_parameters() -> None:

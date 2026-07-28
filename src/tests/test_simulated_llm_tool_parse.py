@@ -36,20 +36,25 @@ def _assert_case_result(
     calls: List[Dict[str, Any]],
     *,
     thinking_extra: str = "",
+    source_text: str = "",
 ) -> None:
     assert _names(calls) == case.expect_names, case.id
     assert _args(calls) == case.expect_args, case.id
 
-    display, thinking = split_entml_thinking(clean)
-    combined_thinking = "\n".join(
-        part for part in (thinking, thinking_extra) if part
-    ).strip()
-
+    display = clean
     for needle in case.expect_clean_substrings:
-        assert needle in display or needle in clean, f"{case.id}: missing {needle!r}"
+        assert needle in display, f"{case.id}: missing {needle!r} in {display!r}"
 
     for banned in case.expect_clean_absent:
         assert banned not in display, f"{case.id}: leaked {banned!r} in {display!r}"
+
+    assert "<entml" not in display.lower(), f"{case.id}: entml tag in display {display!r}"
+    assert "</entml" not in display.lower(), f"{case.id}: entml close in display {display!r}"
+
+    _, thinking_from_source = split_entml_thinking(source_text or clean)
+    combined_thinking = "\n".join(
+        part for part in (thinking_from_source, thinking_extra) if part
+    ).strip()
 
     if case.expect_thinking is not None:
         assert case.expect_thinking in combined_thinking, (
@@ -76,14 +81,16 @@ def _stream_parse(
 def test_simulated_llm_response_batch_parse(case: SimulatedCase) -> None:
     proto = get_protocol("entml")
     clean, calls = proto.parse(case.response, TOOLS)
-    _assert_case_result(case, clean, calls)
+    _assert_case_result(case, clean, calls, source_text=case.response)
 
 
 @pytest.mark.parametrize("case", iter_simulated_cases(), ids=lambda c: c.id)
 @pytest.mark.parametrize("chunk_size", [1, 3, 7, 16, 64, 0], ids=lambda n: f"chunk{n}")
 def test_simulated_llm_response_stream_chunks(case: SimulatedCase, chunk_size: int) -> None:
     clean, calls, thinking = _stream_parse(case.response, TOOLS, chunk_size)
-    _assert_case_result(case, clean, calls, thinking_extra=thinking)
+    _assert_case_result(
+        case, clean, calls, thinking_extra=thinking, source_text=case.response
+    )
 
 
 def test_simulated_corpus_covers_key_shapes() -> None:
@@ -113,15 +120,13 @@ def test_simulated_batch_and_stream_agree_on_all_cases() -> None:
     for case in SIMULATED_LLM_RESPONSES:
         batch_clean, batch_calls = proto.parse(case.response, TOOLS)
         stream_clean, stream_calls, _ = _stream_parse(case.response, TOOLS, 5)
-        batch_display, _ = split_entml_thinking(batch_clean)
-        stream_display, _ = split_entml_thinking(stream_clean)
         if _names(batch_calls) != _names(stream_calls) or _args(batch_calls) != _args(
             stream_calls
         ):
             mismatches.append(f"{case.id}: calls batch={_args(batch_calls)} stream={_args(stream_calls)}")
-        if _normalize_ws(batch_display) != _normalize_ws(stream_display):
+        if _normalize_ws(batch_clean) != _normalize_ws(stream_clean):
             mismatches.append(
-                f"{case.id}: clean batch={batch_display!r} stream={stream_display!r}"
+                f"{case.id}: clean batch={batch_clean!r} stream={stream_clean!r}"
             )
     assert not mismatches, "\n".join(mismatches)
 
@@ -156,13 +161,11 @@ def test_generated_noisy_variants_do_not_leak_tags() -> None:
             clean, calls = proto.parse(text, TOOLS)
             assert _names(calls) == [name]
             assert _args(calls)[0] == expect
-            display, _ = split_entml_thinking(clean)
-            assert "entml:invoke" not in display
-            assert "entml:parameter" not in display
-            assert "entml:function_calls" not in display
+            assert "entml:invoke" not in clean
+            assert "entml:parameter" not in clean
+            assert "entml:function_calls" not in clean
 
             for chunk in (1, 8, 23):
                 sclean, scalls, _ = _stream_parse(text, TOOLS, chunk)
                 assert _args(scalls)[0] == expect
-                sdisplay, _ = split_entml_thinking(sclean)
-                assert "entml:invoke" not in sdisplay
+                assert "entml:invoke" not in sclean
