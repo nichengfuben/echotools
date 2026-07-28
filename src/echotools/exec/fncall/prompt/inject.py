@@ -29,6 +29,9 @@ from echotools.exec.fncall.protocols.entml_think.hist import (
     apply_thinking_history_policy,
     parse_include_thinking_in_history,
 )
+from echotools.exec.fncall.shared.history_markup import (
+    detect_fake_history_markup,
+)
 from echotools.exec.fncall.shared.loop_detect import detect_tool_loop
 from echotools.exec.fncall.shared.normalization import (
     format_tool_descs,
@@ -75,6 +78,11 @@ def build_tools_prompt(
         if result.is_looping:
             logger.debug("检测到工具循环（%d 次）", result.repeat_count)
             loop_warning = result.suggestion
+    history_markup_warning = ""
+    markup_result = detect_fake_history_markup(normalized)
+    if markup_result.detected:
+        logger.debug("检测到 assistant/tool 伪 history 标签")
+        history_markup_warning = markup_result.suggestion
     if hasattr(protocol, "format_tool_descs"):
         tool_descs = protocol.format_tool_descs(tools)
     else:
@@ -92,6 +100,7 @@ def build_tools_prompt(
         user_system_prompt=user_system_prompt,
         history_text=history_text,
         loop_warning=loop_warning,
+        history_markup_warning=history_markup_warning,
         current_user_message=current_user_message,
         **extra,
     )

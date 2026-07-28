@@ -30,6 +30,7 @@ from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_section,
 )
 from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
+from echotools.exec.fncall.shared.history_markup import strip_fake_history_markup
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 from echotools.exec.fncall.shared.normalization import (
     normalize_content,
@@ -176,6 +177,7 @@ class EntmlProtocol(ToolProtocol):
         user_system_prompt: str = "",
         history_text: str = "",
         loop_warning: str = "",
+        history_markup_warning: str = "",
         current_user_message: Optional[str] = None,
         protocol_options: Optional[Dict[str, Any]] = None,
         history_has_tool_calls: bool = False,
@@ -201,6 +203,11 @@ class EntmlProtocol(ToolProtocol):
 
         if loop_warning:
             sections.append(f"<loop_warning>\n{loop_warning}\n</loop_warning>")
+
+        if history_markup_warning:
+            sections.append(
+                f"<history_markup_warning>\n{history_markup_warning}\n</history_markup_warning>"
+            )
 
         if current_user_message is not None:
             sections.append(format_entml_current_user_message(current_user_message))
@@ -277,12 +284,14 @@ class EntmlProtocol(ToolProtocol):
             )
             if unclosed_open_at >= 0:
                 parse_text = text[:unclosed_open_at]
+        parse_text, _ = strip_fake_history_markup(parse_text)
         tool_calls = parse_entml_tool_calls(parse_text, tools, schema_index)
         clean = text[:unclosed_open_at] if unclosed_open_at >= 0 else text
         if tool_calls:
             clean = BLOCK_RE.sub("", clean)
         # 无论是否解析成功，都剥离工具相关残留，避免标签泄露；thinking 保留给后续 split。
         clean = strip_tool_entml_residue(clean)
+        clean, _ = strip_fake_history_markup(clean)
         return (clean, normalize_tool_calls(tool_calls, tools))
 
     def parse_fragment(
@@ -297,8 +306,10 @@ class EntmlProtocol(ToolProtocol):
         return strip_entml_from_content(content)
 
     def clean_tool_tags(self, content: str) -> str:
-        """仅剥离工具相关标签残留，保留 thinking。"""
-        return strip_tool_entml_residue(content)
+        """仅剥离工具相关标签残留，保留 thinking；并移除伪 history 块。"""
+        cleaned = strip_tool_entml_residue(content)
+        cleaned, _ = strip_fake_history_markup(cleaned)
+        return cleaned
 
     def format_assistant_tool_calls(
         self,

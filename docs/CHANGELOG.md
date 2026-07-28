@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.66] - 2026-07-28
+
+### Fixed
+
+- 模型误输出块级 ``<assistant>`` / ``<tool>`` 伪 history 标签：batch/stream 解析时剥离（保留 ``<entml:thinking>`` 内讨论）
+- 反向闭合 ``</assistant>`` / ``</tool>``（无开标签）及 orphan 开标签块一并移除；行内 prose 提及 ``<tool>`` 不误伤
+
+### Added
+
+- 检测到历史 assistant 消息含伪标签时，注入 ``<history_markup_warning>``（与 ``<loop_warning>`` 同级，位于 ``<current_user_message>`` 前）
+
 ## [2.3.65] - 2026-07-28
 
 ### Fixed

@@ -49,6 +49,7 @@ class ToolProtocol(ABC):
         user_system_prompt: str = "",
         history_text: str = "",
         loop_warning: str = "",
+        history_markup_warning: str = "",
         current_user_message: Optional[str] = None,
         protocol_options: Optional[Dict[str, Any]] = None,
     ) -> str:

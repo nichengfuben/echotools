@@ -629,6 +629,9 @@ class FncallStreamParser:
 
         # 统一从「可见正文 + fncall 缓冲」解析，避免漏检；thinking 已在过滤器中剥离
         assembled = "".join(self._text_parts) + self._fncall_buf
+        from echotools.exec.fncall.shared.history_markup import strip_fake_history_markup
+
+        assembled, _ = strip_fake_history_markup(assembled)
         clean_text, tool_calls = self._protocol.parse(assembled, self._tools)
 
         clean_fn = getattr(self._protocol, "clean_tool_tags", None)
