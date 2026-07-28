@@ -17,6 +17,14 @@ _ENTML_THINKING_OPEN_RE = re.compile(
     re.IGNORECASE,
 )
 _ENTML_THINKING_CLOSE = "</entml:thinking>"
+_ORPHAN_FAULT_THINKING_CLOSE_LINE_RE = re.compile(
+    r"(?:^|\n)\s*</thinking>\s*(?:\n|$)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_PLAIN_THINKING_OPEN_LINE_RE = re.compile(
+    r"(?:^|\n)\s*<thinking\s*>\s*(?:\n|$)",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 class HistoryMarkupDetectionResult:
@@ -98,6 +106,13 @@ def _strip_fake_blocks_in_segment(segment: str) -> Tuple[str, bool]:
                 break
             found = True
             text = new_text
+    if not _PLAIN_THINKING_OPEN_LINE_RE.search(text):
+        while True:
+            new_text, n = _ORPHAN_FAULT_THINKING_CLOSE_LINE_RE.subn("\n", text, count=1)
+            if n == 0:
+                break
+            found = True
+            text = new_text
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text, found
 
@@ -133,3 +148,17 @@ def strip_fake_history_markup(content: str) -> Tuple[str, bool]:
             break
 
     return "".join(parts), found
+
+
+def strip_fake_history_markup_for_display(content: str) -> Tuple[str, bool]:
+    """流式 ``partial_text`` 用：完整块剥离 + 截断行尾未收齐的伪标签。"""
+    cleaned, found = strip_fake_history_markup(content)
+    tail = re.search(
+        r"(?:^|\n)\s*(?:</?(?:assistant|tool)\b[^\n]*|</thinking>\s*)$",
+        cleaned,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if tail:
+        cleaned = cleaned[: tail.start()]
+        found = True
+    return cleaned, found

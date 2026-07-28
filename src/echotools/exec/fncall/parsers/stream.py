@@ -675,7 +675,13 @@ class FncallStreamParser:
     @property
     def partial_text(self) -> str:
         """已确认的非 fncall 文本片段（可用于流式 UI 实时展示）。"""
-        return "".join(self._text_parts)
+        from echotools.exec.fncall.shared.history_markup import (
+            strip_fake_history_markup_for_display,
+        )
+
+        text = "".join(self._text_parts)
+        cleaned, _ = strip_fake_history_markup_for_display(text)
+        return cleaned
 
     @property
     def partial_thinking(self) -> str:

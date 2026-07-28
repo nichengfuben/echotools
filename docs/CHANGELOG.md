@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.67] - 2026-07-28
+
+### Fixed
+
+- 流式 ``partial_text`` 实时剥离伪 ``<assistant>`` / ``<tool>`` 块，不再等到 ``finalize()`` 才从 UI 路径隐藏
+- 可见正文中的 orphan ``</thinking>`` 行（无 ``<entml:thinking>`` 开标签）一并移除
+
 ## [2.3.66] - 2026-07-28
 
 ### Fixed

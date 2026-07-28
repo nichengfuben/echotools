@@ -10,6 +10,7 @@ from echotools.exec.fncall.prompt.inject import inject_fncall
 from echotools.exec.fncall.shared.history_markup import (
     detect_fake_history_markup,
     strip_fake_history_markup,
+    strip_fake_history_markup_for_display,
 )
 
 READ_TOOL = {
@@ -28,6 +29,19 @@ REAL_INVOKE = (
     '<entml:invoke name="Read">\n'
     '<entml:parameter name="path">src/main.py</entml:parameter>\n'
     "</entml:invoke>"
+)
+
+USER_EDIT_MIMIC_RESPONSE = (
+    "● 验证通过，无外部依赖残留。现在清理几个文件中遗留的旧路径注释。\n\n"
+    "</thinking>\n\n"
+    "<tool>\n"
+    '{Edit: {"path": "X:/Project/Local/Provider-Deepseek-Adapter/provider_deepseek/core/protocol/consts.py", '
+    '"old_string": "# src/old/path.py", "new_string": "x"}}\n'
+    '{Edit: {"path": "X:/Project/Local/Provider-Deepseek-Adapter/provider_deepseek/core/protocol/headers.py", '
+    '"old_string": "# old", "new_string": "y"}}\n'
+    '{Edit: {"path": "X:/Project/Local/Provider-Deepseek-Adapter/provider_deepseek/core/__init__.py", '
+    '"old_string": "from x", "new_string": "y"}}\n'
+    "</tool>"
 )
 
 MODEL_MIMIC_RESPONSE = (
@@ -87,6 +101,24 @@ MODEL_MIMIC_RESPONSE = (
             "{Read: x}",
             True,
         ),
+        (
+            USER_EDIT_MIMIC_RESPONSE,
+            "验证通过",
+            "Edit",
+            True,
+        ),
+        (
+            "可见正文\n</thinking>\n后续",
+            "后续",
+            "</thinking>",
+            True,
+        ),
+        (
+            "<thinking>\nplan\n</thinking>\nvisible",
+            "visible",
+            None,
+            False,
+        ),
     ],
 )
 def test_strip_fake_history_markup(
@@ -107,6 +139,18 @@ def test_strip_preserves_prose_mention_of_tool_word() -> None:
     cleaned, found = strip_fake_history_markup(text)
     assert not found
     assert "<tool>" in cleaned
+
+
+def test_display_strip_truncates_incomplete_fake_open() -> None:
+    partial = "前言\n\n<tool"
+    cleaned, found = strip_fake_history_markup_for_display(partial)
+    assert found
+    assert cleaned == "前言"
+    partial2 = "前言\n\n<tool>\n{Edit: x"
+    cleaned2, found2 = strip_fake_history_markup_for_display(partial2)
+    assert found2
+    assert cleaned2 == "前言"
+    assert "Edit" not in cleaned2
 
 
 class TestBatchParseFakeHistory:
@@ -150,6 +194,75 @@ class TestStreamParseFakeHistory:
         assert "</assistant>" not in clean
         assert "分析中" not in clean
         assert "后续仍可见" in clean
+
+
+class TestStreamPartialTextFakeHistory:
+    """流式 ``partial_text`` 须在块闭合后即时剥离，不能等 finalize。"""
+
+    @pytest.mark.parametrize("chunk", [1, 4, 8, 17, 64])
+    def test_partial_text_hides_fake_tool_during_stream(self, chunk: int) -> None:
+        parser = FncallStreamParser(protocol=get_protocol("entml"), tools=[READ_TOOL])
+        leaked = False
+        for i in range(0, len(USER_EDIT_MIMIC_RESPONSE), chunk):
+            parser.feed(USER_EDIT_MIMIC_RESPONSE[i : i + chunk])
+            pt = parser.partial_text
+            if "<tool>" in pt or "Edit:" in pt or "Provider-Deepseek" in pt:
+                leaked = True
+        assert not leaked
+        clean, calls = parser.finalize()
+        assert calls == []
+        assert "<tool>" not in clean
+        assert "Edit" not in clean
+        assert "验证通过" in clean
+
+    @pytest.mark.parametrize("chunk", [1, 8, 32])
+    def test_partial_text_model_mimic_no_leak(self, chunk: int) -> None:
+        parser = FncallStreamParser(protocol=get_protocol("entml"), tools=[READ_TOOL])
+        for i in range(0, len(MODEL_MIMIC_RESPONSE), chunk):
+            parser.feed(MODEL_MIMIC_RESPONSE[i : i + chunk])
+            pt = parser.partial_text
+            assert "<tool>" not in pt
+            assert "485                       buf" not in pt
+        clean, calls = parser.finalize()
+        assert calls == []
+        assert "端点正确" in clean
+
+    def test_batch_user_edit_mimic(self) -> None:
+        proto = get_protocol("entml")
+        clean, calls = proto.parse(USER_EDIT_MIMIC_RESPONSE, [READ_TOOL])
+        assert calls == []
+        assert "验证通过" in clean
+        assert "<tool>" not in clean
+        assert "Edit" not in clean
+        assert "</thinking>" not in clean
+
+    def test_fake_tool_then_real_invoke(self) -> None:
+        text = f"{USER_EDIT_MIMIC_RESPONSE}\n\n说明。\n{REAL_INVOKE}"
+        proto = get_protocol("entml")
+        clean, calls = proto.parse(text, [READ_TOOL])
+        assert len(calls) == 1
+        assert calls[0]["function"]["name"] == "Read"
+        assert "<tool>" not in clean
+        assert "Edit" not in clean
+        assert "说明" in clean
+
+    @pytest.mark.parametrize("chunk", [1, 5, 17])
+    def test_thinking_disabled_plain_open_finalize_preserves_visible(
+        self, chunk: int
+    ) -> None:
+        """未开思考时 plain ``<thinking>`` 对不得因 orphan 剥离而清空 finalize。"""
+        parser = FncallStreamParser(
+            protocol=get_protocol("entml"),
+            tools=[READ_TOOL],
+            protocol_options={"thinking_mode": "off"},
+        )
+        text = "<thinking>\nplan\n</thinking>\nvisible\n"
+        for i in range(0, len(text), chunk):
+            parser.feed(text[i : i + chunk])
+        clean, calls = parser.finalize()
+        assert not calls
+        assert "visible" in clean
+        assert "<thinking>" in clean or "plan" in clean
 
 
 class TestHistoryMarkupWarningInject:
