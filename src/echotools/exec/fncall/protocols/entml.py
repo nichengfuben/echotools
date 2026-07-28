@@ -270,14 +270,17 @@ class EntmlProtocol(ToolProtocol):
 
         schema_index = _build_param_schema_index(tools) if tools else None
         parse_text, _thinking = split_entml_thinking(text, thinking_enabled=True)
-        if has_unclosed_entml_thinking(parse_text, thinking_enabled=True):
-            open_at, _ = _find_earliest_thinking_open(parse_text, thinking_enabled=True)
-            if open_at >= 0:
-                parse_text = parse_text[:open_at]
+        unclosed_open_at = -1
+        if has_unclosed_entml_thinking(text, thinking_enabled=True):
+            unclosed_open_at, _ = _find_earliest_thinking_open(
+                text, thinking_enabled=True
+            )
+            if unclosed_open_at >= 0:
+                parse_text = text[:unclosed_open_at]
         tool_calls = parse_entml_tool_calls(parse_text, tools, schema_index)
-        clean = text
+        clean = text[:unclosed_open_at] if unclosed_open_at >= 0 else text
         if tool_calls:
-            clean = BLOCK_RE.sub("", text)
+            clean = BLOCK_RE.sub("", clean)
         # 无论是否解析成功，都剥离工具相关残留，避免标签泄露；thinking 保留给后续 split。
         clean = strip_tool_entml_residue(clean)
         return (clean, normalize_tool_calls(tool_calls, tools))

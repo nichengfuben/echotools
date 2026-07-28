@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.65] - 2026-07-28
+
+### Fixed
+
+- 批量 ``parse()``：未闭合 ``<entml:thinking>`` 时 ``clean`` 不再泄露块后正文（与流式一致，仅保留开标签前可见内容）
+
+### Added
+
+- ``</thinking>`` fault 容错专项语料与测试：``test_fault_thinking_close_batch`` / ``test_fault_thinking_close_stream``（模拟 rogator / Claude Code 高发输出）
+
 ## [2.3.64] - 2026-07-28
 
 ### Fixed
