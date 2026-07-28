@@ -20,6 +20,7 @@ from .entml_patterns import (
     parameter_close_at,
 )
 from .entml_values import coerce_entml_parameter_value
+from echotools.exec.fncall.shared.coercion import _resolve_effective_type
 
 _PARAM_OPEN_RE = re.compile(rf"{PARAM_OPEN_PATTERN}([^>]*)>", re.IGNORECASE)
 _PARAM_CLOSE = PARAM_CLOSE_ENTML
@@ -90,8 +91,10 @@ def _effective_param_type(
         mapped = _TYPE_HINT_TO_JSON_TYPE.get(type_hint.strip().lower())
         if mapped:
             return mapped
-    if pschema and pschema.get("type"):
-        return str(pschema["type"])
+    if pschema:
+        resolved = _resolve_effective_type(pschema)
+        if resolved:
+            return resolved
     stripped = (value or "").lstrip()
     if stripped.startswith("["):
         return "array"

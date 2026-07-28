@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.82] - 2026-07-29
+
+### Fixed
+
+- entml 流式 partial_json：``anyOf``/``oneOf`` schema 的 integer 参数（如 Read ``line_offset``）不再误按 string 加引号，修复 Rogator ANT/OAI 流式 ``json_buf`` 出现 ``143143`` 等非法 JSON
+
+### Added
+
+- ``test_read_anyof_integer_stream_json_buf_matches_batch``：Read + anyOf integer 流式/batch parity 回归
+
 ## [2.3.81] - 2026-07-29
 
 ### Fixed

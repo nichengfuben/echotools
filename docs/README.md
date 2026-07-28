@@ -26,6 +26,20 @@ pip install echotools[all]
 | `all` | 全部可选依赖 |
 | `dev` | pytest, ruff, mypy |
 
+### PyPI 重装（`uninstall-no-record-file`）
+
+本地 `pip install -e .` 或中断的 wheel 安装可能留下无 `RECORD` 的元数据，导致
+`pip install --upgrade echotools` 报 `Cannot uninstall echotools None`。
+
+```powershell
+# 在仓库根目录
+powershell -File scripts/reinstall_from_pypi.ps1 -Version 2.3.81
+```
+
+或手动：删除 `src/echotools.egg-info` 与 site-packages 里仅有 `direct_url.json` 的
+`echotools-*.dist-info`，再执行
+`pip install --force-reinstall --no-cache-dir echotools==2.3.81`。
+
 ## 快速开始
 
 ```python

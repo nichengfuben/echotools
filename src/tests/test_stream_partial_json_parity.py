@@ -85,6 +85,60 @@ def test_bare_parameter_close_at_buffer_end_snapshot() -> None:
     assert json.loads(snap + "}") == {"pattern": "foo|bar"}
 
 
+def test_read_anyof_integer_stream_json_buf_matches_batch() -> None:
+    """Rogator Read：line_offset 为 anyOf integer 时，流式 json_buf 不得误加引号（143143）。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "line_offset": {
+                            "anyOf": [
+                                {"type": "integer", "minimum": 1},
+                                {"type": "integer", "maximum": -1},
+                            ],
+                        },
+                        "n_lines": {"type": "integer", "exclusiveMinimum": 0},
+                    },
+                    "required": ["path"],
+                },
+            },
+        }
+    ]
+    text = (
+        '<entml:invoke name="Read">\n'
+        '<entml:parameter name="path">X:/Project/Local/DeepSeek/core/guard/pow.py</entml:parameter>\n'
+        '<entml:parameter name="line_offset">143</entml:parameter>\n'
+        '<entml:parameter name="n_lines">15</entml:parameter>\n'
+        "</entml:invoke>"
+    )
+    proto = get_protocol("entml")
+    batch_args = json.loads(proto.parse(text, tools)[1][0]["function"]["arguments"])
+    parser = FncallStreamParser(protocol=proto, tools=tools)
+    json_buf = ""
+    for i in range(0, len(text), 17):
+        parser.feed(text[i : i + 17])
+        while True:
+            delta = parser.consume_stream_delta()
+            if not delta:
+                break
+            json_buf += delta[1]
+    comp = parser.complete_stream_delta_if_needed()
+    if comp:
+        json_buf += comp[1]
+    parser.finalize()
+    assert json.loads(json_buf) == batch_args
+    assert batch_args == {
+        "path": "X:/Project/Local/DeepSeek/core/guard/pow.py",
+        "line_offset": 143,
+        "n_lines": 15,
+    }
+
+
 def test_parameters_block_no_stream_until_closed() -> None:
     body = (
         "<entml:parameters>\n"
