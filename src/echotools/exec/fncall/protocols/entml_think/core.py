@@ -159,6 +159,16 @@ def resolve_thinking_injection(
     return injection_mode, max_length
 
 
+def is_thinking_enabled(protocol_options: Optional[Dict[str, Any]] = None) -> bool:
+    """是否开启思考模式（容错与 plain ``<thinking>`` 仅在此为 True 时生效）。
+
+    未传 ``protocol_options`` 时视为已开启（兼容旧调用）；显式 ``off`` / ``none`` 时关闭。
+    """
+    if protocol_options is None:
+        return True
+    return resolve_thinking_injection(protocol_options) is not None
+
+
 def _uses_forced_thinking_behavior(injection_mode: str) -> bool:
     return injection_mode != "auto"
 

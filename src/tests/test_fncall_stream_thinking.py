@@ -328,3 +328,35 @@ def test_entml_open_fault_close_then_invoke_still_works(chunk: int = 3) -> None:
     clean, calls = parser.finalize()
     assert len(calls) == 1
     assert "plan" in parser.partial_thinking
+
+
+@pytest.mark.parametrize("chunk", [1, 5, 17])
+def test_thinking_disabled_plain_open_stays_visible(chunk: int) -> None:
+    """未开思考时 plain ``<thinking>`` 不得进入思考链。"""
+    parser = FncallStreamParser(
+        protocol=get_protocol("entml"),
+        tools=TOOLS,
+        protocol_options={"thinking_mode": "off"},
+    )
+    text = "<thinking>\nplan\n</thinking>\nvisible\n"
+    for i in range(0, len(text), chunk):
+        parser.feed(text[i : i + chunk])
+    clean, calls = parser.finalize()
+    assert not calls
+    assert not parser.partial_thinking
+    assert "<thinking>" in parser.partial_text or "plan" in parser.partial_text
+    assert "visible" in clean
+
+
+def test_thinking_disabled_fault_close_not_applied() -> None:
+    """未开思考时 ``</thinking>`` 不得作为 entml 块的 fault 闭合。"""
+    parser = FncallStreamParser(
+        protocol=get_protocol("entml"),
+        tools=TOOLS,
+        protocol_options={"thinking_mode": "off"},
+    )
+    text = f"<entml:thinking>\nplan\n</thinking>\n{INVOKE}"
+    parser.feed(text)
+    clean, calls = parser.finalize()
+    assert len(calls) == 1
+    assert "plan" not in parser.partial_thinking or "</thinking>" in parser.partial_thinking

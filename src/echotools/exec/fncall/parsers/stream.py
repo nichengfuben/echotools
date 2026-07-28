@@ -12,12 +12,12 @@ from echotools.exec.protocol.base import ToolProtocol
 
 
 # 懒导入：仅 entml 协议需要
-def _make_thinking_filter(protocol: ToolProtocol):
+def _make_thinking_filter(protocol: ToolProtocol, *, thinking_enabled: bool = True):
     if getattr(protocol, "id", None) == "entml":
         from echotools.exec.fncall.protocols.entml_think.parse import (
             EntmlThinkingStreamFilter,
         )
-        return EntmlThinkingStreamFilter()
+        return EntmlThinkingStreamFilter(thinking_enabled=thinking_enabled)
     return None
 
 
@@ -40,9 +40,13 @@ class FncallStreamParser:
         self,
         protocol: ToolProtocol,
         tools: Optional[List[Dict[str, Any]]] = None,
+        protocol_options: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._protocol = protocol
         self._tools = tools
+        from echotools.exec.fncall.protocols.entml_think.core import is_thinking_enabled
+
+        self._thinking_enabled = is_thinking_enabled(protocol_options)
         self._raw_buf: str = ""
         self._text_parts: List[str] = []
         self._waiting_tail: str = ""
@@ -51,7 +55,9 @@ class FncallStreamParser:
         self._state: str = self.WAITING_FOR_TAG
         self._finalized_result: Optional[Tuple[str, List[Dict[str, Any]]]] = None
         self._thinking_parts: List[str] = []
-        self._thinking_filter = _make_thinking_filter(protocol)
+        self._thinking_filter = _make_thinking_filter(
+            protocol, thinking_enabled=self._thinking_enabled
+        )
         self._emitted_invoke_count: int = 0
         self._json_stream_encoder = None
         self._pending_stream_deltas: Deque[Tuple[str, str]] = deque()
@@ -298,7 +304,9 @@ class FncallStreamParser:
                 from echotools.exec.fncall.protocols.entml_think.parse import (
                     invoke_index_inside_unclosed_thinking,
                 )
-                if invoke_index_inside_unclosed_thinking(combined, pos):
+                if invoke_index_inside_unclosed_thinking(
+                    combined, pos, thinking_enabled=self._thinking_enabled
+                ):
                     self._feed_waiting_thinking_plain(combined)
                     return
             if pos > 0:
@@ -314,7 +322,9 @@ class FncallStreamParser:
             from echotools.exec.fncall.protocols.entml_think.parse import (
                 has_unclosed_entml_thinking,
             )
-            if has_unclosed_entml_thinking(combined):
+            if has_unclosed_entml_thinking(
+                combined, thinking_enabled=self._thinking_enabled
+            ):
                 self._feed_waiting_thinking_plain(combined)
                 return
 
@@ -633,7 +643,9 @@ class FncallStreamParser:
             from echotools.exec.fncall.protocols.entml_think.parse import (
                 split_entml_thinking,
             )
-            clean_text, more_thinking = split_entml_thinking(clean_text)
+            clean_text, more_thinking = split_entml_thinking(
+                clean_text, thinking_enabled=self._thinking_enabled
+            )
             if more_thinking:
                 self._thinking_parts.append(more_thinking)
 

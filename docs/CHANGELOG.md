@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.62] - 2026-07-28
+
+### Fixed
+
+- thinking 容错仅在**已开启思考**（``protocol_options`` 注入 thinking 段）时生效；显式 ``off`` / ``none`` 时不识别 plain ``<thinking>`` 开标签与 ``</thinking>`` fault 闭合
+- ``FncallStreamParser`` 新增 ``protocol_options`` 参数，流式/批解析与过滤器共享 ``is_thinking_enabled`` 判定
+
 ## [2.3.61] - 2026-07-28
 
 ### Fixed

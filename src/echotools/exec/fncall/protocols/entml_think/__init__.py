@@ -2,6 +2,7 @@
 
 from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_section,
+    is_thinking_enabled,
     parse_max_thinking_length,
 )
 from echotools.exec.fncall.protocols.entml_think.hist import (
@@ -24,6 +25,7 @@ __all__ = [
     "extract_reasoning_text",
     "format_entml_thinking_history_block",
     "has_unclosed_entml_thinking",
+    "is_thinking_enabled",
     "parse_include_thinking_in_history",
     "parse_interleaved_history",
     "parse_max_thinking_length",

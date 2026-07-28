@@ -132,3 +132,22 @@ def test_plain_thinking_stream_fault_close() -> None:
     assert thinking.strip() == "plan"
     assert "hello" in content
     assert not filt.in_open_thinking()
+
+
+def test_is_thinking_enabled() -> None:
+    from echotools.exec.fncall.protocols.entml_think.core import is_thinking_enabled
+
+    assert is_thinking_enabled(None)
+    assert is_thinking_enabled({"thinking_mode": "on"})
+    assert is_thinking_enabled({"thinking_mode": "auto"})
+    assert not is_thinking_enabled({"thinking_mode": "off"})
+    assert not is_thinking_enabled({"thinking_level": "none"})
+
+
+def test_plain_thinking_requires_thinking_enabled_batch() -> None:
+    text = "<thinking>\nplan\n</thinking>\nanswer"
+    _, thinking_on = split_entml_thinking(text, thinking_enabled=True)
+    content_off, thinking_off = split_entml_thinking(text, thinking_enabled=False)
+    assert thinking_on == "plan"
+    assert thinking_off == ""
+    assert "<thinking>" in content_off
