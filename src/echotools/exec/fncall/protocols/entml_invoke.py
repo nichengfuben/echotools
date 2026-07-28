@@ -13,7 +13,7 @@ from .entml_patterns import (
     normalize_entml_name,
     parse_sub_tags,
 )
-from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value
+from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value, _apply_common_param_aliases
 
 
 def _parse_bare_invoke_children(
@@ -70,6 +70,7 @@ def parse_invoke_args(
         )
 
     _parse_bare_invoke_children(body, args, func_props)
+    _apply_common_param_aliases(args, func_props)
 
     return args
 

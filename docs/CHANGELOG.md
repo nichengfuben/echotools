@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.74] - 2026-07-28
+
+### Fixed
+
+- entml 参数名归一：模型输出 ``file_path`` / ``filepath`` 时，若 schema 要求 ``path`` 则自动映射
+
+### Added
+
+- ``test_entml_parse_read_file_path_alias``
+
 ## [2.3.73] - 2026-07-28
 
 ### Fixed

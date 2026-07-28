@@ -1106,6 +1106,41 @@ def test_entml_parse_bare_parameter_tags_in_invoke() -> None:
         assert json.loads(stream_args[0]) == args, f"chunk={chunk}"
 
 
+def test_entml_parse_read_file_path_alias() -> None:
+    """Read 工具：模型输出 file_path 时映射为 schema 要求的 path。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "line_offset": {"type": "integer"},
+                        "n_lines": {"type": "integer"},
+                    },
+                    "required": ["path"],
+                },
+            },
+        }
+    ]
+    schema_index = _build_param_schema_index(tools)
+    sample = (
+        '<entml:invoke name="Read">'
+        '<entml:parameter name="file_path">X:/Project/foo.py</entml:parameter>'
+        '<entml:parameter name="line_offset">122</entml:parameter>'
+        '<entml:parameter name="n_lines">25</entml:parameter>'
+        "</entml:invoke>"
+    )
+    calls = parse_entml_tool_calls(sample, tools, schema_index)
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert "file_path" not in args
+    assert args["path"] == "X:/Project/foo.py"
+    assert args["line_offset"] == 122
+    assert args["n_lines"] == 25
+
+
 def test_entml_stream_same_tool_name_multiple_invokes() -> None:
     """同名连续 invoke 的流式 arguments 与 batch 一致。"""
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
