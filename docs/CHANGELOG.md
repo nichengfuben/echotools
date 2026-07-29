@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.88] - 2026-07-29
+
+### Fixed
+
+- entml invoke 解析：整段 ``<entml:parameter>`` 块视为不透明 payload，备用语法（直接子标签 / description / timeout）仅在 structural gap 解析，避免 Write 等内容参数内嵌 HTML/Vue 标签（如 ``<span>``、``<slot>``）泄漏为额外工具参数（req-1785323083）
+- entml parameter 闭标签 follower：invoke 级直接子元素（``<path>``、``<-n>`` 等）视为合法兄弟节点，修复 parameter + 直接子标签混合格式边界误判
+
+### Added
+
+- structural gap 辅助函数（``parameter_block_spans`` / ``invoke_structural_gap_text``）及 mixed-syntax、语料回归测试
+
 ## [2.3.87] - 2026-07-29
 
 ### Fixed

@@ -6,6 +6,11 @@ import pytest
 
 from echotools.exec.fncall import get_protocol, inject_fncall
 from echotools.exec.fncall.protocols.entml_invoke import parse_entml_tool_calls
+from echotools.exec.fncall.protocols.entml_patterns import (
+    invoke_structural_gap_text,
+    invoke_structural_gaps,
+    parameter_block_spans,
+)
 from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_section,
     default_max_thinking_length_for_level,
@@ -1699,4 +1704,103 @@ def test_write_path_content_hybrid_tool_block() -> None:
     assert args["file_path"].endswith("rocket-red-tornado-damage.md")
     assert "Agent WebUI" in args["content"]
     assert "Phase 1" in args["content"]
+
+
+def test_invoke_structural_gaps_exclude_parameter_blocks() -> None:
+    body = (
+        "pre\n"
+        '<entml:parameter name="content"><span>x</span></entml:parameter>\n'
+        "<path>src/a.py</path>\n"
+        "post"
+    )
+    blocks = parameter_block_spans(body)
+    assert len(blocks) == 1
+    assert body[blocks[0][0] : blocks[0][1]].startswith("<entml:parameter")
+    gaps = invoke_structural_gaps(body)
+    gap_text = invoke_structural_gap_text(body)
+    assert "<span>" not in gap_text
+    assert "<path>src/a.py</path>" in gap_text
+    assert "pre" in gap_text
+    assert "post" in gap_text
+    assert sum(e - s for s, e in gaps) == len(gap_text)
+
+
+def test_write_parameter_payload_opaque_to_alternate_syntax() -> None:
+    """parameter 块内任意类 XML/HTML 标签不得被 invoke 备用语法解析为参数。"""
+    schema_index = _build_param_schema_index(WRITE_TOOLS)
+    sample = (
+        '<entml:invoke name="Write">\n'
+        '<entml:parameter name="path">src/select.js</entml:parameter>\n'
+        '<entml:parameter name="content">'
+        "app.component('core-collapsible', {\n"
+        "  template: [\n"
+        "    '<span class=\"collapsible-arrow\"></span>',\n"
+        "    '<span>{{ title }}</span>',\n"
+        "    '<slot></slot>',\n"
+        "    '<div v-if=\"open\"></div>',\n"
+        "  ].join('\\n')\n"
+        "});\n"
+        "</entml:parameter>\n"
+        "</entml:invoke>"
+    )
+    calls = parse_entml_tool_calls(sample, WRITE_TOOLS, schema_index)
+    assert len(calls) == 1
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert set(args.keys()) == {"file_path", "content"}
+    assert "<slot></slot>" in args["content"]
+    assert "{{ title }}" in args["content"]
+
+
+def test_invoke_mixed_parameter_and_direct_child_syntax() -> None:
+    """structural gap：parameter 与直接子标签可并存，互不污染。"""
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Grep",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {"type": "string"},
+                        "path": {"type": "string"},
+                        "-n": {"type": "boolean"},
+                    },
+                    "required": ["pattern"],
+                },
+            },
+        }
+    ]
+    schema_index = _build_param_schema_index(tools)
+    sample = (
+        '<entml:invoke name="Grep">\n'
+        '<entml:parameter name="pattern">foo|bar</entml:parameter>\n'
+        "<path>src/main.py</path>\n"
+        "<-n>true</-n>\n"
+        "</entml:invoke>"
+    )
+    calls = parse_entml_tool_calls(sample, tools, schema_index)
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert args == {"pattern": "foo|bar", "path": "src/main.py", "-n": True}
+
+
+def test_write_parameter_payload_corpus_req_1785323083() -> None:
+    """回归 req-1785323083：parameter payload 内 markup 不得泄漏为额外参数。"""
+    from pathlib import Path
+
+    sample_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785323083-f6847d18c1f9.txt"
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus file not available")
+    text = sample_path.read_text(encoding="utf-8")
+    proto = get_protocol("entml")
+    _, batch_calls = proto.parse(text, WRITE_TOOLS)
+    write_calls = [c for c in batch_calls if c["function"]["name"] == "Write"]
+    assert len(write_calls) == 1
+    args = json.loads(write_calls[0]["function"]["arguments"])
+    assert "span" not in args
+    assert "slot" not in args
+    assert args["file_path"].endswith("select.js")
+    assert "core-select" in args["content"]
+    assert "<slot></slot>" in args["content"]
 

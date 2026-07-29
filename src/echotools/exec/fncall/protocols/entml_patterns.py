@@ -15,17 +15,22 @@ INVOKE_RE = re.compile(
     r"<entml:invoke\b([^>]*)>([\s\S]*?)</entml:invoke>",
     re.DOTALL,
 )
+# invoke 内直接子元素：<pattern>v</pattern>、<-n>true</-n>（标签名即参数名）
+_INVOKE_DIRECT_TAG_NAME = r"(?:-\w+|[a-zA-Z_][\w.-]*)"
 # 允许 name / type 等属性任意顺序；单/双引号均可。
-# 闭合标签后必须是下一 parameter / invoke 结束 / parameters 结束。
+# 闭合标签后必须是 invoke 内合法兄弟节点（parameter / entml 子标签 / 直接子元素 / invoke 结束）。
 # 批量解析允许参数块在 body 末尾（$）；流式未闭合 invoke 不允许 $，避免 chunk 落在假闭合上误判。
 # 模型偶发省略 entml: 前缀：<parameter name="...">...</parameter>
 _BARE_PARAM_OPEN_TAG = r"<parameter\b(?![s>])"
 PARAM_OPEN_PATTERN = rf"(?:<entml:parameter\b|{_BARE_PARAM_OPEN_TAG})"
 PARAM_CLOSE_ENTML = "</entml:parameter>"
 PARAM_CLOSE_BARE = "</parameter>"
-# 闭合标签后必须是 invoke 内合法兄弟节点（含裸 description/timeout 等）。
 _INVOKE_SIBLING_OPEN = r"<entml:(?!parameter\b|parameters\b|invoke\b)\w+\b"
-_PARAM_CLOSE_FOLLOWERS = rf"(?:{PARAM_OPEN_PATTERN}|{_INVOKE_SIBLING_OPEN}|</entml:invoke>|</entml:parameters>|{re.escape(PARAM_CLOSE_BARE)})"
+_INVOKE_DIRECT_CHILD_OPEN = rf"<(?!entml:)({_INVOKE_DIRECT_TAG_NAME})\b"
+_PARAM_CLOSE_FOLLOWERS = (
+    rf"(?:{PARAM_OPEN_PATTERN}|{_INVOKE_SIBLING_OPEN}|{_INVOKE_DIRECT_CHILD_OPEN}"
+    rf"|</entml:invoke>|</entml:parameters>|{re.escape(PARAM_CLOSE_BARE)})"
+)
 _PARAM_CLOSE_LOOKAHEAD = rf"(?=\s*{_PARAM_CLOSE_FOLLOWERS})"
 _PARAM_CLOSE_LOOKAHEAD_EOL = rf"(?=\s*(?:{_PARAM_CLOSE_FOLLOWERS}|$))"
 PARAM_RE = re.compile(
@@ -60,8 +65,7 @@ BARE_INVOKE_CHILD_OPEN_RE = re.compile(
     r"<entml:(description|timeout)>([\s\S]*)",
     re.DOTALL | re.IGNORECASE,
 )
-# invoke 内直接子元素：<pattern>v</pattern>、<-n>true</-n>（标签名即参数名）
-_INVOKE_DIRECT_TAG_NAME = r"(?:-\w+|[a-zA-Z_][\w.-]*)"
+# invoke 内直接子元素（完整/未闭合 regex 见下）
 INVOKE_DIRECT_CHILD_RE = re.compile(
     rf"<(?!entml:)({_INVOKE_DIRECT_TAG_NAME})>([\s\S]*?)</\1>",
     re.DOTALL,
@@ -243,6 +247,7 @@ _FOLLOWER_PREFIXES = (
     "</parameter",
     "<entml:description",
     "<entml:timeout",
+    "<",
 )
 
 
@@ -270,6 +275,8 @@ def _parameter_close_follower_ok(after: str, *, allow_end: bool) -> bool:
 
 
 _PARAM_OPEN_TAG_RE = re.compile(rf"{PARAM_OPEN_PATTERN}([^>]*)>", re.IGNORECASE)
+
+
 def synthetic_close_invoke_body(inner: str) -> str:
     """为 force_close / invoke 已闭合但未闭合的 parameter 补齐结构闭合标签。"""
     if not inner:
@@ -314,6 +321,75 @@ def find_valid_parameter_close(body: str, search_from: int = 0, *, allow_end: bo
             return close
         pos = close + 1
     return -1
+
+
+def parameter_value_spans(body: str) -> List[Tuple[int, int]]:
+    """``<entml:parameter>`` 值区间（含未闭合 parameter 的 growing tail）。"""
+    if not body:
+        return []
+    spans: List[Tuple[int, int]] = []
+    i = 0
+    while i < len(body):
+        match = _PARAM_OPEN_TAG_RE.search(body, i)
+        if not match:
+            break
+        val_start = match.end()
+        close = find_valid_parameter_close(body, val_start, allow_end=True)
+        if close < 0:
+            spans.append((val_start, len(body)))
+            break
+        spans.append((val_start, close))
+        i = close + parameter_close_at(body, close)
+    return spans
+
+
+def parameter_block_spans(body: str) -> List[Tuple[int, int]]:
+    """完整 ``<entml:parameter …>…</entml:parameter>`` 块（含开闭标签）。"""
+    if not body:
+        return []
+    spans: List[Tuple[int, int]] = []
+    i = 0
+    while i < len(body):
+        match = _PARAM_OPEN_TAG_RE.search(body, i)
+        if not match:
+            break
+        block_start = match.start()
+        val_start = match.end()
+        close = find_valid_parameter_close(body, val_start, allow_end=True)
+        if close < 0:
+            spans.append((block_start, len(body)))
+            break
+        block_end = close + parameter_close_at(body, close)
+        spans.append((block_start, block_end))
+        i = block_end
+    return spans
+
+
+def invoke_structural_gaps(body: str) -> List[Tuple[int, int]]:
+    """invoke 体内可承载备用参数语法的区间（parameter 块之外）。"""
+    if not body:
+        return []
+    blocks = parameter_block_spans(body)
+    if not blocks:
+        return [(0, len(body))]
+    gaps: List[Tuple[int, int]] = []
+    pos = 0
+    for start, end in blocks:
+        if pos < start:
+            gaps.append((pos, start))
+        pos = end
+    if pos < len(body):
+        gaps.append((pos, len(body)))
+    return gaps
+
+
+def invoke_structural_gap_text(body: str) -> str:
+    """parameter 块视为不透明 payload 后，invoke 体剩余可解析文本。"""
+    return "".join(body[s:e] for s, e in invoke_structural_gaps(body))
+
+
+def inside_parameter_value(pos: int, spans: List[Tuple[int, int]]) -> bool:
+    return any(start <= pos < end for start, end in spans)
 
 
 def extract_attr_value(attrs: str, attr_name: str = "name") -> Optional[str]:

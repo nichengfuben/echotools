@@ -11,6 +11,7 @@ from .entml_patterns import (
     PARAMETERS_RE,
     extract_attr_value,
     extract_parameter_type_attr,
+    invoke_structural_gap_text,
     iter_actionable_entml_invoke_blocks,
     normalize_entml_name,
     parse_sub_tags,
@@ -25,8 +26,9 @@ def _parse_direct_child_tags(
     args: Dict[str, Any],
     func_props: Dict[str, Dict[str, Any]],
 ) -> None:
-    """模型用 ``<key>value</key>`` 代替 ``<parameter name=\"key\">``。"""
-    for match in INVOKE_DIRECT_CHILD_RE.finditer(body):
+    """模型用 ``<key>value</key>`` 代替 ``<parameter name=\"key\">``（仅 structural gap）。"""
+    gap_text = invoke_structural_gap_text(body)
+    for match in INVOKE_DIRECT_CHILD_RE.finditer(gap_text):
         key = normalize_entml_name(match.group(1))
         if not key or key.lower() in INVOKE_DIRECT_CHILD_SKIP or key in args:
             continue
@@ -42,7 +44,8 @@ def _parse_bare_invoke_children(
     args: Dict[str, Any],
     func_props: Dict[str, Dict[str, Any]],
 ) -> None:
-    for match in BARE_INVOKE_CHILD_RE.finditer(body):
+    gap_text = invoke_structural_gap_text(body)
+    for match in BARE_INVOKE_CHILD_RE.finditer(gap_text):
         key = normalize_entml_name(match.group(1))
         if not key or key in args:
             continue
