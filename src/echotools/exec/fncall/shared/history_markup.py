@@ -5,6 +5,10 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Tuple
 
+from echotools.exec.fncall.protocols.entml_fake_structure_markup import (
+    strip_fake_entml_structure_markup,
+    strip_fake_entml_structure_markup_for_display,
+)
 from echotools.exec.fncall.shared.normalization import normalize_content
 
 _FAKE_HISTORY_TAGS = ("assistant", "tool")
@@ -266,7 +270,9 @@ def strip_fake_history_markup(content: str) -> Tuple[str, bool]:
             parts.append(content[open_m.start() :])
             break
 
-    return "".join(parts), found
+    merged = "".join(parts)
+    merged, hit = strip_fake_entml_structure_markup(merged)
+    return merged, found or hit
 
 
 def _truncate_display_fake_tail(cleaned: str) -> Tuple[str, bool]:
@@ -323,4 +329,5 @@ def strip_fake_history_markup_for_display(content: str) -> Tuple[str, bool]:
         ):
             return cleaned, found
     cleaned2, hit = _truncate_display_fake_tail(cleaned)
-    return cleaned2, found or hit
+    cleaned3, hit2 = strip_fake_entml_structure_markup_for_display(cleaned2)
+    return cleaned3, found or hit or hit2

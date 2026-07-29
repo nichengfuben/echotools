@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.95] - 2026-07-30
+
+### Added
+
+- entml 输出过滤：自动剥离模型误生成的 ``<!-- Tool Result ID:… -->``（完整 ``-->`` 闭合后移除；流式未闭合 hold）
+- entml 输出过滤：剥离伪 ``<entml:result>`` / ``<entml:funtions_results>`` / ``<entml:conversation_history>`` 开闭标签（``>`` 闭合即滤；result 正文在 ``</entml:result>`` 收齐前不可见）
+
 ## [2.3.94] - 2026-07-30
 
 ### Fixed

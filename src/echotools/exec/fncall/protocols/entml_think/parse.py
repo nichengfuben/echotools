@@ -3,10 +3,11 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-from echotools.exec.fncall.protocols.entml_patterns import (
-    entml_invoke_open_may_be_streaming,
-    extract_attr_value,
-    normalize_entml_name,
+from echotools.exec.fncall.protocols.entml_fake_structure_markup import (
+    leading_partial_fake_entml_structure_len,
+    strip_fake_entml_structure_markup,
+    strip_fake_entml_structure_markup_for_display,
+    trailing_partial_fake_entml_structure_len,
 )
 
 THINKING_BLOCK_RE = re.compile(
@@ -67,6 +68,9 @@ def leading_entml_tag_holdback_len(
     """buffer 开头是 entml/thinking/invoke 标签真前缀时，应 hold 的字节数。"""
     if not text:
         return 0
+    comment_hold = leading_partial_fake_entml_structure_len(text)
+    if comment_hold:
+        return comment_hold
     prefixes: List[str] = list(_LEADING_HOLD_PREFIXES)
     if thinking_enabled:
         prefixes.append(_PLAIN_THINKING_OPEN_PREFIX)
@@ -110,6 +114,9 @@ def trailing_entml_tag_holdback_len(text: str) -> int:
     """buffer 尾部是 entml/thinking 标签真前缀时，应 hold 的字节数。"""
     if not text:
         return 0
+    comment_hold = trailing_partial_fake_entml_structure_len(text)
+    if comment_hold:
+        return comment_hold
     invoke_idx = text.rfind("<entml:invoke")
     if invoke_idx >= 0:
         tail_from_invoke = text[invoke_idx:]
@@ -171,6 +178,7 @@ def clean_stream_partial_visible(
     tail_hold = trailing_entml_tag_holdback_len(text)
     if tail_hold:
         text = text[:-tail_hold]
+    text = strip_fake_entml_structure_markup_for_display(text)[0]
     if has_calls:
         text = text.rstrip()
     if not text.strip():
