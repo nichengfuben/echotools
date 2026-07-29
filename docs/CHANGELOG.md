@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.86] - 2026-07-29
+
+### Fixed
+
+- entml 流式 partial_json：bare ``description``/``timeout`` 未闭合时去掉尾部 ``</entml:…>`` 片段，避免 snapshot 回缩导致 6537 字节非法 JSON（大 Bash req-1785309429）
+- entml ``<tool>`` 块：支持 ``{Read}`` + ``<entml:parameter>`` 混合格式（除既有 ``{Bash>`` 外）
+- entml fault thinking：``</thinking>`` 后若紧跟 ``<tool>``/``<entml:invoke>``，中间中文视为可见正文而非思考链；``split_entml_thinking`` 不再泄漏 ``</entml:thinking>`` 到 clean
+- entml 流式 ``finalize``：batch thinking 非空时用其校正 ``partial_thinking``
+
+### Added
+
+- ``test_large_bash_bare_description_stream_parity``、``test_entml_tool_block_brace_read_entml_params`` 语料回归
+
 ## [2.3.85] - 2026-07-29
 
 ### Fixed

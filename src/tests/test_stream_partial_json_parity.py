@@ -277,6 +277,43 @@ def test_parameters_block_no_stream_until_closed() -> None:
     assert json.loads(snap2) == {"query": "x", "limit": 1}
 
 
+@pytest.mark.parametrize("chunk", [1, 16, 64, 512])
+def test_large_bash_bare_description_stream_parity(chunk: int) -> None:
+    """大 Bash command + bare description/timeout：流式 json_buf 须单调且与 batch 一致（6537）。"""
+    from pathlib import Path
+
+    text_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785309429-9436e01561b2.txt"
+    )
+    if not text_path.is_file():
+        pytest.skip("fixture log not available")
+    text = text_path.read_text(encoding="utf-8")
+    start = text.index('<entml:invoke name="Bash">')
+    end = text.index("</entml:invoke>", start) + len("</entml:invoke>")
+    sample = text[start:end]
+
+    proto = get_protocol("entml")
+    batch_args = json.loads(proto.parse(sample, BASH_TOOLS)[1][0]["function"]["arguments"])
+
+    parser = FncallStreamParser(protocol=proto, tools=BASH_TOOLS)
+    json_buf = ""
+    prev_len = 0
+    for i in range(0, len(sample), chunk):
+        parser.feed(sample[i : i + chunk])
+        while True:
+            delta = parser.consume_stream_delta()
+            if not delta:
+                break
+            json_buf += delta[1]
+        assert len(json_buf) >= prev_len, f"non-monotonic at offset {i}"
+        prev_len = len(json_buf)
+    comp = parser.complete_stream_delta_if_needed()
+    if comp:
+        json_buf += comp[1]
+    parser.finalize()
+    assert json.loads(json_buf) == batch_args
+
+
 @pytest.mark.parametrize("chunk", [1, 5, 17])
 def test_agent_write_stream_parity(chunk: int) -> None:
     """Windows Write 路径：merged partial_json 必须等于 batch。"""

@@ -210,6 +210,19 @@ def _find_earliest_thinking_open(
     return entml_at, False
 
 
+def tool_markup_follows_entml_thinking_close(text: str) -> bool:
+    """``</entml:thinking>`` 后若紧跟真实工具 markup，则 fault ``</thinking>`` 与 entml 闭标签间为可见正文。"""
+    if not text:
+        return False
+    return bool(
+        re.search(
+            r"^\s*(?:<tool\s*>|<entml:invoke\b)",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    )
+
+
 def _find_thinking_close(
     text: str,
     body_start: int,
@@ -252,6 +265,9 @@ def _find_thinking_close(
         if entml_after < 0 or invoke_abs < entml_after:
             return fault_close, len(_FAULT_THINKING_CLOSE)
     if entml_after >= 0:
+        after_entml = text[entml_after + len(_THINKING_CLOSE) :]
+        if tool_markup_follows_entml_thinking_close(after_entml):
+            return fault_close, len(_FAULT_THINKING_CLOSE)
         return entml_after, len(_THINKING_CLOSE)
     return -1, 0
 
@@ -438,6 +454,18 @@ def split_entml_thinking(
 
         parts.append(text[body_start:close_at])
         i = close_at + close_len
+        if (
+            close_len == len(_FAULT_THINKING_CLOSE)
+            and not opened_plain
+            and thinking_enabled
+        ):
+            entml_after = text.find(_THINKING_CLOSE, i)
+            if entml_after >= 0:
+                after_entml = text[entml_after + len(_THINKING_CLOSE) :]
+                if tool_markup_follows_entml_thinking_close(after_entml):
+                    clean_parts.append(text[i:entml_after])
+                    i = entml_after + len(_THINKING_CLOSE)
+                    continue
 
     clean = "".join(clean_parts)
     thinking = "\n".join(part.strip() for part in parts if part.strip())
@@ -449,11 +477,18 @@ def split_entml_thinking(
 
 
 def strip_orphan_thinking_close_prefix(text: str) -> str:
-    """去掉可见正文开头的 orphan ``</entml:thinking>``（流式分片边界）。"""
+    """去掉可见正文开头/末尾的 orphan ``</entml:thinking>``（流式分片边界）。"""
     if not text:
         return text
-    return re.sub(
+    text = re.sub(
         r"^\s*</entml:thinking>\s*",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(
+        r"\s*</entml:thinking>\s*$",
         "",
         text,
         count=1,
@@ -533,20 +568,27 @@ class EntmlThinkingStreamFilter:
         return True
 
     def _try_resolve_fault_watch_on_entml_close(self, out: List[Tuple[str, str]]) -> bool:
-        """未见 invoke 时出现 ``</entml:thinking>`` → ``</thinking>`` 仅为思考内纯文本。"""
+        """未见 invoke 时出现 ``</entml:thinking>`` → 若其后为 tool/invoke 则中间段为可见正文。"""
         if not self._fault_watch:
             return False
         close_at = self._fault_buffer.find(_THINKING_CLOSE)
         if close_at < 0:
             return False
-        emitted = self._emit_thinking_piece(self._fault_buffer[:close_at])
-        if emitted:
-            out.append(("thinking", emitted))
+        after_entml = self._fault_buffer[close_at + len(_THINKING_CLOSE) :]
+        if tool_markup_follows_entml_thinking_close(after_entml):
+            middle = self._fault_buffer[len(_FAULT_THINKING_CLOSE) : close_at]
+            visible = middle.strip()
+            if visible:
+                out.append(("content", visible))
+        else:
+            emitted = self._emit_thinking_piece(self._fault_buffer[:close_at])
+            if emitted:
+                out.append(("thinking", emitted))
         self._in_block = False
         self._opened_plain = False
         self._fault_watch = False
         self._thinking_started = False
-        self._pending = self._fault_buffer[close_at + len(_THINKING_CLOSE) :]
+        self._pending = after_entml
         self._fault_buffer = ""
         return True
 

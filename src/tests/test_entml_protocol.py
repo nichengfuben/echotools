@@ -1476,6 +1476,89 @@ def test_entml_tool_block_mangled_brace_entml_params() -> None:
         assert "RC4" in stream_clean or "RC4" in parser.partial_text, f"chunk={chunk}"
 
 
+def test_entml_tool_block_brace_read_entml_params() -> None:
+    """``<tool>{Read}\\n<entml:parameter>...`` + fault thinking（req-1785310901）。"""
+    from pathlib import Path
+
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    sample_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785310901-34c502c9e8a9.txt"
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus file not available")
+    sample = sample_path.read_text(encoding="utf-8")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "offset": {"type": "integer"},
+                        "limit": {"type": "integer"},
+                    },
+                    "required": ["file_path"],
+                },
+            },
+        }
+    ]
+    clean, batch_calls = get_protocol("entml").parse(sample, tools)
+    assert len(batch_calls) == 1
+    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert batch_calls[0]["function"]["name"] == "Read"
+    assert batch_args["offset"] == 0
+    assert batch_args["limit"] == 200
+    assert "b01pggtpe.txt" in batch_args["file_path"]
+    assert "流发送逻辑" in clean
+    assert "entml:" not in clean
+
+    for chunk in (1, 17, 64):
+        parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+        for i in range(0, len(sample), chunk):
+            parser.feed(sample[i : i + chunk])
+        stream_clean, stream_calls = parser.finalize()
+        assert len(stream_calls) == 1, f"chunk={chunk}"
+        stream_args = json.loads(stream_calls[0]["function"]["arguments"])
+        assert stream_args == batch_args, f"chunk={chunk}"
+        assert "流发送逻辑" in stream_clean, f"chunk={chunk}"
+        assert "流发送逻辑" not in parser.partial_thinking, f"chunk={chunk}"
+        assert len(parser.partial_thinking) > 500, f"chunk={chunk}"
+
+
+def test_entml_tool_block_mangled_brace_entml_params_brace_close() -> None:
+    """``{Read}``（非 ``{Read>``）后接 entml parameter 须解析。"""
+    from echotools.exec.fncall.protocols.entml_tool_blocks import parse_tool_block_body
+    from echotools.exec.fncall.shared.coercion import _build_param_schema_index
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "offset": {"type": "integer"},
+                    },
+                    "required": ["file_path"],
+                },
+            },
+        }
+    ]
+    body = (
+        "{Read}\n"
+        '<entml:parameter name="file_path">src/a.py</entml:parameter>\n'
+        '<entml:parameter name="offset">10</entml:parameter>'
+    )
+    schema = _build_param_schema_index(tools)
+    parsed = parse_tool_block_body(body, tools=tools, schema_index=schema)
+    assert parsed == [("Read", {"file_path": "src/a.py", "offset": 10})]
+
+
 def test_prose_entml_invoke_mention_does_not_swallow_real_invoke() -> None:
     """正文提及 ``<entml:invoke>``（无 name）不得吞掉后续真实工具块（req-1785299710）。"""
     from pathlib import Path

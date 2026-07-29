@@ -42,6 +42,19 @@ def _strip_incomplete_markup_suffix(value: str) -> str:
     return value
 
 
+def _strip_incomplete_child_close_suffix(value: str, key: str) -> str:
+    """流式未闭合 bare/direct 子标签：去掉尾部尚未收齐的 ``</...>``。"""
+    value = _strip_incomplete_markup_suffix(value)
+    lt = value.rfind("<")
+    if lt < 0:
+        return value
+    tail = value[lt:]
+    for close in (f"</entml:{key}>", f"</{key}>"):
+        if close.startswith(tail) and tail != close:
+            return value[:lt]
+    return value
+
+
 def split_invoke_open(buffer: str) -> Optional[Tuple[str, int]]:
     """返回当前正在流式写入的 invoke（最后一个有效开标签）。"""
     search_from = 0
@@ -177,6 +190,7 @@ def _parse_bare_invoke_entries(body: str) -> List[Tuple[str, str, bool, Optional
         tail = match.group(2) or ""
         if close in tail:
             continue
+        tail = _strip_incomplete_child_close_suffix(tail, key)
         tagged.append((match.start(), key, tail, False, None))
     tagged.sort(key=lambda item: item[0])
     seen: set[str] = set()
@@ -236,6 +250,7 @@ def _parse_direct_child_entries(body: str) -> List[Tuple[str, str, bool, Optiona
         tail = match.group(2) or ""
         if close in tail:
             continue
+        tail = _strip_incomplete_child_close_suffix(tail, key)
         tagged.append((match.start(), key, tail, False, None))
     tagged.sort(key=lambda item: item[0])
     seen: set[str] = set()

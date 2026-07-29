@@ -24,9 +24,9 @@ _INNER_TOOL_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 _BRACE_TOOL_HEAD_RE = re.compile(r"\{([A-Za-z][A-Za-z0-9_]*)\s*:\s*")
-# ``{Bash>`` 后接 ``<entml:parameter>`` 的混合格式（``{Edit: json}`` 仍走 history brace）
+# ``{Bash>`` / ``{Read}`` 后接 ``<entml:parameter>`` 的混合格式（``{Edit: json}`` 仍走 history brace）
 _MANGLED_BRACE_ENTML_HEAD_RE = re.compile(
-    r"^\s*\{([A-Za-z][A-Za-z0-9_]*)\s*>\s*",
+    r"^\s*\{([A-Za-z][A-Za-z0-9_]*)\s*(?:>|\})\s*",
     re.MULTILINE,
 )
 _PARAM_MARKER_RE = re.compile(

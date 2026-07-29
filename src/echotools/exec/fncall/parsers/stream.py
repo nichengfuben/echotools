@@ -759,6 +759,11 @@ class FncallStreamParser:
                 split_entml_thinking,
             )
 
+            _, batch_thinking = split_entml_thinking(
+                self._raw_buf, thinking_enabled=self._thinking_enabled
+            )
+            if batch_thinking:
+                self._thinking_parts = [batch_thinking]
             display_text, _ = split_entml_thinking(
                 clean_text, thinking_enabled=self._thinking_enabled
             )
