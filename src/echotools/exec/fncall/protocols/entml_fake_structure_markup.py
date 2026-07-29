@@ -52,6 +52,19 @@ _FAKE_ENTML_TAG_PREFIXES: Tuple[str, ...] = (
     "</function_calling_behavior",
     "<thinking_behavior",
     "</thinking_behavior",
+    "</entml:invoke",
+    "</entml:parameter",
+    "</entml:thinking",
+)
+
+# 模型误输出的残缺/单行 ``</entml:…``（无完整闭标签名或未收齐 ``>``）。
+_ORPHAN_ENTML_CLOSE_LINE_RE = re.compile(
+    r"(?m)^\s*(?:●\s*)?</entml:?[a-z0-9_-]*\s*$",
+    re.IGNORECASE,
+)
+_TRAILING_INCOMPLETE_ENTML_CLOSE_RE = re.compile(
+    r"</entml:?[a-z0-9_-]*\s*$",
+    re.IGNORECASE,
 )
 
 
@@ -67,6 +80,12 @@ def _strip_tag_only_markup(text: str) -> Tuple[str, bool]:
         if n:
             found = True
     return text, found
+
+
+def _strip_orphan_entml_close_leaks(text: str) -> Tuple[str, bool]:
+    text, n1 = _ORPHAN_ENTML_CLOSE_LINE_RE.subn("", text)
+    text, n2 = _TRAILING_INCOMPLETE_ENTML_CLOSE_RE.subn("", text)
+    return text, (n1 + n2) > 0
 
 
 def _could_be_fake_entml_tag_prefix(fragment: str) -> bool:
@@ -152,6 +171,8 @@ def strip_fake_entml_structure_markup(content: str) -> Tuple[str, bool]:
     text, hit = _truncate_unclosed_fake_result_id_tail(text)
     found = found or hit
     text, hit = _strip_tag_only_markup(text)
+    found = found or hit
+    text, hit = _strip_orphan_entml_close_leaks(text)
     found = found or hit
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text, found

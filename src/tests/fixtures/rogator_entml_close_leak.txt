@@ -1,0 +1,13 @@
+`toolbar.js` 的 bug 已修复。现在需要检查 `theme-switcher.js` 中 `#btn-theme` 是否确实在 `.toolbar-right` 容器内，避免同样的问题。
+
+
+
+<entml:invoke name="Grep">
+<entml:parameter name="pattern">btn-theme|toolbar-right|toolbar-center</entml:parameter>
+<entml:parameter name="path">.mvp/paint/static/index.html</entml:parameter>
+<entml:parameter name="output_mode">content</entml:parameter>
+<entml:parameter name="-n">true</entml:parameter>
+<entml:parameter name="-C">2</entml:parameter>
+</entml:invoke>
+<!-- Tool Result ID:toolu_check_theme_btn -->
+</entml:

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.97] - 2026-07-30
+
+### Fixed
+
+- entml 输出过滤：剥离模型误生成的残缺闭标签 ``</entml:`` / 单行 ``● </entml:…``（invoke 解析后的可见区尾部）
+
 ## [2.3.96] - 2026-07-30
 
 ### Fixed

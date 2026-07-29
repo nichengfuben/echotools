@@ -135,6 +135,41 @@ def test_bare_result_tags_only_not_body() -> None:
     assert "尾" in cleaned
 
 
+def test_orphan_incomplete_entml_close_leak() -> None:
+    raw = (
+        "说明正文\n"
+        "<!-- Tool Result ID:toolu_check_theme_btn -->\n"
+        "</entml:"
+    )
+    cleaned, found = strip_fake_entml_structure_markup(raw)
+    assert found
+    assert "说明正文" in cleaned
+    assert "entml" not in cleaned.lower()
+    assert "Tool Result ID" not in cleaned
+
+
+def test_rogator_response_log_corpus_no_entml_tail() -> None:
+    from pathlib import Path
+
+    log = Path(__file__).resolve().parent / "fixtures" / "rogator_entml_close_leak.txt"
+    raw = log.read_text(encoding="utf-8")
+    READ = {
+        "type": "function",
+        "function": {
+            "name": "Grep",
+            "parameters": {
+                "type": "object",
+                "properties": {"pattern": {"type": "string"}, "path": {"type": "string"}},
+                "required": ["pattern"],
+            },
+        },
+    }
+    proto = get_protocol("entml")
+    clean, calls = proto.parse(raw, [READ])
+    assert calls
+    assert "entml" not in clean.lower()
+
+
 def test_batch_parse_strips_fake_structure() -> None:
     text = (
         "回答正文\n"
