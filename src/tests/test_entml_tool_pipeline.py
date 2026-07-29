@@ -757,9 +757,9 @@ class TestBuildMechanisms:
         idx_tools = prompt.index("### search")
         idx_sys = prompt.index("<user_system_prompt>")
         idx_loop = prompt.index("<loop_warning>")
+        idx_hist = prompt.index("<entml:conversation_history>\n")
         idx_fc = prompt.index("<function_calling_behavior>\n")
         idx_behavior = prompt.index("<thinking_behavior>\n")
-        idx_hist = prompt.index("<entml:conversation_history>\n")
         idx_hard = prompt.index("<entml:hard_constraint_restatement>\n")
         idx_user = prompt.index("<current_user_message>\n")
         idx_max = prompt.index("<entml:max_thinking_length>")
@@ -768,9 +768,9 @@ class TestBuildMechanisms:
             idx_tools
             < idx_sys
             < idx_loop
+            < idx_hist
             < idx_fc
             < idx_behavior
-            < idx_hist
             < idx_hard
             < idx_user
             < idx_max

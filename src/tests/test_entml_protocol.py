@@ -382,15 +382,15 @@ def test_render_prompt_thinking_after_current_user() -> None:
         current_user_message="new",
         protocol_options={"thinking_mode": "on", "max_thinking_length": 1000},
     )
-    assert prompt.index("In this environment") < prompt.index("<function_calling_behavior>")
+    assert prompt.index("In this environment") < prompt.index("<entml:conversation_history>\n")
+    idx_hist = prompt.index("<entml:conversation_history>\n")
     idx_fc = prompt.index("<function_calling_behavior>\n")
     idx_behavior = prompt.index("<thinking_behavior>\n")
-    idx_hist = prompt.index("<entml:conversation_history>\n")
     idx_hard = prompt.index("<entml:hard_constraint_restatement>\n")
     idx_user = prompt.index("<current_user_message>\n")
     idx_max = prompt.index("<entml:max_thinking_length>")
     idx_mode = prompt.index("<entml:thinking_mode>")
-    assert idx_fc < idx_behavior < idx_hist < idx_hard < idx_user < idx_max < idx_mode
+    assert idx_hist < idx_fc < idx_behavior < idx_hard < idx_user < idx_max < idx_mode
     assert prompt.rstrip().endswith("</entml:thinking_mode>")
 
 
@@ -516,7 +516,9 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
         {"role": "tool", "tool_call_id": "call_1", "content": "found 3"},
         {"role": "user", "content": "summarize"},
     ]
-    content = inject_fncall(msgs, tools, proto)[0]["content"]
+    content = inject_fncall(
+        msgs, tools, proto, protocol_options={"thinking_level": "high"},
+    )[0]["content"]
     assert '<entml:invoke name="search">' in content
     assert '"query": "docs"' in content or "docs" in content
     assert "<!-- Tool Result ID:call_1 -->" in content
@@ -525,11 +527,13 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
     assert "<entml:funtions_results>" in content
     assert "<function_calling_behavior>" in content
     assert "IMPORTANT: The <entml:funtions_results> block is a top-level block" in content
-    fc_idx = content.index("<function_calling_behavior>\n")
     hist_idx = content.index("<entml:conversation_history>\n")
     results_idx = content.index("<entml:funtions_results>\n")
+    fc_idx = content.index("<function_calling_behavior>\n")
+    behavior_idx = content.index("<thinking_behavior>\n")
+    hard_idx = content.index("<entml:hard_constraint_restatement>\n")
     user_idx = content.index("<current_user_message>\n")
-    assert fc_idx < hist_idx < results_idx < user_idx
+    assert hist_idx < results_idx < fc_idx < behavior_idx < hard_idx < user_idx
 
 
 def test_strip_entml_from_user_content() -> None:

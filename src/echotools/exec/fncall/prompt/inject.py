@@ -148,13 +148,13 @@ def _build_entml_no_tools_prompt(
         sections.append(
             f"<user_system_prompt>\n{user_system_prompt.strip()}\n</user_system_prompt>"
         )
+    if history_text.strip():
+        sections.append(format_entml_conversation_history(history_text))
     thinking_behavior = build_entml_thinking_behavior_section(
         protocol_options, history_text=history_text
     )
     if thinking_behavior:
         sections.append(thinking_behavior)
-    if history_text.strip():
-        sections.append(format_entml_conversation_history(history_text))
     if current_user_message is not None:
         sections.append(format_entml_current_user_message(current_user_message))
     thinking_meta = build_entml_thinking_meta_section(protocol_options)

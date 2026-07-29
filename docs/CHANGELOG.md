@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.94] - 2026-07-30
+
+### Fixed
+
+- entml prompt 块顺序：``conversation_history`` → ``funtions_results`` → ``function_calling_behavior`` → ``thinking_behavior`` → ``hard_constraint_restatement`` → ``current_user_message`` → thinking 元数据
+
 ## [2.3.93] - 2026-07-30
 
 ### Changed
@@ -16,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - entml prompt：移除末尾 ``IMPORTANT — Tool invocation format`` 块；有 tools 时在 ``<current_user_message>`` 之后注入 ``<function_calling_behavior>``；尾部顺序为 ``thinking_behavior`` → ``max_thinking_length`` → ``thinking_mode``（``thinking_mode`` 置末以便截断保留）
 - entml history：assistant 轮次内 invoke 后仅环境回填 ``<!-- Tool Result ID:{id} -->``；累计 ``<entml:result id="...">`` 写入顶层 ``<entml:funtions_results>``（与 history 平级）
-- entml prompt 顺序：工具说明 → ``function_calling_behavior`` → ``thinking_behavior`` → ``conversation_history`` → ``funtions_results`` → ``hard_constraint_restatement`` → ``current_user_message`` → thinking 元数据
+- entml prompt 顺序：工具说明 → ``conversation_history`` → ``funtions_results`` → ``function_calling_behavior`` → ``thinking_behavior`` → ``hard_constraint_restatement`` → ``current_user_message`` → thinking 元数据
 - entml 解析：移除 ``<tool>`` / ``{ToolName: …}`` 作为 ``tool_calls`` 的解析路径（保留伪 history 块剥离防御）；仅 ``<entml:invoke>`` 闭合且 ``name`` 在已知 tools 内才解析
 
 ## [2.3.91] - 2026-07-29

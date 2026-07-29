@@ -233,6 +233,14 @@ class EntmlProtocol(ToolProtocol):
                 f"<history_markup_warning>\n{history_markup_warning}\n</history_markup_warning>"
             )
 
+        if history_text:
+            sections.append(
+                format_entml_conversation_history(history_text, _HISTORY_CLARIFY_EN)
+            )
+
+        if functions_results_text.strip():
+            sections.append(functions_results_text.strip())
+
         if tool_descs:
             sections.append(format_function_calling_behavior())
 
@@ -241,14 +249,6 @@ class EntmlProtocol(ToolProtocol):
         )
         if thinking_behavior:
             sections.append(thinking_behavior)
-
-        if history_text:
-            sections.append(
-                format_entml_conversation_history(history_text, _HISTORY_CLARIFY_EN)
-            )
-
-        if functions_results_text.strip():
-            sections.append(functions_results_text.strip())
 
         if tool_descs:
             sections.append(format_hard_constraint_restatement())
