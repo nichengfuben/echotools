@@ -100,6 +100,11 @@ class FncallStreamParser(StreamFeedMixin, StreamDeltaMixin, StreamFinalMixin):
             self._schema_index = _build_param_schema_index(self._tools)
         return self._schema_index
 
+    def _get_known_tool_names(self):
+        from echotools.exec.fncall.protocols.entml_patterns import resolve_known_tool_names
+
+        return resolve_known_tool_names(self._tools, self._get_schema_index())
+
     def _emit_text(self, text: str) -> None:
         """将文本路由给思考过滤器（若启用）或直接追加到 _text_parts。"""
         if not text:

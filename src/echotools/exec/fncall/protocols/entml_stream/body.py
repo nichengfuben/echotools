@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from echotools.exec.fncall.protocols.entml_patterns import (
     BARE_INVOKE_CHILD_OPEN_RE,
@@ -59,7 +59,11 @@ def _strip_incomplete_child_close_suffix(value: str, key: str) -> str:
     return value
 
 
-def split_invoke_open(buffer: str) -> Optional[Tuple[str, int]]:
+def split_invoke_open(
+    buffer: str,
+    *,
+    known_names: Optional[Set[str]] = None,
+) -> Optional[Tuple[str, int]]:
     """返回当前正在流式写入的 invoke（最后一个有效开标签）。"""
     search_from = 0
     prefix_len = len(_INVOKE_OPEN_PREFIX)
@@ -68,6 +72,14 @@ def split_invoke_open(buffer: str) -> Optional[Tuple[str, int]]:
         pos = buffer.find(_INVOKE_OPEN_PREFIX, search_from)
         if pos < 0:
             break
+        from echotools.exec.fncall.protocols.entml_patterns import (
+            entml_invoke_open_is_actionable,
+        )
+
+        if not entml_invoke_open_is_actionable(buffer, pos, known_names=known_names):
+            gt = buffer.find(">", pos + prefix_len)
+            search_from = (gt + 1) if gt >= 0 else (pos + prefix_len)
+            continue
         gt = buffer.find(">", pos + prefix_len)
         if gt < 0:
             break

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.89] - 2026-07-29
+
+### Fixed
+
+- entml invoke 解析/过滤：仅当 ``<entml:invoke …>`` 已闭合 ``>`` 且 ``name`` 在已知 tools 列表内时才进入工具流、剥离或 batch 解析；保留 prose ``<entml:invoke>`` 提及与未知工具名 invoke
+- entml 流式 ``partial_text``：仅在 actionable invoke 起点截断；未闭合 invoke 尾部 hold；带属性的工具标签剥离时不误伤无 name 的 prose 提及
+
+### Added
+
+- ``resolve_known_tool_names`` / ``find_actionable_entml_invoke_open`` 及 ``test_entml_invoke_known_tool_gate`` 全方位回归（batch + 多 chunk 流式）
+
 ## [2.3.88] - 2026-07-29
 
 ### Fixed

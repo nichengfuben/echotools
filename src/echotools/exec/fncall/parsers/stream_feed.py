@@ -37,7 +37,7 @@ class StreamFeedMixin:
         """True 表示已消费 text（含 holdback）。"""
         hold_from_fn = getattr(self._protocol, "find_fncall_hold_from", None)
         if hold_from_fn is not None:
-            hold_from = hold_from_fn(text)
+            hold_from = hold_from_fn(text, tools=self._tools)
             if hold_from is not None:
                 if hold_from > 0:
                     self._append_content_text(text[:hold_from])
@@ -52,7 +52,7 @@ class StreamFeedMixin:
     def _hold_or_split_emit(self, text: str, trigger_tags) -> None:
         hold_from_fn = getattr(self._protocol, "find_fncall_hold_from", None)
         if hold_from_fn is not None:
-            hold_from = hold_from_fn(text)
+            hold_from = hold_from_fn(text, tools=self._tools)
             if hold_from is not None:
                 if hold_from > 0:
                     self._emit_text(text[:hold_from])
@@ -81,7 +81,7 @@ class StreamFeedMixin:
                 self._fncall_buf += text
                 return
             trigger_tags = self._protocol.get_trigger_tags()
-            found, pos = self._protocol.detect_start(text)
+            found, pos = self._protocol.detect_start(text, tools=self._tools)
             if found:
                 if pos > 0:
                     self._append_content_text(text[:pos])
@@ -90,7 +90,7 @@ class StreamFeedMixin:
             self._hold_or_split_content(text, trigger_tags)
             return
         trigger_tags = self._protocol.get_trigger_tags()
-        found, pos = self._protocol.detect_start(text)
+        found, pos = self._protocol.detect_start(text, tools=self._tools)
         if not found:
             self._hold_or_split_content(text, trigger_tags)
             return
@@ -138,7 +138,7 @@ class StreamFeedMixin:
             self._feed_waiting_thinking_plain(combined)
             return
         trigger_tags = self._protocol.get_trigger_tags()
-        found, pos = self._protocol.detect_start(combined)
+        found, pos = self._protocol.detect_start(combined, tools=self._tools)
         if found:
             if self._thinking_filter is not None:
                 from echotools.exec.fncall.protocols.entml_think.parse import (

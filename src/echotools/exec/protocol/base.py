@@ -56,7 +56,11 @@ class ToolProtocol(ABC):
         """构建注入工具定义的 prompt。"""
         ...
 
-    def detect_start(self, buffer: str) -> Tuple[bool, int]:
+    def detect_start(
+        self,
+        buffer: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> Tuple[bool, int]:
         """检测触发标记。"""
         return (False, -1)
 

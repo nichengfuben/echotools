@@ -67,10 +67,18 @@ class StreamFinalMixin:
 
         lower = raw.lower()
         cut = len(raw)
-        for marker in ("<entml:invoke", "<entml:function_calls"):
-            pos = lower.find(marker)
-            if pos >= 0:
-                cut = min(cut, pos)
+        from echotools.exec.fncall.protocols.entml_patterns import (
+            find_actionable_entml_invoke_open,
+        )
+
+        invoke_pos = find_actionable_entml_invoke_open(
+            raw, known_names=self._get_known_tool_names()
+        )
+        if invoke_pos >= 0:
+            cut = min(cut, invoke_pos)
+        legacy_pos = lower.find("<entml:function_calls")
+        if legacy_pos >= 0:
+            cut = min(cut, legacy_pos)
         segment = raw[:cut]
 
         buf = stream_safe_visible_prefix(
@@ -128,12 +136,25 @@ class StreamFinalMixin:
         )
         clean_fn = getattr(self._protocol, "clean_tool_tags", None)
         if callable(clean_fn):
-            clean_text = clean_fn(clean_text)
+            import inspect
+
+            sig = inspect.signature(clean_fn)
+            if "tools" in sig.parameters:
+                clean_text = clean_fn(clean_text, tools=self._tools)
+            else:
+                clean_text = clean_fn(clean_text)
         elif getattr(self._protocol, "id", None) == "entml":
             from echotools.exec.fncall.protocols.entml_patterns import (
+                resolve_known_tool_names,
                 strip_tool_entml_residue,
             )
-            clean_text = strip_tool_entml_residue(clean_text)
+
+            clean_text = strip_tool_entml_residue(
+                clean_text,
+                known_names=resolve_known_tool_names(
+                    self._tools, self._get_schema_index()
+                ),
+            )
         display_text = self._finalize_display_text(clean_text)
         self._text_parts = [display_text] if display_text else []
         self._finalized_result = (display_text, tool_calls)

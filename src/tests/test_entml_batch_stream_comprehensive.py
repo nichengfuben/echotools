@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import pytest
 from fixtures.simulated_fake_history_markup_responses import (
     iter_fake_history_markup_cases,
+    tools_for_markup_case,
 )
 from fixtures.simulated_fault_thinking_responses import (
     iter_fault_thinking_cases,
@@ -272,7 +273,7 @@ def test_fault_thinking_batch_stream_parity(case, chunk_size: int) -> None:
 @pytest.mark.parametrize("chunk_size", (1, 7, 64), ids=lambda n: f"chunk{n}")
 def test_fake_history_batch_stream_no_tag_leak(case, chunk_size: int) -> None:
     _assert_batch_stream_parity(
-        case.response, TOOLS, case_id=case.id, chunk_size=chunk_size
+        case.response, tools_for_markup_case(case), case_id=case.id, chunk_size=chunk_size
     )
 
 

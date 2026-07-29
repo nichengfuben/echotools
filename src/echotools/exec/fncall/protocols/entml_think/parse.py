@@ -110,6 +110,11 @@ def trailing_entml_tag_holdback_len(text: str) -> int:
     """buffer 尾部是 entml/thinking 标签真前缀时，应 hold 的字节数。"""
     if not text:
         return 0
+    invoke_idx = text.rfind("<entml:invoke")
+    if invoke_idx >= 0:
+        tail_from_invoke = text[invoke_idx:]
+        if ">" not in tail_from_invoke:
+            return len(tail_from_invoke)
     lt = text.rfind("<")
     if lt < 0:
         return 0
@@ -122,6 +127,29 @@ def trailing_entml_tag_holdback_len(text: str) -> int:
         if tag.startswith(tail) and tail != tag:
             return len(tail)
     return 0
+
+
+def _strip_stream_tool_entml_tags(text: str) -> str:
+    """流式可见区：仅去掉带属性的工具标签；保留 prose ``<entml:invoke>`` 提及。"""
+    text = re.sub(
+        r"<entml:(?:invoke|parameter|parameters|function_calls)\s[^>]*>",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"</entml:(?:invoke|parameter|parameters|function_calls)\s*>",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"<entml:(?:invoke|parameter|parameters|function_calls)\s[^>]*$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text
 
 
 def clean_stream_partial_visible(
@@ -149,19 +177,7 @@ def clean_stream_partial_visible(
         return ""
     if re.search(r"</?entml:", text, re.IGNORECASE):
         if thinking_enabled:
-            # 保留 thinking 标签供 split_entml_thinking 剥离；仅去掉工具相关 entml 残留。
-            text = re.sub(
-                r"</?entml:(?!thinking\b)[^>]*>",
-                "",
-                text,
-                flags=re.IGNORECASE,
-            )
-            text = re.sub(
-                r"</?entml:(?!thinking\b)\w*$",
-                "",
-                text,
-                flags=re.IGNORECASE,
-            )
+            text = _strip_stream_tool_entml_tags(text)
         else:
             text = re.sub(r"</?entml:[^>]*>", "", text, flags=re.IGNORECASE)
             text = re.sub(r"</?entml:\w*$", "", text, flags=re.IGNORECASE)

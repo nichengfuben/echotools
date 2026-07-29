@@ -25,7 +25,9 @@ from echotools.exec.fncall.protocols.entml_think.blocks import (
 from echotools.exec.fncall.protocols.entml_patterns import (
     entml_invoke_open_may_be_streaming,
     extract_attr_value,
+    find_actionable_entml_invoke_open,
     normalize_entml_name,
+    resolve_known_tool_names,
     strip_actionable_entml_invoke_blocks,
     strip_legacy_function_calls_wrapper,
     strip_tool_entml_residue,
@@ -215,16 +217,28 @@ class EntmlProtocol(ToolProtocol):
 
         return "\n\n".join(sections)
 
-    def detect_start(self, buffer: str) -> Tuple[bool, int]:
-        """invoke 开标签（含 name 且闭合 ``>``）稳定后才视为工具流开始。"""
-        invoke_pos = self._find_complete_invoke_open(buffer)
+    def detect_start(
+        self,
+        buffer: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> Tuple[bool, int]:
+        """invoke 开标签（闭合 ``>`` 且 name 在 tools 内）稳定后才视为工具流开始。"""
+        schema_index = _build_param_schema_index(tools) if tools else None
+        known = resolve_known_tool_names(tools, schema_index)
+        invoke_pos = find_actionable_entml_invoke_open(buffer, known_names=known)
         if invoke_pos < 0:
             return (False, -1)
         return (True, invoke_pos)
 
-    def find_fncall_hold_from(self, buffer: str) -> Optional[int]:
+    def find_fncall_hold_from(
+        self,
+        buffer: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[int]:
         """invoke 未稳定前 hold 前缀；legacy 外壳开标签未闭合时同样 hold。"""
-        if self._find_complete_invoke_open(buffer) >= 0:
+        schema_index = _build_param_schema_index(tools) if tools else None
+        known = resolve_known_tool_names(tools, schema_index)
+        if find_actionable_entml_invoke_open(buffer, known_names=known) >= 0:
             return None
         hold: Optional[int] = None
         legacy_pos = buffer.find(self._LEGACY_WRAPPER_PREFIX)
@@ -235,28 +249,23 @@ class EntmlProtocol(ToolProtocol):
         invoke_pos = buffer.find(self._TRIGGER_PREFIX)
         if (
             invoke_pos >= 0
-            and entml_invoke_open_may_be_streaming(buffer, invoke_pos)
+            and entml_invoke_open_may_be_streaming(
+                buffer, invoke_pos, known_names=known
+            )
             and (hold is None or invoke_pos < hold)
         ):
             hold = invoke_pos
         return hold
 
-    def _find_complete_invoke_open(self, buffer: str) -> int:
-        """返回首个含 name 且已闭合 ``>`` 的 ``<entml:invoke`` 起始下标；否则 -1。"""
-        search_from = 0
-        prefix_len = len(self._TRIGGER_PREFIX)
-        while True:
-            pos = buffer.find(self._TRIGGER_PREFIX, search_from)
-            if pos < 0:
-                return -1
-            close = buffer.find(">", pos + prefix_len)
-            if close < 0:
-                return -1
-            attrs = buffer[pos + prefix_len : close]
-            name = extract_attr_value(attrs, "name")
-            if name and normalize_entml_name(name):
-                return pos
-            search_from = close + 1
+    def _find_complete_invoke_open(
+        self,
+        buffer: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> int:
+        """返回首个可解析 ``<entml:invoke`` 起始下标；否则 ``-1``。"""
+        schema_index = _build_param_schema_index(tools) if tools else None
+        known = resolve_known_tool_names(tools, schema_index)
+        return find_actionable_entml_invoke_open(buffer, known_names=known)
 
     def parse(
         self,
@@ -282,6 +291,8 @@ class EntmlProtocol(ToolProtocol):
             )
             if unclosed_open_at >= 0:
                 parse_text = text[:unclosed_open_at]
+        schema_index = _build_param_schema_index(tools) if tools else None
+        known = resolve_known_tool_names(tools, schema_index)
         tool_calls = parse_entml_tool_calls(parse_text, tools, schema_index)
         tool_block_calls: List[Dict[str, Any]] = []
         if include_tool_blocks:
@@ -297,8 +308,8 @@ class EntmlProtocol(ToolProtocol):
         # 须在移除 invoke 之前剥离伪 history，且须晚于已解析的 ``<tool>`` 块剥离。
         clean, _ = strip_fake_history_markup(clean)
         if tool_calls:
-            clean = strip_actionable_entml_invoke_blocks(clean)
-        clean = strip_tool_entml_residue(clean)
+            clean = strip_actionable_entml_invoke_blocks(clean, known_names=known)
+        clean = strip_tool_entml_residue(clean, known_names=known)
         return (clean, normalize_tool_calls(tool_calls, tools))
 
     def parse_fragment(
@@ -313,9 +324,15 @@ class EntmlProtocol(ToolProtocol):
         """user 消息：仅去掉 ``entml:`` 前缀，不做其它剥离。"""
         return strip_entml_from_content(content)
 
-    def clean_tool_tags(self, content: str) -> str:
+    def clean_tool_tags(
+        self,
+        content: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """仅剥离工具相关标签残留，保留 thinking；并移除伪 history 块。"""
-        cleaned = strip_tool_entml_residue(content)
+        schema_index = _build_param_schema_index(tools) if tools else None
+        known = resolve_known_tool_names(tools, schema_index)
+        cleaned = strip_tool_entml_residue(content, known_names=known)
         cleaned, _ = strip_fake_history_markup(cleaned)
         return cleaned
 

@@ -15,6 +15,7 @@ from .entml_patterns import (
     iter_actionable_entml_invoke_blocks,
     normalize_entml_name,
     parse_sub_tags,
+    resolve_known_tool_names,
     split_mangled_json_param_tail,
     synthetic_close_invoke_body,
 )
@@ -143,7 +144,10 @@ def parse_entml_tool_calls(
     schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
 ) -> List[Dict[str, Any]]:
     tool_calls: List[Dict[str, Any]] = []
-    for _start, _end, attrs, body in iter_actionable_entml_invoke_blocks(text):
+    known = resolve_known_tool_names(tools, schema_index)
+    for _start, _end, attrs, body in iter_actionable_entml_invoke_blocks(
+        text, known_names=known
+    ):
         name = extract_attr_value(attrs, "name")
         if not name:
             continue

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 from echotools.exec.fncall.protocols.entml_patterns import (
     entml_invoke_open_may_be_streaming,
-    extract_attr_value,
-    normalize_entml_name,
+    find_actionable_entml_invoke_open,
 )
 
 THINKING_BLOCK_RE = re.compile(
@@ -39,24 +38,13 @@ _LEADING_HOLD_PREFIXES = _AMBIGUOUS_ENTML_PREFIXES + _ORPHAN_CLOSE_PREFIXES + (
 )
 
 
-def find_complete_entml_invoke_open(buffer: str) -> int:
-    """返回首个含 name 且已闭合 ``>`` 的 ``<entml:invoke`` 起始下标；否则 -1。"""
-    if not buffer:
-        return -1
-    search_from = 0
-    prefix_len = len(_INVOKE_PREFIX)
-    while True:
-        pos = buffer.find(_INVOKE_PREFIX, search_from)
-        if pos < 0:
-            return -1
-        close = buffer.find(">", pos + prefix_len)
-        if close < 0:
-            return -1
-        attrs = buffer[pos + prefix_len : close]
-        name = extract_attr_value(attrs, "name")
-        if name and normalize_entml_name(name):
-            return pos
-        search_from = close + 1
+def find_complete_entml_invoke_open(
+    buffer: str,
+    *,
+    known_names: Optional[set[str]] = None,
+) -> int:
+    """返回首个可解析 ``<entml:invoke`` 起始下标；否则 ``-1``。"""
+    return find_actionable_entml_invoke_open(buffer, known_names=known_names)
 
 
 
@@ -153,13 +141,19 @@ def _hold_thinking_open_prefixes(
     return safe, ""
 
 
-def _hold_ambiguous_tool_markup(buffer: str) -> Tuple[str, str]:
+def _hold_ambiguous_tool_markup(
+    buffer: str,
+    *,
+    known_names: Optional[Set[str]] = None,
+) -> Tuple[str, str]:
     """thinking 块内：hold 可能长成真实工具调用的 markup（非 prose ``<entml:invoke>`` 提及）。"""
     if not buffer:
         return "", ""
     hold_from: Optional[int] = None
     invoke_pos = buffer.find(_INVOKE_PREFIX)
-    if invoke_pos >= 0 and entml_invoke_open_may_be_streaming(buffer, invoke_pos):
+    if invoke_pos >= 0 and entml_invoke_open_may_be_streaming(
+        buffer, invoke_pos, known_names=known_names
+    ):
         if hold_from is None or invoke_pos < hold_from:
             hold_from = invoke_pos
     for prefix in _AMBIGUOUS_ENTML_PREFIXES:

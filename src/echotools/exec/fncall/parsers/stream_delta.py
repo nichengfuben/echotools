@@ -26,7 +26,7 @@ class StreamDeltaMixin:
 
         complete = list(INVOKE_RE.finditer(self._fncall_buf))
         complete_n = len(complete)
-        parsed = split_invoke_open(self._fncall_buf)
+        parsed = split_invoke_open(self._fncall_buf, known_names=self._get_known_tool_names())
         if parsed is None:
             return max(0, complete_n - 1)
         _name, body_start = parsed
@@ -77,7 +77,7 @@ class StreamDeltaMixin:
             build_streaming_json_snapshot,
             split_invoke_open,
         )
-        parsed = split_invoke_open(self._fncall_buf)
+        parsed = split_invoke_open(self._fncall_buf, known_names=self._get_known_tool_names())
         if not parsed:
             self._json_stream_encoder.reset()
             return
@@ -125,7 +125,7 @@ class StreamDeltaMixin:
             split_invoke_open,
         )
 
-        parsed = split_invoke_open(self._fncall_buf)
+        parsed = split_invoke_open(self._fncall_buf, known_names=self._get_known_tool_names())
         if not parsed:
             self._json_stream_encoder.reset()
             return
@@ -172,7 +172,7 @@ class StreamDeltaMixin:
             split_invoke_open,
         )
 
-        parsed = split_invoke_open(self._fncall_buf)
+        parsed = split_invoke_open(self._fncall_buf, known_names=self._get_known_tool_names())
         if not parsed:
             return None
         name, body_start = parsed
@@ -241,7 +241,7 @@ class StreamDeltaMixin:
             split_invoke_open,
         )
 
-        parsed = split_invoke_open(self._fncall_buf)
+        parsed = split_invoke_open(self._fncall_buf, known_names=self._get_known_tool_names())
         if not parsed:
             return None
         name, body_start = parsed

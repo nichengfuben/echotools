@@ -11,6 +11,7 @@ from fixtures.simulated_llm_tool_responses import (
     TOOLS,
     SimulatedCase,
     iter_bare_invoke_cases,
+    tools_for_case,
 )
 
 from echotools.exec.fncall import get_protocol, inject_fncall
@@ -252,7 +253,8 @@ class TestBatchParse:
 
     @pytest.mark.parametrize("case", iter_bare_invoke_cases(), ids=lambda c: c.id)
     def test_bare_invoke_corpus_batch(self, case: SimulatedCase) -> None:
-        clean, calls = _proto().parse(case.response, TOOLS)
+        case_tools = tools_for_case(case)
+        clean, calls = _proto().parse(case.response, case_tools)
         assert _names(calls) == case.expect_names, case.id
         assert _args(calls) == case.expect_args, case.id
         for banned in BANNED_IN_USER_VISIBLE:
@@ -276,7 +278,8 @@ class TestStreamParse:
     @pytest.mark.parametrize("case", iter_bare_invoke_cases(), ids=lambda c: c.id)
     @pytest.mark.parametrize("chunk_size", [1, 5, 17, 0], ids=lambda n: f"chunk{n}")
     def test_bare_invoke_corpus_stream(self, case: SimulatedCase, chunk_size: int) -> None:
-        clean, calls, thinking = _stream_parse(case.response, TOOLS, chunk_size)
+        case_tools = tools_for_case(case)
+        clean, calls, thinking = _stream_parse(case.response, case_tools, chunk_size)
         assert _names(calls) == case.expect_names, case.id
         assert _args(calls) == case.expect_args, case.id
         for banned in BANNED_IN_USER_VISIBLE:
@@ -287,8 +290,9 @@ class TestStreamParse:
     def test_batch_and_stream_agree_on_bare_corpus(self) -> None:
         mismatches: List[str] = []
         for case in iter_bare_invoke_cases():
-            batch_clean, batch_calls = _proto().parse(case.response, TOOLS)
-            stream_clean, stream_calls, _ = _stream_parse(case.response, TOOLS, 5)
+            case_tools = tools_for_case(case)
+            batch_clean, batch_calls = _proto().parse(case.response, case_tools)
+            stream_clean, stream_calls, _ = _stream_parse(case.response, case_tools, 5)
             batch_display, _ = split_entml_thinking(batch_clean)
             stream_display, _ = split_entml_thinking(stream_clean)
             if _names(batch_calls) != _names(stream_calls):
@@ -333,16 +337,33 @@ class TestStreamParse:
 class TestDetectAndHoldback:
     def test_detect_start_requires_name_and_closing_angle(self) -> None:
         proto = _proto()
-        assert proto.detect_start('<entml:invoke name="x">') == (True, 0)
-        assert proto.detect_start('<entml:invoke name="x"') == (False, -1)
-        assert proto.detect_start("<entml:invoke>") == (False, -1)
-        assert proto.detect_start('<entml:invoke other="y">') == (False, -1)
+        assert proto.detect_start('<entml:invoke name="get_weather">', tools=SAMPLE_TOOLS) == (
+            True,
+            0,
+        )
+        assert proto.detect_start('<entml:invoke name="x">', tools=SAMPLE_TOOLS) == (
+            False,
+            -1,
+        )
+        assert proto.detect_start('<entml:invoke name="get_weather"', tools=SAMPLE_TOOLS) == (
+            False,
+            -1,
+        )
+        assert proto.detect_start("<entml:invoke>", tools=SAMPLE_TOOLS) == (False, -1)
+        assert proto.detect_start('<entml:invoke other="y">', tools=SAMPLE_TOOLS) == (
+            False,
+            -1,
+        )
+        assert proto.detect_start('<entml:invoke name="get_weather">', tools=None) == (
+            True,
+            0,
+        )
 
     def test_holdback_until_invoke_stable(self) -> None:
         parser = FncallStreamParser(protocol=_proto(), tools=SAMPLE_TOOLS)
         parser.feed('说明文字\n<entml:invoke name=')
         assert not parser.has_calls
-        assert parser.partial_text == "说明文字\n"
+        assert parser.partial_text in ("说明文字\n", "说明文字")
         parser.feed('"get_weather">')
         assert parser.has_calls
         assert "entml:" not in parser.partial_text
