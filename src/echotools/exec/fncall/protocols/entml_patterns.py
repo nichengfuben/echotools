@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .entml_values import coerce_entml_parameter_value
 
@@ -101,6 +102,7 @@ _FENCE_ONLY_LINE_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _INVOKE_OPEN_PREFIX = "<entml:invoke"
+_INVOKE_CLOSE = "</entml:invoke>"
 _PLACEHOLDER_INVOKE_NAMES = frozenset({"$FUNCTION_NAME", "$FUNCTION_NAME2"})
 
 
@@ -137,6 +139,76 @@ def entml_invoke_open_may_be_streaming(buffer: str, pos: int) -> bool:
     return False
 
 
+def _actionable_invoke_open_before_close(content: str, close_pos: int) -> bool:
+    """``close_pos`` 处的 ``</entml:invoke>`` 是否闭合带真实 name 的开标签。"""
+    search = close_pos - 1
+    while search >= 0:
+        pos = content.rfind(_INVOKE_OPEN_PREFIX, 0, search + 1)
+        if pos < 0:
+            return False
+        if entml_invoke_open_is_actionable(content, pos):
+            gt = content.find(">", pos)
+            if gt < 0 or gt >= close_pos:
+                search = pos - 1
+                continue
+            inner_close = content.find(_INVOKE_CLOSE, gt + 1, close_pos)
+            if inner_close < 0:
+                return True
+            search = pos - 1
+            continue
+        search = pos - 1
+    return False
+
+
+def _invoke_close_should_strip(content: str, close_pos: int) -> bool:
+    """是否应剥离 ``</entml:invoke>``（孤儿噪声或真实工具块残留）。"""
+    if _actionable_invoke_open_before_close(content, close_pos):
+        return True
+    open_pos = content.rfind(_INVOKE_OPEN_PREFIX, 0, close_pos)
+    if open_pos < 0:
+        return True
+    return entml_invoke_open_is_actionable(content, open_pos)
+
+
+def iter_actionable_entml_invoke_blocks(text: str) -> Iterator[Tuple[int, int, str, str]]:
+    """迭代含真实 ``name`` 的完整 ``<entml:invoke>…</entml:invoke>`` 块。"""
+    if not text:
+        return
+    search_from = 0
+    prefix_len = len(_INVOKE_OPEN_PREFIX)
+    close_len = len(_INVOKE_CLOSE)
+    while search_from < len(text):
+        pos = text.find(_INVOKE_OPEN_PREFIX, search_from)
+        if pos < 0:
+            break
+        if not entml_invoke_open_is_actionable(text, pos):
+            search_from = pos + prefix_len
+            continue
+        gt = text.find(">", pos + prefix_len)
+        if gt < 0:
+            break
+        close = text.find(_INVOKE_CLOSE, gt + 1)
+        if close < 0:
+            break
+        attrs = text[pos + prefix_len : gt]
+        body = text[gt + 1 : close]
+        yield pos, close + close_len, attrs, body
+        search_from = close + close_len
+
+
+def strip_actionable_entml_invoke_blocks(text: str) -> str:
+    """仅剥离含真实 ``name`` 的 invoke 块；保留 prose ``<entml:invoke>`` 提及。"""
+    if not text:
+        return text
+    parts: List[str] = []
+    last = 0
+    for start, end, _attrs, _body in iter_actionable_entml_invoke_blocks(text):
+        parts.append(text[last:start])
+        last = end
+    parts.append(text[last:])
+    return "".join(parts)
+
+
 def _strip_orphan_invoke_tags(content: str) -> str:
     """仅剥离带真实 name 的 invoke 孤儿标签；保留 prose 中的 ``<entml:invoke>`` 提及。"""
     pattern = re.compile(r"</?entml:invoke\b[^>]*/?>", re.DOTALL)
@@ -144,7 +216,9 @@ def _strip_orphan_invoke_tags(content: str) -> str:
     def repl(match: re.Match[str]) -> str:
         tag = match.group(0)
         if tag.startswith("</"):
-            return ""
+            if _invoke_close_should_strip(content, match.start()):
+                return ""
+            return tag
         if entml_invoke_open_is_actionable(content, match.start()):
             return ""
         return tag
@@ -224,15 +298,29 @@ _MANGLED_PARAM_JSON_COMMA_AFTER_QUOTE_RE = re.compile(
 )
 
 
+def _param_value_is_json_container(value: str) -> bool:
+    stripped = (value or "").lstrip()
+    return bool(stripped) and stripped[0] in "{["
+
+
 def mangled_json_param_tail_in_progress(value: str) -> bool:
     """parameter 值中出现误写入 JSON 尾缀但尚未收齐时不应继续增长 partial_json。"""
-    return bool(value and _MANGLED_PARAM_JSON_TAIL_IN_PROGRESS_RE.search(value))
+    if not value or _param_value_is_json_container(value):
+        return False
+    return bool(_MANGLED_PARAM_JSON_TAIL_IN_PROGRESS_RE.search(value))
 
 
 def split_mangled_json_param_tail(value: str) -> Tuple[str, Dict[str, Any]]:
     """模型把 ``", "description": ..., "timeout": ...}}`` 误写入 parameter 值时的拆分。"""
     if not value:
         return value, {}
+    if _param_value_is_json_container(value):
+        try:
+            json.loads(value)
+            return value, {}
+        except json.JSONDecodeError:
+            # 合法 JSON 数组/对象（含 options.description 等）不得走标量 command 尾缀启发式。
+            return value, {}
     match = _MANGLED_PARAM_JSON_TAIL_RE.search(value)
     if match:
         command = value[: match.start() + 1]
@@ -365,7 +453,7 @@ def strip_tool_entml_residue(content: str) -> str:
     if not content:
         return content
     cleaned = _TOOL_WRAPPER_PAIR_RE.sub("", content)
-    cleaned = BLOCK_RE.sub("", cleaned)
+    cleaned = strip_actionable_entml_invoke_blocks(cleaned)
     cleaned = _strip_orphan_invoke_tags(cleaned)
     cleaned = _strip_orphan_non_invoke_tool_tags(cleaned)
     cleaned = _EMPTY_FENCE_RE.sub("", cleaned)

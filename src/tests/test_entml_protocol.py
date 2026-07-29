@@ -1463,3 +1463,71 @@ def test_entml_tool_block_mangled_brace_entml_params() -> None:
         assert len(parser.partial_thinking) > 100, f"chunk={chunk}"
         assert "RC4" in stream_clean or "RC4" in parser.partial_text, f"chunk={chunk}"
 
+
+def test_prose_entml_invoke_mention_does_not_swallow_real_invoke() -> None:
+    """正文提及 ``<entml:invoke>``（无 name）不得吞掉后续真实工具块（req-1785299710）。"""
+    from pathlib import Path
+
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    text = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785299710-addb90714d4d.txt"
+    ).read_text(encoding="utf-8")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "AskUserQuestion",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "questions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "question": {"type": "string"},
+                                    "header": {"type": "string"},
+                                    "options": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "label": {"type": "string"},
+                                                "description": {"type": "string"},
+                                            },
+                                        },
+                                    },
+                                    "multiSelect": {"type": "boolean"},
+                                },
+                            },
+                        }
+                    },
+                    "required": ["questions"],
+                },
+            },
+        }
+    ]
+    proto = get_protocol("entml")
+    clean, batch_calls = proto.parse(text, tools)
+    assert len(batch_calls) == 1
+    assert batch_calls[0]["function"]["name"] == "AskUserQuestion"
+    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert isinstance(batch_args["questions"], list)
+    assert batch_args["questions"][0]["header"] == "Retest"
+    assert "`<entml:invoke>`" in clean or "<entml:invoke>" in clean
+    assert '<entml:invoke name="AskUserQuestion">' not in clean
+
+    for chunk in (1, 17, 64):
+        parser = FncallStreamParser(protocol=proto, tools=tools)
+        for i in range(0, len(text), chunk):
+            parser.feed(text[i : i + chunk])
+        stream_clean, stream_calls = parser.finalize()
+        assert len(stream_calls) == 1, f"chunk={chunk}"
+        assert json.loads(stream_calls[0]["function"]["arguments"]) == batch_args, (
+            f"chunk={chunk}"
+        )
+        assert "`<entml:invoke>`" in stream_clean or "<entml:invoke>" in stream_clean, (
+            f"chunk={chunk}"
+        )
+

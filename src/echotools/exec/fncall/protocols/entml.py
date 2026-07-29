@@ -23,10 +23,10 @@ from echotools.exec.fncall.protocols.entml_tool_blocks import (
     strip_tool_block_spans,
 )
 from echotools.exec.fncall.protocols.entml_patterns import (
-    BLOCK_RE,
     entml_invoke_open_may_be_streaming,
     extract_attr_value,
     normalize_entml_name,
+    strip_actionable_entml_invoke_blocks,
     strip_legacy_function_calls_wrapper,
     strip_tool_entml_residue,
 )
@@ -308,7 +308,7 @@ class EntmlProtocol(ToolProtocol):
         # 须在移除 invoke 之前剥离伪 history，且须晚于已解析的 ``<tool>`` 块剥离。
         clean, _ = strip_fake_history_markup(clean)
         if tool_calls:
-            clean = BLOCK_RE.sub("", clean)
+            clean = strip_actionable_entml_invoke_blocks(clean)
         clean = strip_tool_entml_residue(clean)
         return (clean, normalize_tool_calls(tool_calls, tools))
 

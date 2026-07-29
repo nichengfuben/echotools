@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.84] - 2026-07-29
+
+### Fixed
+
+- entml invoke 剥离/解析：仅匹配开标签含真实 ``name`` 的 ``<entml:invoke>…</entml:invoke>``；正文 prose ``<entml:invoke>`` 提及不再吞掉后续真实工具块（req-1785299710）
+- entml ``split_mangled_json_param_tail``：JSON 数组/对象参数内的 ``description`` 等字段不再误触发 Bash command 尾缀截断（AskUserQuestion req-1785299204）
+- entml 参数类型：``parameter type`` 优先、否则 schema；batch/stream 共用 ``coerce_entml_parameter_value`` / ``effective_entml_param_json_type``
+- schema ``array``：单对象 JSON 值自动包装为单元素数组（AskUserQuestion 单 parameter 对象）
+
+### Added
+
+- ``test_prose_entml_invoke_mention_does_not_swallow_real_invoke``、``test_ask_user_question_array_param_not_split_on_description_key`` 语料回归
+
 ## [2.3.83] - 2026-07-29
 
 ### Fixed

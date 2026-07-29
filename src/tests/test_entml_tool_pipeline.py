@@ -248,6 +248,19 @@ class TestCoercionUnit:
         )
         assert out == {"i": 3, "b": False}
 
+    def test_coerce_arguments_mangled_extra_fields_use_schema(self) -> None:
+        from echotools.exec.fncall.protocols.entml_values import _coerce_entml_arg_value
+
+        index = _build_param_schema_index(RICH_TOOLS)
+        out = coerce_entml_arguments(
+            {"i": 30, "s": "echo hi"},
+            "rich_tool",
+            index,
+        )
+        assert out["i"] == 30
+        assert isinstance(out["i"], int)
+        assert _coerce_entml_arg_value(30, {"type": "integer"}) == 30
+
 
 # ===========================================================================
 # 2) 解析机制边界

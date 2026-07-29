@@ -21,8 +21,7 @@ from .entml_patterns import (
     split_mangled_json_param_tail,
     synthetic_close_invoke_body,
 )
-from .entml_values import coerce_entml_parameter_value
-from echotools.exec.fncall.shared.coercion import _resolve_effective_type
+from .entml_values import coerce_entml_parameter_value, effective_entml_param_json_type
 
 _PARAM_OPEN_RE = re.compile(rf"{PARAM_OPEN_PATTERN}([^>]*)>", re.IGNORECASE)
 _PARAM_CLOSE = PARAM_CLOSE_ENTML
@@ -30,22 +29,6 @@ _PARAMETERS_OPEN = "<entml:parameters>"
 _PARAMETERS_CLOSE = "</entml:parameters>"
 _INVOKE_CLOSE = "</entml:invoke>"
 _INVOKE_OPEN_PREFIX = "<entml:invoke"
-
-_TYPE_HINT_TO_JSON_TYPE = {
-    "str": "string",
-    "string": "string",
-    "int": "integer",
-    "integer": "integer",
-    "float": "number",
-    "number": "number",
-    "double": "number",
-    "bool": "boolean",
-    "boolean": "boolean",
-    "array": "array",
-    "list": "array",
-    "object": "object",
-    "dict": "object",
-}
 
 
 def _strip_incomplete_markup_suffix(value: str) -> str:
@@ -89,20 +72,7 @@ def _effective_param_type(
     pschema: Optional[Dict[str, Any]],
     type_hint: Optional[str],
 ) -> str:
-    if type_hint:
-        mapped = _TYPE_HINT_TO_JSON_TYPE.get(type_hint.strip().lower())
-        if mapped:
-            return mapped
-    if pschema:
-        resolved = _resolve_effective_type(pschema)
-        if resolved:
-            return resolved
-    stripped = (value or "").lstrip()
-    if stripped.startswith("["):
-        return "array"
-    if stripped.startswith("{"):
-        return "object"
-    return "string"
+    return effective_entml_param_json_type(value, pschema, type_hint)
 
 
 def _synthetic_close_body(inner: str) -> str:

@@ -190,6 +190,73 @@ def test_mangled_json_tail_in_command_param_batch_and_stream() -> None:
         assert json.loads(json_buf) == batch_args, f"chunk={chunk}"
 
 
+ASK_USER_QUESTION_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "AskUserQuestion",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "questions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "question": {"type": "string"},
+                                "header": {"type": "string"},
+                                "options": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "label": {"type": "string"},
+                                            "description": {"type": "string"},
+                                        },
+                                    },
+                                },
+                                "multiSelect": {"type": "boolean"},
+                            },
+                        },
+                    }
+                },
+                "required": ["questions"],
+            },
+        },
+    }
+]
+
+
+def test_ask_user_question_array_param_not_split_on_description_key() -> None:
+    """JSON 数组参数内的 ``description`` 字段不得触发 mangled command 尾缀截断。"""
+    from pathlib import Path
+
+    text = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785299204-c84e955dbf7d.txt"
+    ).read_text(encoding="utf-8")
+    proto = get_protocol("entml")
+    _, batch_calls = proto.parse(text, ASK_USER_QUESTION_TOOLS)
+    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert isinstance(batch_args["questions"], list)
+    assert batch_args["questions"][0]["options"][0]["description"]
+
+    for chunk in (1, 17, 64):
+        parser = FncallStreamParser(protocol=proto, tools=ASK_USER_QUESTION_TOOLS)
+        json_buf = ""
+        for i in range(0, len(text), chunk):
+            parser.feed(text[i : i + chunk])
+            while True:
+                delta = parser.consume_stream_delta()
+                if not delta:
+                    break
+                json_buf += delta[1]
+        comp = parser.complete_stream_delta_if_needed()
+        if comp:
+            json_buf += comp[1]
+        parser.finalize()
+        assert json.loads(json_buf) == batch_args, f"chunk={chunk}"
+
+
 def test_parameters_block_no_stream_until_closed() -> None:
     body = (
         "<entml:parameters>\n"

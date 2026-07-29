@@ -199,6 +199,9 @@ def _coerce_to_array(raw: str, parsed: Any, item_schema: Dict[str, Any]) -> Any:
     if result_list is None:
         result_list = _try_parse_json_list(raw)
 
+    if result_list is None and isinstance(parsed, dict):
+        result_list = [parsed]
+
     if result_list is None:
         logger.debug("_coerce_to_array: 无法解析为列表，原样返回 %r", raw[:100])
         return parsed

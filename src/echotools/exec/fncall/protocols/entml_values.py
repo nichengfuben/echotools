@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
-from echotools.exec.fncall.shared.coercion import _coerce_param_value
+from echotools.exec.fncall.shared.coercion import _coerce_param_value, _resolve_effective_type
 
 _TYPE_HINT_TO_JSON_TYPE = {
     "str": "string",
@@ -71,6 +71,44 @@ def coerce_entml_parameter_value(
     return stripped
 
 
+def effective_entml_param_json_type(
+    value: str,
+    schema: Optional[Dict[str, Any]] = None,
+    type_hint: Optional[str] = None,
+) -> str:
+    """流式 partial_json 与 batch 共用：模型 type 优先，否则 schema，再否则按值推断。"""
+    effective = resolve_entml_parameter_schema(schema, type_hint)
+    if effective:
+        resolved = _resolve_effective_type(effective)
+        if resolved:
+            return resolved
+    stripped = (value or "").lstrip()
+    if stripped.startswith("["):
+        return "array"
+    if stripped.startswith("{"):
+        return "object"
+    return "string"
+
+
+def _coerce_entml_arg_value(
+    value: Any,
+    schema: Optional[Dict[str, Any]] = None,
+    type_hint: Optional[str] = None,
+) -> Any:
+    """将已解析的 Python 值再按 type_hint / schema 归一（与 batch 单参路径一致）。"""
+    if isinstance(value, str):
+        return coerce_entml_parameter_value(value, schema, type_hint=type_hint)
+    if isinstance(value, (dict, list)):
+        return coerce_entml_parameter_value(
+            json.dumps(value, ensure_ascii=False),
+            schema,
+            type_hint=type_hint,
+        )
+    if value is None:
+        return coerce_entml_parameter_value("", schema, type_hint=type_hint)
+    return coerce_entml_parameter_value(str(value), schema, type_hint=type_hint)
+
+
 def coerce_entml_arguments(
     args: Dict[str, Any],
     func_name: str,
@@ -86,8 +124,8 @@ def coerce_entml_arguments(
     out: Dict[str, Any] = {}
     for key, value in args.items():
         pschema = func_schema.get(key) or {}
-        if isinstance(value, str) and pschema:
-            out[key] = coerce_entml_parameter_value(value, pschema)
+        if pschema:
+            out[key] = _coerce_entml_arg_value(value, pschema)
         else:
             out[key] = value
     return out

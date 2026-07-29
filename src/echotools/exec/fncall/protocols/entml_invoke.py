@@ -5,20 +5,19 @@ from typing import Any, Dict, List, Optional
 
 from .entml_patterns import (
     BARE_INVOKE_CHILD_RE,
-    INVOKE_DIRECT_CHILD_OPEN_RE,
     INVOKE_DIRECT_CHILD_RE,
     INVOKE_DIRECT_CHILD_SKIP,
-    INVOKE_RE,
     PARAM_RE,
     PARAMETERS_RE,
     extract_attr_value,
     extract_parameter_type_attr,
+    iter_actionable_entml_invoke_blocks,
     normalize_entml_name,
     parse_sub_tags,
     split_mangled_json_param_tail,
     synthetic_close_invoke_body,
 )
-from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value
+from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value, _coerce_entml_arg_value
 
 
 def _parse_direct_child_tags(
@@ -98,13 +97,10 @@ def parse_invoke_args(
             if extra_key in args:
                 continue
             extra_schema = func_props.get(extra_key) or {}
-            if isinstance(extra_val, (int, float, bool)):
-                args[extra_key] = extra_val
-            else:
-                args[extra_key] = coerce_entml_parameter_value(
-                    str(extra_val),
-                    extra_schema or None,
-                )
+            args[extra_key] = _coerce_entml_arg_value(
+                extra_val,
+                extra_schema or None,
+            )
 
     _parse_bare_invoke_children(body, args, func_props)
     _parse_direct_child_tags(body, args, func_props)
@@ -118,13 +114,12 @@ def parse_entml_tool_calls(
     schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
 ) -> List[Dict[str, Any]]:
     tool_calls: List[Dict[str, Any]] = []
-    for invoke_m in INVOKE_RE.finditer(text):
-        attrs = invoke_m.group(1) or ""
+    for _start, _end, attrs, body in iter_actionable_entml_invoke_blocks(text):
         name = extract_attr_value(attrs, "name")
         if not name:
             continue
         name = normalize_entml_name(name)
-        args = parse_invoke_args(invoke_m.group(2), name, schema_index)
+        args = parse_invoke_args(body, name, schema_index)
         arguments = json.dumps(args, ensure_ascii=False)
         tool_calls.append(
             {
