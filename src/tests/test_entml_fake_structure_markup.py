@@ -53,6 +53,12 @@ READ_TOOL = {
             "完",
         ),
         (
+            "前\n<entml:call>\n调用块正文\n</entml:call>\n后",
+            "调用块正文",
+            "entml:call",
+            "后",
+        ),
+        (
             "前\n<entml:calls>\n调用块正文\n</entml:calls>\n后",
             "调用块正文",
             "entml:calls",
