@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.85] - 2026-07-29
+
+### Fixed
+
+- entml user 消息：``strip_entml_from_content`` 仅去掉 ``entml:`` 标签前缀，保留标签结构与 ``//`` 路径
+- entml 流式：thinking 块内 ``<entml:invoke>`` 示例不再误触发工具解析截断
+- history markup：orphan ``</assistant>`` 等闭标签只删标签行，不再吞掉前文可见正文
+
 ## [2.3.84] - 2026-07-29
 
 ### Fixed
