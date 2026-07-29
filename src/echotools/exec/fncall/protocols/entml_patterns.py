@@ -4,7 +4,7 @@ import json
 import re
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from .entml_values import coerce_entml_parameter_value
+from .entml_schema import coerce_entml_parameter_value
 
 BLOCK_RE = re.compile(
     r"<entml:invoke\b[^>]*>[\s\S]*?</entml:invoke>",
@@ -270,84 +270,6 @@ def _parameter_close_follower_ok(after: str, *, allow_end: bool) -> bool:
 
 
 _PARAM_OPEN_TAG_RE = re.compile(rf"{PARAM_OPEN_PATTERN}([^>]*)>", re.IGNORECASE)
-_MANGLED_PARAM_JSON_TAIL_RE = re.compile(
-    r'"\s*,\s*"description"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"timeout"\s*:\s*(\d+)\s*\}\}?\s*$',
-    re.DOTALL,
-)
-_MANGLED_PARAM_JSON_TAIL_START_RE = re.compile(
-    r'"\s*,\s*"description"\s*:\s*"',
-    re.DOTALL,
-)
-_MANGLED_PARAM_JSON_TAIL_EARLY_RE = re.compile(
-    r'"\s*,\s*"(?:description|timeout)\b',
-    re.DOTALL,
-)
-_MANGLED_PARAM_JSON_TAIL_IN_PROGRESS_RE = re.compile(
-    r'"\s*,\s*"(?:d|t)',
-    re.DOTALL,
-)
-
-
-_MANGLED_PARAM_JSON_COMMA_QUOTE_END_RE = re.compile(
-    r'"\s*,\s*"$',
-    re.DOTALL,
-)
-_MANGLED_PARAM_JSON_COMMA_AFTER_QUOTE_RE = re.compile(
-    r'"\s*,\s*$',
-    re.DOTALL,
-)
-
-
-def _param_value_is_json_container(value: str) -> bool:
-    stripped = (value or "").lstrip()
-    return bool(stripped) and stripped[0] in "{["
-
-
-def mangled_json_param_tail_in_progress(value: str) -> bool:
-    """parameter 值中出现误写入 JSON 尾缀但尚未收齐时不应继续增长 partial_json。"""
-    if not value or _param_value_is_json_container(value):
-        return False
-    return bool(_MANGLED_PARAM_JSON_TAIL_IN_PROGRESS_RE.search(value))
-
-
-def split_mangled_json_param_tail(value: str) -> Tuple[str, Dict[str, Any]]:
-    """模型把 ``", "description": ..., "timeout": ...}}`` 误写入 parameter 值时的拆分。"""
-    if not value:
-        return value, {}
-    if _param_value_is_json_container(value):
-        try:
-            json.loads(value)
-            return value, {}
-        except json.JSONDecodeError:
-            # 合法 JSON 数组/对象（含 options.description 等）不得走标量 command 尾缀启发式。
-            return value, {}
-    match = _MANGLED_PARAM_JSON_TAIL_RE.search(value)
-    if match:
-        command = value[: match.start() + 1]
-        extra: Dict[str, Any] = {
-            "description": match.group(1),
-            "timeout": int(match.group(2)),
-        }
-        return command, extra
-    partial = _MANGLED_PARAM_JSON_TAIL_START_RE.search(value)
-    if partial:
-        return value[: partial.start() + 1], {}
-    early = _MANGLED_PARAM_JSON_TAIL_EARLY_RE.search(value)
-    if early:
-        return value[: early.start() + 1], {}
-    if _MANGLED_PARAM_JSON_TAIL_IN_PROGRESS_RE.search(value):
-        matches = list(re.finditer(r'"\s*,\s*"', value))
-        if matches:
-            return value[: matches[-1].start() + 1], {}
-    comma_quote_end = _MANGLED_PARAM_JSON_COMMA_QUOTE_END_RE.search(value)
-    if comma_quote_end:
-        return value[: comma_quote_end.start() + 1], {}
-    comma_after_quote = _MANGLED_PARAM_JSON_COMMA_AFTER_QUOTE_RE.search(value)
-    if comma_after_quote:
-        return value[: comma_after_quote.start() + 1], {}
-    return value, {}
-
-
 def synthetic_close_invoke_body(inner: str) -> str:
     """为 force_close / invoke 已闭合但未闭合的 parameter 补齐结构闭合标签。"""
     if not inner:
@@ -462,3 +384,8 @@ def strip_tool_entml_residue(content: str) -> str:
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+from echotools.exec.fncall.protocols.entml_schema import (
+    mangled_json_param_tail_in_progress,
+    split_mangled_json_param_tail,
+)

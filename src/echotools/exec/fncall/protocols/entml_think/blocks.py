@@ -6,8 +6,8 @@ import json
 import re
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
-from .entml_patterns import INVOKE_RE, normalize_entml_name
-from .entml_values import coerce_entml_arguments
+from ..entml_patterns import INVOKE_RE, normalize_entml_name
+from ..entml_schema import coerce_entml_arguments
 
 _TOOL_BLOCK_OPEN_RE = re.compile(r"<tool\s*>", re.IGNORECASE)
 _TOOL_BLOCK_CLOSE_RE = re.compile(
@@ -29,6 +29,11 @@ _MANGLED_BRACE_ENTML_HEAD_RE = re.compile(
     r"^\s*\{([A-Za-z][A-Za-z0-9_]*)\s*(?:>|\})\s*",
     re.MULTILINE,
 )
+_WRITE_PATH_CONTENT_HEAD_RE = re.compile(
+    r'^\s*\{Write\s*:\s*\{\s*"path"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"content"\s*:\s*"?',
+    re.DOTALL | re.IGNORECASE,
+)
+_WRITE_CONTENT_END_RE = re.compile(r"</content\s*>", re.IGNORECASE)
 _PARAM_MARKER_RE = re.compile(
     r"<\s*(?:entml:)?parameter\b",
     re.IGNORECASE,
@@ -229,6 +234,48 @@ def _parse_brace_calls(
     return [(name, args)]
 
 
+def _map_write_path_arg(
+    args: Dict[str, Any],
+    schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
+) -> Dict[str, Any]:
+    props = (schema_index or {}).get("Write") or {}
+    if "path" in args and "file_path" in props and "path" not in props:
+        out = dict(args)
+        out["file_path"] = out.pop("path")
+        return out
+    return args
+
+
+def _parse_write_path_content_hybrid(
+    body: str,
+    known: Set[str],
+    schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
+) -> List[Tuple[str, Dict[str, Any]]]:
+    """``{Write: {"path": "...", "content": "…`` 后以 ``</content>`` 收束的多行正文。"""
+    if known and "Write" not in known:
+        return []
+    match = _WRITE_PATH_CONTENT_HEAD_RE.search(body)
+    if not match:
+        return []
+    path_raw = match.group(1)
+    try:
+        path_val = json.loads(f'"{path_raw}"')
+    except json.JSONDecodeError:
+        path_val = path_raw.replace("\\/", "/")
+    content = body[match.end() :]
+    end_m = _WRITE_CONTENT_END_RE.search(content)
+    if end_m:
+        content = content[: end_m.start()]
+    content = content.rstrip()
+    if content.endswith('"'):
+        content = content[:-1]
+    if not str(path_val).strip():
+        return []
+    args = _map_write_path_arg({"path": path_val, "content": content}, schema_index)
+    args = coerce_entml_arguments(args, "Write", schema_index)
+    return [("Write", args)]
+
+
 def _parse_mangled_brace_entml_params(
     body: str,
     known: Set[str],
@@ -244,7 +291,7 @@ def _parse_mangled_brace_entml_params(
     rest = body[match.end() :].lstrip()
     if not _PARAM_MARKER_RE.search(rest):
         return []
-    from .entml_invoke import parse_invoke_args
+    from ..entml_invoke import parse_invoke_args
 
     args = parse_invoke_args(rest, name, schema_index)
     if not args:
@@ -273,6 +320,10 @@ def parse_tool_block_body(
     mangled = _parse_mangled_brace_entml_params(text, known, schema_index)
     if mangled:
         return mangled
+
+    write_hybrid = _parse_write_path_content_hybrid(text, known, schema_index)
+    if write_hybrid:
+        return write_hybrid
 
     if not allow_brace_format:
         return []

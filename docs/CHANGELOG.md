@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.87] - 2026-07-29
+
+### Fixed
+
+- entml Write ``content``/``path`` 等大字段参数跳过 mangled Bash 尾缀启发式，避免内嵌 JSON 示例（如 ``", "type"``）被误截断（req-1785314805）
+- entml mangled 尾缀：``", "description"`` 紧跟 command 闭合引号时在首段截断，流式 partial_json 与 batch 一致
+- entml fault thinking：``</thinking>`` 后允许可见正文再跟 ``<tool>``/invoke，不再把整段响应当作未闭合 thinking
+- entml ``<tool>`` 块：支持 ``{Write: {"path","content":...`` + ``</content>`` 混合格式；``path`` 映射 ``file_path``
+
+### Changed
+
+- fncall/entml 模块拆分以通过 achecker（``entml_stream`` 包、``entml_schema``、stream mixins、thinking hold/filter）
+
+### Added
+
+- 三条 Qwen 语料回归：req-1785314805 / req-1785311004 / req-1785314760
+
 ## [2.3.86] - 2026-07-29
 
 ### Fixed

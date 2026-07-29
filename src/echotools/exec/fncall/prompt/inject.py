@@ -129,6 +129,32 @@ def _strip_entml_from_user_messages(
     return stripped
 
 
+def _build_entml_no_tools_prompt(
+    *,
+    user_system_prompt: str,
+    history_text: str,
+    current_user_message: Optional[str],
+    protocol_options: Optional[Dict[str, Any]],
+) -> str:
+    sections: List[str] = []
+    if user_system_prompt and user_system_prompt.strip():
+        sections.append(
+            f"<user_system_prompt>\n{user_system_prompt.strip()}\n</user_system_prompt>"
+        )
+    if history_text.strip():
+        sections.append(format_entml_conversation_history(history_text))
+    if current_user_message is not None:
+        sections.append(format_entml_current_user_message(current_user_message))
+    thinking_section = build_entml_thinking_section(
+        protocol_options,
+        has_tools=False,
+        history_text=history_text,
+    )
+    if thinking_section:
+        sections.append(thinking_section)
+    return "\n\n".join(sections)
+
+
 def inject_fncall(
     messages: List[Dict[str, Any]],
     tools: List[Dict[str, Any]],
@@ -146,33 +172,19 @@ def inject_fncall(
     normalized = _normalize_messages(prepared)
     normalized = _strip_entml_from_user_messages(normalized, protocol)
     history_messages, current_user_message = split_last_user_message(normalized)
-
     history_text = _format_conversation_history(
         history_messages,
         protocol=protocol,
         include_thinking_in_history=include_history,
     ).strip()
-
     if not tools:
         if protocol.id == "entml":
-            sections: List[str] = []
-            if user_system_prompt and user_system_prompt.strip():
-                sections.append(
-                    f"<user_system_prompt>\n{user_system_prompt.strip()}\n</user_system_prompt>"
-                )
-            if history_text.strip():
-                sections.append(format_entml_conversation_history(history_text))
-            if current_user_message is not None:
-                sections.append(format_entml_current_user_message(current_user_message))
-            # thinking 放在最后，超限截断时优先保留在 send_text 尾部
-            thinking_section = build_entml_thinking_section(
-                protocol_options,
-                has_tools=False,
+            prompt = _build_entml_no_tools_prompt(
+                user_system_prompt=user_system_prompt,
                 history_text=history_text,
+                current_user_message=current_user_message,
+                protocol_options=protocol_options,
             )
-            if thinking_section:
-                sections.append(thinking_section)
-            prompt = "\n\n".join(sections)
         else:
             prompt = build_no_tools_prompt(
                 history_text, current_user_message or "",
@@ -180,7 +192,6 @@ def inject_fncall(
         if dump_prompt:
             _maybe_dump_prompt(prompt, dump_dir)
         return [{"role": "user", "content": prompt}]
-
     prompt = build_tools_prompt(
         protocol, tools, normalized, lang, user_system_prompt,
         history_text, loop_detection_threshold, current_user_message,

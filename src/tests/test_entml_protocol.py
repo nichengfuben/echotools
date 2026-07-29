@@ -13,7 +13,7 @@ from echotools.exec.fncall.protocols.entml_think.core import (
     normalize_thinking_mode,
     resolve_thinking_injection,
 )
-from echotools.exec.fncall.protocols.entml_values import coerce_entml_parameter_value
+from echotools.exec.fncall.protocols.entml_schema import coerce_entml_parameter_value
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 
 
@@ -1289,7 +1289,7 @@ def test_entml_parse_tool_block_inner_tags() -> None:
         '{"command": "python main.py", "timeout": 120}\n'
         "</tool>"
     )
-    from echotools.exec.fncall.protocols.entml_tool_blocks import parse_tool_block_calls
+    from echotools.exec.fncall.protocols.entml_think.blocks import parse_tool_block_calls
 
     schema_index = _build_param_schema_index(tools)
     batch = parse_entml_tool_calls(sample, tools, schema_index)
@@ -1530,7 +1530,7 @@ def test_entml_tool_block_brace_read_entml_params() -> None:
 
 def test_entml_tool_block_mangled_brace_entml_params_brace_close() -> None:
     """``{Read}``（非 ``{Read>``）后接 entml parameter 须解析。"""
-    from echotools.exec.fncall.protocols.entml_tool_blocks import parse_tool_block_body
+    from echotools.exec.fncall.protocols.entml_think.blocks import parse_tool_block_body
     from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 
     tools = [
@@ -1625,4 +1625,78 @@ def test_prose_entml_invoke_mention_does_not_swallow_real_invoke() -> None:
         assert "`<entml:invoke>`" in stream_clean or "<entml:invoke>" in stream_clean, (
             f"chunk={chunk}"
         )
+
+
+WRITE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "Write",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["content"],
+            },
+        },
+    }
+]
+
+
+def test_write_content_with_embedded_json_examples_not_truncated() -> None:
+    """Write ``content`` 参数内嵌 JSON 示例时不得误触 mangled command 尾缀截断。"""
+    from pathlib import Path
+
+    sample_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785314805-78e418df4ea0.txt"
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus file not available")
+    text = sample_path.read_text(encoding="utf-8")
+    proto = get_protocol("entml")
+    _, batch_calls = proto.parse(text, WRITE_TOOLS)
+    assert len(batch_calls) == 1
+    args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert "thread_updated" in args["content"]
+    assert "REST API" in args["content"]
+    assert args["file_path"].endswith("rocket-red-tornado-damage.md")
+
+
+def test_fault_thinking_close_prose_then_tool_block() -> None:
+    """``</thinking>`` 后允许可见正文，再跟 ``<tool>{Write>`` + entml 参数。"""
+    from pathlib import Path
+
+    sample_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785314760-0da55e1ba166.txt"
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus file not available")
+    text = sample_path.read_text(encoding="utf-8")
+    proto = get_protocol("entml")
+    _, batch_calls = proto.parse(text, WRITE_TOOLS)
+    assert len(batch_calls) == 1
+    args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert args["file_path"].endswith("test_grpc_standard.py")
+    assert "AgentRunRequest" in args["content"]
+
+
+def test_write_path_content_hybrid_tool_block() -> None:
+    """``<tool>{Write: {"path", "content": "...`` + ``</content>`` 混合格式。"""
+    from pathlib import Path
+
+    sample_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785311004-438c84fa5aa4.txt"
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus file not available")
+    text = sample_path.read_text(encoding="utf-8")
+    proto = get_protocol("entml")
+    _, batch_calls = proto.parse(text, WRITE_TOOLS)
+    assert len(batch_calls) == 1
+    args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert args["file_path"].endswith("rocket-red-tornado-damage.md")
+    assert "Agent WebUI" in args["content"]
+    assert "Phase 1" in args["content"]
 

@@ -476,7 +476,10 @@ def test_req_1785261134_bare_parameter_stream_json_parity() -> None:
     batch_args = json.loads(batch_calls[0]["function"]["arguments"])
     assert "createConnectTransport" in batch_args["pattern"]
     assert batch_args["-n"] is True
-    assert batch_clean.strip() == ""
+    # fault ``</thinking>`` 与 ``</entml:thinking>`` 之间的中文为可见正文（2.3.86+）
+    assert "Connect-RPC" in batch_clean
+    assert "entml:invoke" not in batch_clean
+    assert "parameter" not in batch_clean
 
     for chunk_size in (1, 7, 17, 64):
         parser = FncallStreamParser(protocol=get_protocol("entml"), tools=_GREP_TOOLS)

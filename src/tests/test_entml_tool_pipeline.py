@@ -23,8 +23,8 @@ from echotools.exec.fncall.protocols.entml_patterns import (
     strip_tool_entml_residue,
 )
 from echotools.exec.fncall.protocols.entml_think.parse import split_entml_thinking
-from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
-from echotools.exec.fncall.protocols.entml_values import (
+from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
+from echotools.exec.fncall.protocols.entml_schema import (
     coerce_entml_arguments,
     coerce_entml_parameter_value,
 )
@@ -249,7 +249,7 @@ class TestCoercionUnit:
         assert out == {"i": 3, "b": False}
 
     def test_coerce_arguments_mangled_extra_fields_use_schema(self) -> None:
-        from echotools.exec.fncall.protocols.entml_values import _coerce_entml_arg_value
+        from echotools.exec.fncall.protocols.entml_schema import _coerce_entml_arg_value
 
         index = _build_param_schema_index(RICH_TOOLS)
         out = coerce_entml_arguments(

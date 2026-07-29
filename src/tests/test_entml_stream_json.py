@@ -4,7 +4,7 @@ import json
 
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
-from echotools.exec.fncall.protocols.entml_stream_json import (
+from echotools.exec.fncall.protocols.entml_stream import (
     EntmlInvokeJsonStreamEncoder,
     encode_streaming_invoke_json,
 )

@@ -17,7 +17,7 @@ from .entml_patterns import (
     split_mangled_json_param_tail,
     synthetic_close_invoke_body,
 )
-from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value, _coerce_entml_arg_value
+from .entml_schema import coerce_entml_arguments, coerce_entml_parameter_value, _coerce_entml_arg_value
 
 
 def _parse_direct_child_tags(
@@ -53,31 +53,28 @@ def _parse_bare_invoke_children(
         )
 
 
-def parse_invoke_args(
-    body: str,
+def _parse_parameters_block_args(
+    params_content: str,
     name: str,
     schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
 ) -> Dict[str, Any]:
-    func_props = (schema_index or {}).get(name) or {}
-    if "</entml:invoke>" in body:
-        body = body[: body.index("</entml:invoke>")]
-    body = synthetic_close_invoke_body(body)
+    try:
+        parsed = json.loads(params_content)
+        if isinstance(parsed, dict):
+            return coerce_entml_arguments(parsed, name, schema_index)
+        return {"value": parsed}
+    except json.JSONDecodeError:
+        sub_args = parse_sub_tags(params_content, schema_index, name)
+        if sub_args:
+            return coerce_entml_arguments(sub_args, name, schema_index)
+        return {"value": params_content}
 
-    params_m = PARAMETERS_RE.search(body)
-    if params_m:
-        params_content = params_m.group(1).strip()
-        try:
-            parsed = json.loads(params_content)
-            if isinstance(parsed, dict):
-                return coerce_entml_arguments(parsed, name, schema_index)
-            return {"value": parsed}
-        except json.JSONDecodeError:
-            sub_args = parse_sub_tags(params_content, schema_index, name)
-            if sub_args:
-                return coerce_entml_arguments(sub_args, name, schema_index)
-            return {"value": params_content}
 
-    args: Dict[str, Any] = {}
+def _fill_parameter_tag_args(
+    body: str,
+    args: Dict[str, Any],
+    func_props: Dict[str, Dict[str, Any]],
+) -> None:
     for param_m in PARAM_RE.finditer(body):
         attrs = param_m.group(1) or ""
         pname = extract_attr_value(attrs, "name")
@@ -85,7 +82,7 @@ def parse_invoke_args(
             continue
         pname = normalize_entml_name(pname)
         pval = (param_m.group(2) or "").strip()
-        pval, extra = split_mangled_json_param_tail(pval)
+        pval, extra = split_mangled_json_param_tail(pval, param_name=pname)
         type_hint = extract_parameter_type_attr(attrs)
         pschema = func_props.get(pname) or {}
         args[pname] = coerce_entml_parameter_value(
@@ -102,9 +99,38 @@ def parse_invoke_args(
                 extra_schema or None,
             )
 
+
+def parse_invoke_args(
+    body: str,
+    name: str,
+    schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
+) -> Dict[str, Any]:
+    func_props = (schema_index or {}).get(name) or {}
+    if "</entml:invoke>" in body:
+        body = body[: body.index("</entml:invoke>")]
+    body = synthetic_close_invoke_body(body)
+    params_m = PARAMETERS_RE.search(body)
+    if params_m:
+        return _parse_parameters_block_args(
+            params_m.group(1).strip(), name, schema_index
+        )
+    args: Dict[str, Any] = {}
+    _fill_parameter_tag_args(body, args, func_props)
     _parse_bare_invoke_children(body, args, func_props)
     _parse_direct_child_tags(body, args, func_props)
+    return _alias_write_path_arg(args, name, func_props)
 
+
+def _alias_write_path_arg(
+    args: Dict[str, Any],
+    name: str,
+    func_props: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Write schema 仅有 ``file_path`` 时，将模型输出的 ``path`` 映射过去。"""
+    if name == "Write" and "path" in args and "file_path" in func_props and "path" not in func_props:
+        out = dict(args)
+        out["file_path"] = out.pop("path")
+        return out
     return args
 
 

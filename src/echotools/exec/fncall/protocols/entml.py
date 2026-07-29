@@ -18,7 +18,7 @@ from echotools.exec.fncall.prompt.templates import (
 from echotools.exec.fncall.protocols.entml_invoke import (
     parse_entml_tool_calls,
 )
-from echotools.exec.fncall.protocols.entml_tool_blocks import (
+from echotools.exec.fncall.protocols.entml_think.blocks import (
     parse_tool_block_calls,
     strip_tool_block_spans,
 )
@@ -33,7 +33,7 @@ from echotools.exec.fncall.protocols.entml_patterns import (
 from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_section,
 )
-from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
+from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 from echotools.exec.fncall.shared.history_markup import strip_fake_history_markup
 from echotools.exec.fncall.shared.normalization import (

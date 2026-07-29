@@ -158,6 +158,41 @@ def _orphan_open_to_eof_re(tag: str) -> re.Pattern[str]:
     )
 
 
+def _subn_all(pattern, text: str, repl: str = "") -> Tuple[str, bool]:
+    found = False
+    while True:
+        new_text, n = pattern.subn(repl, text, count=1)
+        if n == 0:
+            return text, found
+        found = True
+        text = new_text
+
+
+def _strip_one_fake_tag(
+    text: str,
+    tag: str,
+    *,
+    followed_by_invoke: bool,
+) -> Tuple[str, bool]:
+    found = False
+    for pair_re in (
+        _paired_block_re(tag),
+        _paired_block_anywhere_re(tag),
+        _paired_block_glued_brace_re(tag),
+    ):
+        text, hit = _subn_all(pair_re, text)
+        found = found or hit
+    text, hit = _subn_all(_open_before_entml_re(tag), text)
+    found = found or hit
+    if followed_by_invoke:
+        text, hit = _subn_all(_orphan_open_to_eof_re(tag), text)
+        found = found or hit
+    text, hit = _subn_all(_orphan_close_line_re(tag), text)
+    found = found or hit
+    text, hit = _subn_all(_orphan_open_re(tag), text)
+    return text, found or hit
+
+
 def _strip_fake_blocks_in_unprotected(
     segment: str,
     *,
@@ -168,53 +203,13 @@ def _strip_fake_blocks_in_unprotected(
     found = False
     text = segment
     for tag in _FAKE_HISTORY_TAGS:
-        for pair_re in (
-            _paired_block_re(tag),
-            _paired_block_anywhere_re(tag),
-            _paired_block_glued_brace_re(tag),
-        ):
-            while True:
-                new_text, n = pair_re.subn("", text, count=1)
-                if n == 0:
-                    break
-                found = True
-                text = new_text
-        before_entml = _open_before_entml_re(tag)
-        while True:
-            new_text, n = before_entml.subn("", text, count=1)
-            if n == 0:
-                break
-            found = True
-            text = new_text
-        if followed_by_invoke:
-            to_eof = _orphan_open_to_eof_re(tag)
-            while True:
-                new_text, n = to_eof.subn("", text, count=1)
-                if n == 0:
-                    break
-                found = True
-                text = new_text
-        close_re = _orphan_close_line_re(tag)
-        while True:
-            new_text, n = close_re.subn("", text, count=1)
-            if n == 0:
-                break
-            found = True
-            text = new_text
-        open_re = _orphan_open_re(tag)
-        while True:
-            new_text, n = open_re.subn("", text, count=1)
-            if n == 0:
-                break
-            found = True
-            text = new_text
+        text, hit = _strip_one_fake_tag(
+            text, tag, followed_by_invoke=followed_by_invoke
+        )
+        found = found or hit
     if not _PLAIN_THINKING_OPEN_LINE_RE.search(text):
-        while True:
-            new_text, n = _ORPHAN_FAULT_THINKING_CLOSE_LINE_RE.subn("\n", text, count=1)
-            if n == 0:
-                break
-            found = True
-            text = new_text
+        text, hit = _subn_all(_ORPHAN_FAULT_THINKING_CLOSE_LINE_RE, text, "\n")
+        found = found or hit
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text, found
 
@@ -274,12 +269,45 @@ def strip_fake_history_markup(content: str) -> Tuple[str, bool]:
     return "".join(parts), found
 
 
+def _truncate_display_fake_tail(cleaned: str) -> Tuple[str, bool]:
+    found = False
+    tail = re.search(
+        r"(?:^|\n)\s*(?:</?(?:assistant|tool)\b[^\n]*|</thinking>\s*(?:<(?:assistant|tool)\b[^\n]*)?)$",
+        cleaned,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if tail:
+        return cleaned[: tail.start()], True
+    glued = re.search(
+        r"</thinking>\s*<(?:assistant|tool)\b[^\n]*$",
+        cleaned,
+        re.IGNORECASE,
+    )
+    if glued:
+        cleaned, found = cleaned[: glued.start()], True
+    glued_open = re.search(
+        r"(?:^|\n)\s*<(?:assistant|tool)\b[^>]*>?\s*(?:\{[^\n<]*)?$",
+        cleaned,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if glued_open:
+        cleaned, found = cleaned[: glued_open.start()], True
+    partial_fake_close = re.search(
+        r"(?:^|\n)\s*<(?:assistant|tool)\b[^>]*>"
+        r"(?:[\s\S]*?(?:</(?:assistant|tool)\b[^>]*)?)?$",
+        cleaned,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if partial_fake_close:
+        cleaned, found = cleaned[: partial_fake_close.start()], True
+    return cleaned, found
+
+
 def strip_fake_history_markup_for_display(content: str) -> Tuple[str, bool]:
     """流式 ``partial_text`` 用：完整块剥离 + 截断行尾未收齐的伪标签。"""
     cleaned, found = strip_fake_history_markup(content)
     invoke_m = _ENTML_INVOKE_OPEN_RE.search(cleaned)
     fc_m = _ENTML_FUNCTION_CALLS_OPEN_RE.search(cleaned)
-    prot_m = None
     if invoke_m and fc_m:
         prot_m = invoke_m if invoke_m.start() <= fc_m.start() else fc_m
     else:
@@ -289,40 +317,10 @@ def strip_fake_history_markup_for_display(content: str) -> Tuple[str, bool]:
         invoke_open = _ENTML_INVOKE_OPEN_RE.search(tail)
         if invoke_open and "</entml:invoke>" not in tail[invoke_open.start() :]:
             return cleaned, found
-        if _ENTML_FUNCTION_CALLS_OPEN_RE.search(tail) and _ENTML_FUNCTION_CALLS_CLOSE not in tail:
+        if (
+            _ENTML_FUNCTION_CALLS_OPEN_RE.search(tail)
+            and _ENTML_FUNCTION_CALLS_CLOSE not in tail
+        ):
             return cleaned, found
-    tail = re.search(
-        r"(?:^|\n)\s*(?:</?(?:assistant|tool)\b[^\n]*|</thinking>\s*(?:<(?:assistant|tool)\b[^\n]*)?)$",
-        cleaned,
-        re.IGNORECASE | re.MULTILINE,
-    )
-    if tail:
-        cleaned = cleaned[: tail.start()]
-        found = True
-    else:
-        glued = re.search(
-            r"</thinking>\s*<(?:assistant|tool)\b[^\n]*$",
-            cleaned,
-            re.IGNORECASE,
-        )
-        if glued:
-            cleaned = cleaned[: glued.start()]
-            found = True
-    glued_open = re.search(
-        r"(?:^|\n)\s*<(?:assistant|tool)\b[^>]*>?\s*(?:\{[^\n<]*)?$",
-        cleaned,
-        re.IGNORECASE | re.MULTILINE,
-    )
-    if glued_open:
-        cleaned = cleaned[: glued_open.start()]
-        found = True
-    partial_fake_close = re.search(
-        r"(?:^|\n)\s*<(?:assistant|tool)\b[^>]*>"
-        r"(?:[\s\S]*?(?:</(?:assistant|tool)\b[^>]*)?)?$",
-        cleaned,
-        re.IGNORECASE | re.MULTILINE,
-    )
-    if partial_fake_close:
-        cleaned = cleaned[: partial_fake_close.start()]
-        found = True
-    return cleaned, found
+    cleaned2, hit = _truncate_display_fake_tail(cleaned)
+    return cleaned2, found or hit

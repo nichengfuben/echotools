@@ -17,7 +17,7 @@ from fixtures.simulated_llm_tool_responses import (
 
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
-from echotools.exec.fncall.protocols.entml_stream_json import build_streaming_json_snapshot
+from echotools.exec.fncall.protocols.entml_stream import build_streaming_json_snapshot
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 
 _INVOKE_RE = re.compile(

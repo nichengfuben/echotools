@@ -1,4 +1,4 @@
-from echotools.exec.fncall.protocols.entml_tools import format_entml_tool_descs
+from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
 
 ASK_USER_TOOL = {
     "type": "function",
