@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""entml 流式/批量解析器全方位测试：普通路径 + 边界 + rogator/Claude Code 高发场景。
+"""entml 流式/批量解析器全方位测试：普通路径 + 边界 + rogator/agent 客户端高发场景。
 
 与 test_simulated_llm_tool_parse / test_adversarial_stream_splits 互补：
 - 本文件聚焦 thinking/invoke 边界、fault ``</thinking>``、holdback 分片、

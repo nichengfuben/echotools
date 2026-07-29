@@ -273,6 +273,15 @@ class FncallStreamParser:
             self._waiting_tail = remain
             return
 
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            invoke_index_inside_any_thinking_block,
+        )
+        if invoke_index_inside_any_thinking_block(
+            text, pos, thinking_enabled=self._thinking_enabled,
+        ):
+            self._append_content_text(text)
+            return
+
         if pos > 0:
             self._append_content_text(text[:pos])
 
@@ -319,10 +328,10 @@ class FncallStreamParser:
         if found:
             if self._thinking_filter is not None:
                 from echotools.exec.fncall.protocols.entml_think.parse import (
-                    invoke_index_inside_unclosed_thinking,
+                    invoke_index_inside_any_thinking_block,
                 )
-                if invoke_index_inside_unclosed_thinking(
-                    combined, pos, thinking_enabled=self._thinking_enabled
+                if invoke_index_inside_any_thinking_block(
+                    combined, pos, thinking_enabled=self._thinking_enabled,
                 ):
                     self._feed_waiting_thinking_plain(combined)
                     return

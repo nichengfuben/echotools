@@ -98,10 +98,11 @@ def _paired_block_glued_brace_re(tag: str) -> re.Pattern[str]:
     )
 
 
-def _orphan_close_re(tag: str) -> re.Pattern[str]:
+def _orphan_close_line_re(tag: str) -> re.Pattern[str]:
+    """无配对开标签的 ``</tag>`` 行：仅删该行，不删其前的合法可见正文。"""
     return re.compile(
-        rf"(?:^|\n)([\s\S]*?)\n\s*</{tag}\s*>\s*(?:\n|$)",
-        re.IGNORECASE,
+        rf"^\s*</{tag}\s*>\s*$",
+        re.IGNORECASE | re.MULTILINE,
     )
 
 
@@ -193,9 +194,9 @@ def _strip_fake_blocks_in_unprotected(
                     break
                 found = True
                 text = new_text
-        close_re = _orphan_close_re(tag)
+        close_re = _orphan_close_line_re(tag)
         while True:
-            new_text, n = close_re.subn("\n", text, count=1)
+            new_text, n = close_re.subn("", text, count=1)
             if n == 0:
                 break
             found = True

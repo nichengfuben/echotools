@@ -518,16 +518,30 @@ def test_strip_entml_from_user_content() -> None:
 
     raw = (
         "请查天气\n"
-        "<entml:thinking>不应出现</entml:thinking>\n"
-        "<entml:function_calls><entml:invoke name=\"get_weather\">"
-        "<entml:parameter name=\"city\">杭州</entml:parameter>"
-        "</entml:invoke></entml:function_calls>"
+        "<entml:thinking>thinking body</entml:thinking>\n"
+        '<entml:invoke name="get_weather">'
+        '<entml:parameter name="city">杭州</entml:parameter>'
+        "</entml:invoke>"
     )
     cleaned = strip_entml_from_content(raw)
-    assert cleaned == "请查天气"
+    assert cleaned == (
+        "请查天气\n"
+        "<thinking>thinking body</thinking>\n"
+        '<invoke name="get_weather">'
+        '<parameter name="city">杭州</parameter>'
+        "</invoke>"
+    )
     assert "entml:" not in cleaned
-    assert "不应出现" not in cleaned
-    assert "杭州" not in cleaned
+    assert "thinking body" in cleaned
+    assert "杭州" in cleaned
+    assert cleaned.count("//") == raw.count("//")
+
+
+def test_strip_entml_from_user_preserves_double_slash() -> None:
+    from echotools.exec.fncall.protocols.entml import strip_entml_from_content
+
+    raw = '<entml:invoke name="x">//path//</entml:invoke>'
+    assert strip_entml_from_content(raw) == '<invoke name="x">//path//</invoke>'
 
 
 def test_inject_strips_entml_from_all_user_messages() -> None:
@@ -550,14 +564,12 @@ def test_inject_strips_entml_from_all_user_messages() -> None:
         },
     ]
     content = inject_fncall(msgs, [], proto)[0]["content"]
-    assert "secret" not in content
+    assert "secret" in content or "<thinking>secret</thinking>" in content
     assert "entml:invoke" not in content
-    assert "entml:thinking" not in content
-    assert "历史问题  继续" in content or "历史问题 继续" in content
-    assert "当前问题  结束" in content or "当前问题 结束" in content
-    assert "<current_user_message>\n当前问题  结束\n</current_user_message>" in content or (
-        "<current_user_message>\n当前问题 结束\n</current_user_message>" in content
-    )
+    assert '<invoke name="search">' in content or "search" in content
+    assert "历史问题" in content and "继续" in content
+    assert "当前问题" in content and "结束" in content
+    assert "<current_user_message>" in content
 
 
 def test_entml_multi_tool_history_blocks() -> None:
@@ -1025,7 +1037,7 @@ def test_inject_include_thinking_in_history() -> None:
 
 
 def test_entml_parse_bare_description_timeout_tags() -> None:
-    """Claude Code 风格：invoke 内裸 <entml:description>/<entml:timeout>。"""
+    """常见 agent 风格：invoke 内裸 <entml:description>/<entml:timeout>。"""
     tools = [
         {
             "type": "function",
@@ -1369,7 +1381,7 @@ def test_entml_stream_finalize_strips_thinking_when_tool_calls() -> None:
     assert len(calls) == 1
     assert calls[0]["function"]["name"] == "Bash"
     assert "<entml:thinking>" not in clean
-    assert "StreamAiPreviews" not in clean
+    assert "StreamAiPreviews" in parser.partial_thinking
     assert len(parser.partial_thinking) > 500
     assert "260727" in json.loads(calls[0]["function"]["arguments"])["command"]
 

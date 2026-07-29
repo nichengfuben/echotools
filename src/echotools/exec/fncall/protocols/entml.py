@@ -42,26 +42,15 @@ from echotools.exec.fncall.shared.normalization import (
 )
 from echotools.exec.protocol.base import ToolProtocol
 
-# 仅按 entml: 前缀剥离标签，不区分具体标签名。
-_ENTML_PAIR_RE = re.compile(
-    r"<entml:[a-zA-Z_][\w]*\b[^>]*>.*?</entml:[a-zA-Z_][\w]*>",
-    re.DOTALL,
-)
-_ENTML_SELF_CLOSING_RE = re.compile(r"<entml:[a-zA-Z_][\w]*\b[^>]*/>", re.DOTALL)
-_ENTML_ORPHAN_CLOSE_RE = re.compile(r"</entml:[a-zA-Z_][\w]*>", re.DOTALL)
-_ENTML_ORPHAN_OPEN_RE = re.compile(r"<entml:[a-zA-Z_][\w]*\b[^>]*>", re.DOTALL)
+# user 消息：仅去掉标签名中的 entml: 命名空间，保留标签与正文。
+_ENTML_NAMESPACE_RE = re.compile(r"(</?)entml:", re.IGNORECASE)
 
 
 def strip_entml_from_content(content: str) -> str:
-    """从 user 消息正文剥离所有 entml:* 标签及残留开闭标签。"""
+    """user 消息：去掉 ``entml:`` 标签前缀，保留标签结构与正文（含 ``//``）。"""
     if not content:
         return content
-    cleaned = content
-    cleaned = _ENTML_PAIR_RE.sub("", cleaned)
-    cleaned = _ENTML_SELF_CLOSING_RE.sub("", cleaned)
-    cleaned = _ENTML_ORPHAN_CLOSE_RE.sub("", cleaned)
-    cleaned = _ENTML_ORPHAN_OPEN_RE.sub("", cleaned)
-    return cleaned.strip()
+    return _ENTML_NAMESPACE_RE.sub(r"\1", content)
 
 
 def _parse_tool_call_args(tc: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
@@ -321,6 +310,7 @@ class EntmlProtocol(ToolProtocol):
         return tool_calls
 
     def clean_tags(self, content: str) -> str:
+        """user 消息：仅去掉 ``entml:`` 前缀，不做其它剥离。"""
         return strip_entml_from_content(content)
 
     def clean_tool_tags(self, content: str) -> str:

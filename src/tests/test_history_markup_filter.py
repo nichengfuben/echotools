@@ -76,8 +76,8 @@ MODEL_MIMIC_RESPONSE = (
         ),
         (
             "计划说明\n</assistant>\n后续仍可见",
-            "后续仍可见",
             "计划说明",
+            "</assistant>",
             True,
         ),
         (
@@ -200,7 +200,7 @@ class TestStreamParseFakeHistory:
             parser.feed(text[i : i + chunk])
         clean, _ = parser.finalize()
         assert "</assistant>" not in clean
-        assert "分析中" not in clean
+        assert "分析中" in clean
         assert "后续仍可见" in clean
 
 

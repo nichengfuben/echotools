@@ -414,3 +414,23 @@ def test_thinking_disabled_fault_close_not_applied() -> None:
     clean, calls = parser.finalize()
     assert len(calls) == 1
     assert "plan" not in parser.partial_thinking or "</thinking>" in parser.partial_thinking
+
+
+def test_invoke_mention_inside_closed_thinking_is_not_tool_start() -> None:
+    """thinking 正文中举例 ``<entml:invoke>`` 不得触发工具解析截断。"""
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    text = (
+        "<entml:thinking>\nplan A\n</entml:thinking>\n\n"
+        "让我快速检查\n\n"
+        "<entml:thinking>\nplan B mentions <entml:invoke name=\"x\">\n"
+        "still thinking\n</entml:thinking>\n\n"
+        "总结\n"
+        f"{INVOKE}"
+    )
+    parser.feed(text)
+    clean, calls = parser.finalize()
+    assert "still thinking" in parser.partial_thinking
+    assert "plan B mentions" in parser.partial_thinking
+    assert "让我快速检查" in clean
+    assert "总结" in clean
+    assert len(calls) == 1

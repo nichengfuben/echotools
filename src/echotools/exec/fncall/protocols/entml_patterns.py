@@ -51,7 +51,7 @@ PARAMETERS_RE = re.compile(
     r"<entml:parameters>([\s\S]*?)</entml:parameters>",
     re.DOTALL,
 )
-# invoke 内裸子标签（非 parameter 包裹），如 Claude Code 输出的 description/timeout。
+# invoke 内裸子标签（非 parameter 包裹），如部分 agent 输出的 description/timeout。
 BARE_INVOKE_CHILD_RE = re.compile(
     r"<entml:(description|timeout)>([\s\S]*?)</entml:\1>",
     re.DOTALL | re.IGNORECASE,

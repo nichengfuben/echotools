@@ -1,4 +1,4 @@
-"""模拟模型 ``<entml:thinking>…</thinking>`` fault 容错输出（rogator / Claude Code 高发）。
+"""模拟模型 ``<entml:thinking>…</thinking>`` fault 容错输出（rogator / agent 客户端高发）。
 
 非真实模型日志；用于 batch ``protocol.parse`` 与 ``FncallStreamParser`` 分流回归。
 """

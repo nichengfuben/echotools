@@ -353,26 +353,49 @@ def invoke_index_inside_unclosed_thinking(
     thinking_enabled: bool = True,
 ) -> bool:
     """``invoke_at`` 是否落在尚未闭合的 thinking 块内。"""
+    return invoke_index_inside_any_thinking_block(
+        text, invoke_at, thinking_enabled=thinking_enabled, unclosed_only=True,
+    )
+
+
+def invoke_index_inside_any_thinking_block(
+    text: str,
+    invoke_at: int,
+    *,
+    thinking_enabled: bool = True,
+    unclosed_only: bool = False,
+) -> bool:
+    """``invoke_at`` 是否落在 thinking 块内（``unclosed_only`` 时仅检查未闭合块）。"""
     if invoke_at < 0:
         return False
-    think_open, opened_plain = _find_earliest_thinking_open(
-        text, thinking_enabled=thinking_enabled
-    )
-    if think_open < 0 or invoke_at <= think_open:
-        return False
-    gt = text.find(">", think_open)
-    if gt < 0:
-        return True
-    body_start = gt + 1
-    close_at, close_len = _find_thinking_close(
-        text,
-        body_start,
-        opened_plain=opened_plain,
-        thinking_enabled=thinking_enabled,
-    )
-    if close_at < 0:
-        return True
-    return invoke_at < close_at + close_len
+    i = 0
+    while i < len(text):
+        open_at, opened_plain = _find_earliest_thinking_open(
+            text, i, thinking_enabled=thinking_enabled,
+        )
+        if open_at < 0:
+            break
+        gt = text.find(">", open_at)
+        if gt < 0:
+            return invoke_at > open_at
+        body_start = gt + 1
+        close_at, close_len = _find_thinking_close(
+            text,
+            body_start,
+            opened_plain=opened_plain,
+            thinking_enabled=thinking_enabled,
+        )
+        if close_at < 0:
+            if open_at < invoke_at:
+                return True
+            break
+        block_end = close_at + close_len
+        if open_at < invoke_at < block_end:
+            return True
+        if unclosed_only:
+            return False
+        i = block_end
+    return False
 
 
 def split_entml_thinking(
@@ -574,15 +597,7 @@ class EntmlThinkingStreamFilter:
             self._pending = ""
             return False
 
-        safe, tool_hold = _hold_ambiguous_tool_markup(self._pending)
-        if tool_hold:
-            if safe:
-                emitted = self._emit_thinking_piece(safe)
-                if emitted:
-                    out.append(("thinking", emitted))
-            self._pending = tool_hold
-            return False
-
+        # thinking 块内 ``<entml:invoke>`` 等仅为 prose/示例时仍计入 thinking，不按工具 hold 截断。
         safe, hold = _hold_prefix(self._pending, _THINKING_CLOSE)
         if not hold and self._thinking_enabled:
             safe, hold = _hold_prefix(safe, _FAULT_THINKING_CLOSE)

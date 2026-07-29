@@ -474,7 +474,7 @@ class TestFilterMechanisms:
         assert "function_calls" not in cleaned
         assert "invoke" not in cleaned
 
-    def test_strip_entml_from_content_removes_all_entml(self) -> None:
+    def test_strip_entml_from_content_strips_namespace_only(self) -> None:
         raw = (
             "A\n"
             "<entml:thinking>t</entml:thinking>\n"
@@ -485,8 +485,9 @@ class TestFilterMechanisms:
         cleaned = strip_entml_from_content(raw)
         assert "A" in cleaned and "B" in cleaned
         assert "entml:" not in cleaned
-        assert "t" not in cleaned
-        assert "on" not in cleaned
+        assert "<thinking>t</thinking>" in cleaned
+        assert "<thinking_mode>on</thinking_mode>" in cleaned
+        assert "rich_tool" in cleaned
 
     def test_clean_tags_vs_clean_tool_tags(self) -> None:
         proto = _proto()
@@ -494,7 +495,8 @@ class TestFilterMechanisms:
             "<entml:thinking>keep-me</entml:thinking>\n"
             + _invoke("rich_tool", {"s": "x"})
         )
-        assert "keep-me" not in proto.clean_tags(text)
+        assert "keep-me" in proto.clean_tags(text)
+        assert "entml:" not in proto.clean_tags(text)
         assert "keep-me" in proto.clean_tool_tags(text)
         assert "entml:invoke" not in proto.clean_tool_tags(text)
 
@@ -518,7 +520,7 @@ class TestFilterMechanisms:
         assert "entml:" not in clean
         assert "hi" in clean and "there" in clean
 
-    def test_inject_strips_user_entml_but_builds_prompt_tags(self) -> None:
+    def test_inject_strips_user_entml_namespace_but_builds_prompt_tags(self) -> None:
         proto = _proto()
         msgs = [
             {
@@ -529,10 +531,10 @@ class TestFilterMechanisms:
             }
         ]
         content = inject_fncall(msgs, RICH_TOOLS, proto)[0]["content"]
-        assert "leak" not in content
-        assert 'name="rich_tool"' not in content.split("<current_user_message>")[1].split(
-            "</current_user_message>"
-        )[0]
+        user_section = content.split("<current_user_message>")[1].split("</current_user_message>")[0]
+        assert "leak" in user_section
+        assert "entml:" not in user_section
+        assert '<invoke name="rich_tool">' in user_section
         # prompt 自身仍含指令示例标签
         assert '<entml:invoke name="$FUNCTION_NAME">' in content
 

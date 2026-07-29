@@ -110,7 +110,7 @@ def tools_for_markup_case(case: HistoryMarkupCase) -> List[Dict[str, Any]]:
 FAKE_HISTORY_MARKUP_CASES: Tuple[HistoryMarkupCase, ...] = (
     HistoryMarkupCase(
         id="model_edit_mimic_orphan_thinking",
-        description="Claude Code 高发：正文 + orphan </thinking> + 多块 Edit 伪 tool",
+        description="高发语料：正文 + orphan </thinking> + 多块 Edit 伪 tool",
         extra_tools=("Read", "Edit"),
         response=(
             "● 验证通过，无外部依赖残留。现在清理几个文件中遗留的旧路径注释。\n\n"
@@ -166,8 +166,8 @@ FAKE_HISTORY_MARKUP_CASES: Tuple[HistoryMarkupCase, ...] = (
         id="orphan_assistant_close",
         description="无开标签的 </assistant> 反向闭合",
         response="分析中...\n</assistant>\n后续仍可见",
-        expect_clean_contains=("后续仍可见",),
-        expect_clean_excludes=("分析中", "</assistant>"),
+        expect_clean_contains=("后续仍可见", "分析中"),
+        expect_clean_excludes=("</assistant>",),
     ),
     HistoryMarkupCase(
         id="fake_tool_bash_scalar",
