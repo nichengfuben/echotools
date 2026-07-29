@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.91] - 2026-07-29
+
+### Changed
+
+- entml 末尾 IMPORTANT 硬约束块按 System Prompt Authoring Specification 重写：每条规则以 ``IMPORTANT:`` 开头、首尾 verbatim 复述、含 guard 示例块；工具调用表述改为 ``If you execute a tool in this turn`` 条件句式，不再暗示每轮必须调工具
+
 ## [2.3.90] - 2026-07-29
 
 ### Changed

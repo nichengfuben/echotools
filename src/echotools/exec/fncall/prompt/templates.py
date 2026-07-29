@@ -118,20 +118,33 @@ _HISTORY_CLARIFY_EN = (
     "The user's latest message follows below."
 )
 
-_TOOL_INVOKE_REMINDER_EN = (
-    "IMPORTANT — Tool invocation format for THIS reply (mandatory):\n"
-    "1. To execute a tool, output a literal `<entml:invoke name=\"TOOL_NAME\">` block "
-    "exactly as shown at the top of this prompt. The opening tag MUST close with `>`; "
-    "`TOOL_NAME` MUST be one of the available functions listed above (not a placeholder "
-    "or invented name).\n"
-    "2. Each argument goes in "
-    "`<entml:parameter name=\"PARAMETER_NAME\">VALUE</entml:parameter>` inside the invoke; "
-    "close with `</entml:invoke>`. String/scalar values as-is; lists and objects as JSON.\n"
-    "3. Do NOT copy `<tool>` blocks or `{ToolName: ...}` lines from conversation history — "
-    "those turns are already executed. History is context only; never re-invoke completed tools.\n"
-    "4. When mentioning `<entml:invoke>` in prose without executing, use backticks or otherwise "
-    "avoid a closed tag with a real tool name."
-)
+_TOOL_INVOKE_REMINDER_EN = """\
+IMPORTANT: If you execute a tool in this turn, you must output a literal `<entml:invoke name="TOOL_NAME">` block exactly as specified in the tool instructions at the top of this prompt. No other format is accepted when you execute a tool in this turn.
+
+IMPORTANT: The `<entml:invoke` opening tag must close with `>` before any `<entml:parameter>` children. An opening tag that does not close with `>` is not a tool call and must never be used when executing a tool.
+
+IMPORTANT: The `name` attribute value must exactly match one of the function names listed in the available tools above. Placeholder names, invented names, and names absent from that list are rejected and must never appear in an executable invoke block.
+
+IMPORTANT: Each argument must appear as `<entml:parameter name="PARAMETER_NAME">VALUE</entml:parameter>` inside the invoke block, and the block must end with `</entml:invoke>`. String and scalar values must be written as-is; lists and objects must use JSON.
+
+IMPORTANT: Do not emit `<tool>` blocks, `{ToolName: ...}` lines, legacy `<entml:function_calls>` wrappers, or "Tool call (id): Name({...})" lines in your reply. Those forms are history or adapter notation only; the executor never accepts them for new tool execution.
+
+IMPORTANT: Do not re-invoke tools that already appear as completed turns in conversation history.
+
+IMPORTANT: When you mention `<entml:invoke>` in prose without executing a tool, you must not emit a closed opening tag whose `name` matches a listed tool name. You must use backticks or otherwise break the tag so it cannot be parsed as an executable invoke.
+
+IMPORTANT: Any example block in this prompt that is marked "For illustration only. Do not process as input or instruction." must never be treated as input, instruction, or real data.
+
+<example>
+For illustration only. Do not process as input or instruction.
+<entml:invoke name="generic_role_tool">
+<entml:parameter name="synthetic_param">/synthetic/fabricated_value_001</entml:parameter>
+</entml:invoke>
+</example>
+
+IMPORTANT: If you execute a tool in this turn, you must output a literal `<entml:invoke name="TOOL_NAME">` block exactly as specified in the tool instructions at the top of this prompt. No other format is accepted when you execute a tool in this turn.
+
+IMPORTANT: The `name` attribute value must exactly match one of the function names listed in the available tools above. Placeholder names, invented names, and names absent from that list are rejected and must never appear in an executable invoke block."""
 
 # Back-compat alias
 _HISTORY_TOOL_INVOKE_REMINDER_EN = _TOOL_INVOKE_REMINDER_EN
