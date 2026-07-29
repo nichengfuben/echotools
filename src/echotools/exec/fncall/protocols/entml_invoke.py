@@ -15,6 +15,8 @@ from .entml_patterns import (
     extract_parameter_type_attr,
     normalize_entml_name,
     parse_sub_tags,
+    split_mangled_json_param_tail,
+    synthetic_close_invoke_body,
 )
 from .entml_values import coerce_entml_arguments, coerce_entml_parameter_value
 
@@ -58,6 +60,9 @@ def parse_invoke_args(
     schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
 ) -> Dict[str, Any]:
     func_props = (schema_index or {}).get(name) or {}
+    if "</entml:invoke>" in body:
+        body = body[: body.index("</entml:invoke>")]
+    body = synthetic_close_invoke_body(body)
 
     params_m = PARAMETERS_RE.search(body)
     if params_m:
@@ -81,6 +86,7 @@ def parse_invoke_args(
             continue
         pname = normalize_entml_name(pname)
         pval = (param_m.group(2) or "").strip()
+        pval, extra = split_mangled_json_param_tail(pval)
         type_hint = extract_parameter_type_attr(attrs)
         pschema = func_props.get(pname) or {}
         args[pname] = coerce_entml_parameter_value(
@@ -88,6 +94,17 @@ def parse_invoke_args(
             pschema or None,
             type_hint=type_hint,
         )
+        for extra_key, extra_val in extra.items():
+            if extra_key in args:
+                continue
+            extra_schema = func_props.get(extra_key) or {}
+            if isinstance(extra_val, (int, float, bool)):
+                args[extra_key] = extra_val
+            else:
+                args[extra_key] = coerce_entml_parameter_value(
+                    str(extra_val),
+                    extra_schema or None,
+                )
 
     _parse_bare_invoke_children(body, args, func_props)
     _parse_direct_child_tags(body, args, func_props)

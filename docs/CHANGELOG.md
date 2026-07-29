@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.83] - 2026-07-29
+
+### Fixed
+
+- entml 流式 ``partial_text``：thinking 闭合后不再把思考正文重复泄漏到 answer（``stream_safe_visible_prefix`` / ``clean_stream_partial_visible`` 顺序修正）
+- entml batch/stream Bash：未闭合 ``<entml:parameter>`` + 误写入 command 的 JSON 尾缀（``", "description": ..., "timeout": ...}}``）可正确解析；流式 ``json_buf`` 不再出现 1596 字节非法 JSON
+- entml 流式 partial_json：快照回退时不发 append-only 错误 delta；invoke ready 时 diverged tail 不再追加垃圾后缀
+- entml ``<tool>`` 块：支持 ``{Bash>`` + ``<entml:parameter>`` 混合格式（req-1785297403）
+
+### Added
+
+- ``test_thinking_close_does_not_leak_into_partial_text``、``test_mangled_json_tail_in_command_param_batch_and_stream`` 语料回归
+- ``test_entml_tool_block_mangled_brace_entml_params``：``<tool>{Bash>`` 混合格式 batch/stream
+- ``test_entml_tool_block_mangled_brace_entml_params``：``<tool>{Bash>`` + ``<entml:parameter>`` 混合格式
+
 ## [2.3.82] - 2026-07-29
 
 ### Fixed

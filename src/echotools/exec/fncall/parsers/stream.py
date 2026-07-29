@@ -439,7 +439,7 @@ class FncallStreamParser:
                 else:
                     tail = ""
             else:
-                tail = final if multi else ""
+                tail = ""
             if tail:
                 name = call["function"]["name"]
                 if multi:
@@ -635,10 +635,16 @@ class FncallStreamParser:
             stream_safe_visible_prefix,
         )
 
+        from echotools.exec.fncall.protocols.entml_think.parse import (
+            split_entml_thinking,
+        )
+
         buf = stream_safe_visible_prefix(
             self._raw_buf,
             thinking_enabled=self._thinking_enabled,
         )
+        if self._thinking_enabled and buf:
+            buf, _ = split_entml_thinking(buf, thinking_enabled=True)
         return clean_stream_partial_visible(
             buf,
             has_calls=self.has_calls,
@@ -690,11 +696,6 @@ class FncallStreamParser:
             segment,
             thinking_enabled=self._thinking_enabled,
         )
-        buf = clean_stream_partial_visible(
-            buf,
-            has_calls=self.has_calls,
-            thinking_enabled=self._thinking_enabled,
-        )
         if not buf:
             return ""
         cleaned, _ = strip_fake_history_markup_for_display(buf)
@@ -703,7 +704,11 @@ class FncallStreamParser:
             thinking_enabled=self._thinking_enabled,
             preserve_visible_whitespace=True,
         )
-        return visible
+        return clean_stream_partial_visible(
+            visible,
+            has_calls=self.has_calls,
+            thinking_enabled=self._thinking_enabled,
+        )
 
     def finalize(self) -> Tuple[str, List[Dict[str, Any]]]:
         """结束流式解析，返回 (清理后文本, tool_calls 列表)。幂等。"""

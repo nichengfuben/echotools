@@ -79,6 +79,10 @@ def stream_safe_visible_prefix(
         )
         if open_at >= 0:
             return buf[:open_at]
+    if thinking_enabled:
+        visible, thinking = split_entml_thinking(buf, thinking_enabled=True)
+        if thinking:
+            return visible
     return buf
 
 
@@ -124,8 +128,23 @@ def clean_stream_partial_visible(
     if not text.strip():
         return ""
     if re.search(r"</?entml:", text, re.IGNORECASE):
-        text = re.sub(r"</?entml:[^>]*>", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"</?entml:\w*$", "", text, flags=re.IGNORECASE)
+        if thinking_enabled:
+            # 保留 thinking 标签供 split_entml_thinking 剥离；仅去掉工具相关 entml 残留。
+            text = re.sub(
+                r"</?entml:(?!thinking\b)[^>]*>",
+                "",
+                text,
+                flags=re.IGNORECASE,
+            )
+            text = re.sub(
+                r"</?entml:(?!thinking\b)\w*$",
+                "",
+                text,
+                flags=re.IGNORECASE,
+            )
+        else:
+            text = re.sub(r"</?entml:[^>]*>", "", text, flags=re.IGNORECASE)
+            text = re.sub(r"</?entml:\w*$", "", text, flags=re.IGNORECASE)
         text = text.rstrip()
     return text
 

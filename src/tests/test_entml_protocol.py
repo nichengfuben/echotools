@@ -1414,3 +1414,52 @@ def test_entml_tool_block_bash_with_output_tail_batch_and_finalize() -> None:
     stream_args = json.loads(stream_calls[0]["function"]["arguments"])
     assert stream_args == batch_args
 
+
+def test_entml_tool_block_mangled_brace_entml_params() -> None:
+    """``<tool>{Bash>\\n<entml:parameter>...`` 混合格式 batch/stream 均解析 Bash。"""
+    from pathlib import Path
+
+    from echotools.exec.fncall.parsers.stream import FncallStreamParser
+
+    sample_path = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785297403-7c656ac5fe40.txt"
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus file not available")
+    sample = sample_path.read_text(encoding="utf-8")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "Bash",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "description": {"type": "string"},
+                        "timeout": {"type": "integer"},
+                    },
+                    "required": ["command"],
+                },
+            },
+        }
+    ]
+    clean, batch_calls = get_protocol("entml").parse(sample, tools)
+    assert len(batch_calls) == 1
+    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
+    assert batch_calls[0]["function"]["name"] == "Bash"
+    assert "alicdn-analytics" in batch_args["command"]
+    assert batch_args.get("timeout") == 30
+    assert "RC4" in clean
+
+    for chunk in (1, 17, 64):
+        parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
+        for i in range(0, len(sample), chunk):
+            parser.feed(sample[i : i + chunk])
+        stream_clean, stream_calls = parser.finalize()
+        assert len(stream_calls) == 1, f"chunk={chunk}"
+        stream_args = json.loads(stream_calls[0]["function"]["arguments"])
+        assert stream_args == batch_args, f"chunk={chunk}"
+        assert len(parser.partial_thinking) > 100, f"chunk={chunk}"
+        assert "RC4" in stream_clean or "RC4" in parser.partial_text, f"chunk={chunk}"
+

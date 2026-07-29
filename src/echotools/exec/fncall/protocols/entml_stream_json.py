@@ -18,6 +18,8 @@ from .entml_patterns import (
     find_valid_parameter_close,
     normalize_entml_name,
     parameter_close_at,
+    split_mangled_json_param_tail,
+    synthetic_close_invoke_body,
 )
 from .entml_values import coerce_entml_parameter_value
 from echotools.exec.fncall.shared.coercion import _resolve_effective_type
@@ -104,24 +106,8 @@ def _effective_param_type(
 
 
 def _synthetic_close_body(inner: str) -> str:
-    """为 force_close 补齐未闭合的 parameter / parameters 标签。"""
-    if _INVOKE_CLOSE in inner:
-        inner = inner[: inner.index(_INVOKE_CLOSE)]
-    closed = inner
-    if _PARAMETERS_OPEN in closed and _PARAMETERS_CLOSE not in closed:
-        closed = closed + _PARAMETERS_CLOSE
-    matches = list(_PARAM_OPEN_RE.finditer(closed))
-    if matches:
-        last = matches[-1]
-        after = closed[last.end() :]
-        open_snip = closed[last.start() : last.end()].lower()
-        if open_snip.startswith("<parameter") and not open_snip.startswith("<entml:"):
-            need = PARAM_CLOSE_BARE
-        else:
-            need = _PARAM_CLOSE
-        if need not in after and find_valid_parameter_close(closed, last.end(), allow_end=True) < 0:
-            closed = closed + need
-    return closed
+    """兼容旧名；委托 ``synthetic_close_invoke_body``。"""
+    return synthetic_close_invoke_body(inner)
 
 
 def _final_invoke_arguments_json(
@@ -136,7 +122,7 @@ def _final_invoke_arguments_json(
 
     invoke_closed = _INVOKE_CLOSE in body
     inner = body[: body.index(_INVOKE_CLOSE)] if invoke_closed else body
-    parse_body = inner if invoke_closed else _synthetic_close_body(inner)
+    parse_body = synthetic_close_invoke_body(inner)
     args = parse_invoke_args(parse_body, tool_name, schema_index)
     return json.dumps(args, ensure_ascii=False)
 
@@ -312,16 +298,24 @@ def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool, Optional[s
         val_start = match.end()
         close = _resolve_parameter_close(body, val_start)
         if close < 0:
+            raw = _incomplete_parameter_raw(body, val_start)
+            raw, extra = split_mangled_json_param_tail(raw)
             entries.append(
                 (
                     key,
-                    _incomplete_parameter_raw(body, val_start),
+                    raw,
                     False,
                     type_hint,
                 )
             )
+            for extra_key, extra_val in extra.items():
+                entries.append((extra_key, str(extra_val), True, None))
             break
-        entries.append((key, body[val_start:close].strip(), True, type_hint))
+        raw = body[val_start:close].strip()
+        raw, extra = split_mangled_json_param_tail(raw)
+        entries.append((key, raw, True, type_hint))
+        for extra_key, extra_val in extra.items():
+            entries.append((extra_key, str(extra_val), True, None))
         i = close + parameter_close_at(body, close)
     return entries
 
@@ -467,6 +461,9 @@ class EntmlInvokeJsonStreamEncoder:
                 if a != b:
                     break
                 common += 1
+            if common < len(self._emitted):
+                self._emitted = snapshot
+                return ""
             delta = snapshot[common:]
             self._emitted = snapshot
             return delta

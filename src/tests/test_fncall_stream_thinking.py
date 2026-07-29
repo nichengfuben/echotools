@@ -90,6 +90,59 @@ def test_thinking_close_and_invoke_in_one_chunk() -> None:
     assert "reason" not in clean or clean.strip() == ""
 
 
+def test_thinking_close_does_not_leak_into_partial_text() -> None:
+    """thinking 闭合后 partial_text 不得重复输出思考正文（Rogator text/reasoning 双发）。"""
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    thinking_body = (
+        "The concurrent test shows SSE received 0 bytes even though BidiAppend returned 200.\n"
+        "Default reply language: Simplified Chinese\n"
+    )
+    answer = "并发测试显示SSE线程收到状态200但0字节数据。"
+    text = (
+        f"<entml:thinking>\n{thinking_body}</entml:thinking>\n\n{answer}\n{INVOKE}"
+    )
+    dup_count = 0
+    for i in range(0, len(text), 17):
+        parser.feed(text[i : i + 17])
+        pt = parser.partial_text
+        pth = parser.partial_thinking
+        if pth and thinking_body[:40] in pt:
+            dup_count += 1
+    clean, calls = parser.finalize()
+    assert dup_count == 0, "thinking body leaked into partial_text during stream"
+    assert thinking_body.strip() in parser.partial_thinking
+    assert "The concurrent test shows" not in clean
+    assert answer in clean
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("chunk", [1, 17, 64])
+def test_thinking_then_answer_no_partial_text_dup(chunk: int) -> None:
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    text = (
+        "<entml:thinking>\nlong reasoning line one\nline two\n</entml:thinking>\n"
+        "visible answer\n"
+        f"{INVOKE}"
+    )
+    for i in range(0, len(text), chunk):
+        parser.feed(text[i : i + chunk])
+        assert "long reasoning" not in parser.partial_text
+    clean, calls = parser.finalize()
+    assert "long reasoning" in parser.partial_thinking
+    assert "visible answer" in clean
+    assert "long reasoning" not in clean
+
+
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
+    chunks = ["<entml:thinking>reason</entml:thinking>", INVOKE]
+    for chunk in chunks:
+        parser.feed(chunk)
+    clean, calls = parser.finalize()
+    assert parser.partial_thinking.strip() == "reason"
+    assert len(calls) == 1
+    assert "reason" not in clean or clean.strip() == ""
+
+
 def test_no_thinking_invoke_still_works() -> None:
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=TOOLS)
     parser.feed(f"Sure.\n{INVOKE}")

@@ -139,6 +139,57 @@ def test_read_anyof_integer_stream_json_buf_matches_batch() -> None:
     }
 
 
+BASH_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "Bash",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string"},
+                    "description": {"type": "string"},
+                    "timeout": {"type": "integer"},
+                },
+                "required": ["command"],
+            },
+        },
+    }
+]
+
+
+def test_mangled_json_tail_in_command_param_batch_and_stream() -> None:
+    """未闭合 parameter + JSON 尾缀误写入 command：batch/stream json_buf 须可解析且一致。"""
+    from pathlib import Path
+
+    text = Path(
+        r"X:/Project/Public/Qwen/logs/responses/req-1785296513-7782eb161d4d.txt"
+    ).read_text(encoding="utf-8")
+    proto = get_protocol("entml")
+    batch_args = json.loads(proto.parse(text, BASH_TOOLS)[1][0]["function"]["arguments"])
+    assert "command" in batch_args
+    assert batch_args["command"].endswith("head -60\"")
+    assert "description" not in batch_args["command"]
+    assert batch_args.get("description")
+    assert batch_args.get("timeout") == 30000
+
+    for chunk in (1, 17, 64):
+        parser = FncallStreamParser(protocol=proto, tools=BASH_TOOLS)
+        json_buf = ""
+        for i in range(0, len(text), chunk):
+            parser.feed(text[i : i + chunk])
+            while True:
+                delta = parser.consume_stream_delta()
+                if not delta:
+                    break
+                json_buf += delta[1]
+        comp = parser.complete_stream_delta_if_needed()
+        if comp:
+            json_buf += comp[1]
+        parser.finalize()
+        assert json.loads(json_buf) == batch_args, f"chunk={chunk}"
+
+
 def test_parameters_block_no_stream_until_closed() -> None:
     body = (
         "<entml:parameters>\n"

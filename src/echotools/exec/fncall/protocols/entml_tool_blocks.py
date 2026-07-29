@@ -24,6 +24,15 @@ _INNER_TOOL_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 _BRACE_TOOL_HEAD_RE = re.compile(r"\{([A-Za-z][A-Za-z0-9_]*)\s*:\s*")
+# ``{Bash>`` 后接 ``<entml:parameter>`` 的混合格式（``{Edit: json}`` 仍走 history brace）
+_MANGLED_BRACE_ENTML_HEAD_RE = re.compile(
+    r"^\s*\{([A-Za-z][A-Za-z0-9_]*)\s*>\s*",
+    re.MULTILINE,
+)
+_PARAM_MARKER_RE = re.compile(
+    r"<\s*(?:entml:)?parameter\b",
+    re.IGNORECASE,
+)
 # 工具结果常见行号泄漏（Read 伪块）— 仅用于多块 brace 判定
 _OUTPUT_LINE_RE = re.compile(r"^\s*\d+\s+\S", re.MULTILINE)
 _SCALAR_ARG_KEYS = ("path", "command", "pattern", "query", "file_path")
@@ -220,6 +229,30 @@ def _parse_brace_calls(
     return [(name, args)]
 
 
+def _parse_mangled_brace_entml_params(
+    body: str,
+    known: Set[str],
+    schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
+) -> List[Tuple[str, Dict[str, Any]]]:
+    """``<tool>\\n{Bash>\\n<entml:parameter>...`` 混合格式。"""
+    match = _MANGLED_BRACE_ENTML_HEAD_RE.search(body)
+    if not match:
+        return []
+    name = normalize_entml_name(match.group(1))
+    if known and name not in known:
+        return []
+    rest = body[match.end() :].lstrip()
+    if not _PARAM_MARKER_RE.search(rest):
+        return []
+    from .entml_invoke import parse_invoke_args
+
+    args = parse_invoke_args(rest, name, schema_index)
+    if not args:
+        return []
+    args = coerce_entml_arguments(args, name, schema_index)
+    return [(name, args)]
+
+
 def parse_tool_block_body(
     body: str,
     *,
@@ -236,6 +269,10 @@ def parse_tool_block_body(
     inner = _parse_inner_tag_calls(text, known, schema_index)
     if inner:
         return inner
+
+    mangled = _parse_mangled_brace_entml_params(text, known, schema_index)
+    if mangled:
+        return mangled
 
     if not allow_brace_format:
         return []
