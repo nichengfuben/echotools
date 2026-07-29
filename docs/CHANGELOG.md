@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.96] - 2026-07-30
+
+### Fixed
+
+- entml 输出过滤两步分离：**Step 1** 带 ``id`` 的 ``<entml:result id="…">…</entml:result>`` 整块剥离（含内部正文；流式未闭合 hold）；**Step 2** 仅剥离开/闭标签本身（``>`` 闭合即滤，保留标签间/后正文）：``funtions_results`` / ``conversation_history`` / ``entml:calls`` / ``function_calling_behavior`` / ``thinking_behavior`` / 无 id 的 ``entml:result``
+
 ## [2.3.95] - 2026-07-30
 
 ### Added

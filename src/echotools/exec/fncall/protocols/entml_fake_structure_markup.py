@@ -11,32 +11,32 @@ from echotools.exec.fncall.protocols.entml_tool_result_comment import (
     trailing_partial_tool_result_id_comment_len,
 )
 
-# 开/闭标签在 ``>`` 闭合即剥离；``funtions_results`` 拼写与 prompt 注入一致。
-_FAKE_ENTML_OPEN_TAG_RES = (
-    ("result", re.compile(r"<entml:result\b[^>]*>", re.IGNORECASE)),
-    (
-        "funtions_results",
-        re.compile(r"<entml:funtions_results\b[^>]*>", re.IGNORECASE),
-    ),
-    (
-        "conversation_history",
-        re.compile(r"<entml:conversation_history\b[^>]*>", re.IGNORECASE),
-    ),
-)
-_FAKE_ENTML_CLOSE_TAG_RES = (
-    ("result", re.compile(r"</entml:result\s*>", re.IGNORECASE)),
-    (
-        "funtions_results",
-        re.compile(r"</entml:funtions_results\s*>", re.IGNORECASE),
-    ),
-    (
-        "conversation_history",
-        re.compile(r"</entml:conversation_history\s*>", re.IGNORECASE),
-    ),
-)
-_ENTML_RESULT_BLOCK_RE = re.compile(
-    r"<entml:result\b[^>]*>[\s\S]*?</entml:result\s*>",
+# Step 1：带 id 的 result 整块（含内部正文）剥离。
+_ENTML_RESULT_ID_BLOCK_RE = re.compile(
+    r"<entml:result\b[^>]*\bid\s*=[^>]*>[\s\S]*?</entml:result\s*>",
     re.IGNORECASE,
+)
+_ENTML_RESULT_ID_OPEN_INNER_RE = re.compile(
+    r"<entml:result\b[^>]*\bid\s*=",
+    re.IGNORECASE,
+)
+
+# Step 2：仅剥离开/闭标签（``>`` 闭合即移除，不删标签间/后正文）。
+_TAG_ONLY_OPEN_RES = (
+    re.compile(r"<entml:funtions_results\b[^>]*>", re.IGNORECASE),
+    re.compile(r"<entml:conversation_history\b[^>]*>", re.IGNORECASE),
+    re.compile(r"<entml:calls\b[^>]*>", re.IGNORECASE),
+    re.compile(r"<function_calling_behavior\b[^>]*>", re.IGNORECASE),
+    re.compile(r"<thinking_behavior\b[^>]*>", re.IGNORECASE),
+    re.compile(r"<entml:result\b[^>]*>", re.IGNORECASE),
+)
+_TAG_ONLY_CLOSE_RES = (
+    re.compile(r"</entml:funtions_results\s*>", re.IGNORECASE),
+    re.compile(r"</entml:conversation_history\s*>", re.IGNORECASE),
+    re.compile(r"</entml:calls\s*>", re.IGNORECASE),
+    re.compile(r"</function_calling_behavior\s*>", re.IGNORECASE),
+    re.compile(r"</thinking_behavior\s*>", re.IGNORECASE),
+    re.compile(r"</entml:result\s*>", re.IGNORECASE),
 )
 
 _FAKE_ENTML_TAG_PREFIXES: Tuple[str, ...] = (
@@ -46,21 +46,27 @@ _FAKE_ENTML_TAG_PREFIXES: Tuple[str, ...] = (
     "</entml:funtions_results",
     "<entml:conversation_history",
     "</entml:conversation_history",
+    "<entml:calls",
+    "</entml:calls",
+    "<function_calling_behavior",
+    "</function_calling_behavior",
+    "<thinking_behavior",
+    "</thinking_behavior",
 )
 
 
-def _strip_complete_fake_entml_tags(text: str) -> Tuple[str, bool]:
+def _strip_fake_entml_result_id_blocks(text: str) -> Tuple[str, bool]:
+    text, n = _ENTML_RESULT_ID_BLOCK_RE.subn("", text)
+    return text, n > 0
+
+
+def _strip_tag_only_markup(text: str) -> Tuple[str, bool]:
     found = False
-    for _, pattern in _FAKE_ENTML_OPEN_TAG_RES + _FAKE_ENTML_CLOSE_TAG_RES:
+    for pattern in _TAG_ONLY_OPEN_RES + _TAG_ONLY_CLOSE_RES:
         text, n = pattern.subn("", text)
         if n:
             found = True
     return text, found
-
-
-def _strip_fake_entml_result_blocks(text: str) -> Tuple[str, bool]:
-    text, n = _ENTML_RESULT_BLOCK_RE.subn("", text)
-    return text, n > 0
 
 
 def _could_be_fake_entml_tag_prefix(fragment: str) -> bool:
@@ -107,12 +113,12 @@ def leading_partial_fake_entml_structure_len(text: str) -> int:
     return 0
 
 
-def _truncate_unclosed_fake_result_tail(text: str) -> Tuple[str, bool]:
-    """流式：从 ``<entml:result`` 起至 ``</entml:result>`` 收齐前均不可见。"""
+def _truncate_unclosed_fake_result_id_tail(text: str) -> Tuple[str, bool]:
+    """流式/batch：``<entml:result id=...>`` 未闭合至 ``</entml:result>`` 前均不可见。"""
     found = False
     search_from = 0
     while True:
-        open_m = re.search(r"<entml:result\b", text[search_from:], re.IGNORECASE)
+        open_m = _ENTML_RESULT_ID_OPEN_INNER_RE.search(text[search_from:])
         if not open_m:
             break
         abs_start = search_from + open_m.start()
@@ -134,25 +140,25 @@ def _truncate_unclosed_fake_result_tail(text: str) -> Tuple[str, bool]:
 
 
 def strip_fake_entml_structure_markup(content: str) -> Tuple[str, bool]:
-    """batch：剥离完整伪 entml 结构标签、result 块与 Tool Result ID 注释。"""
+    """batch：id result 整块 → 仅标签 → Tool Result ID 注释。"""
     if not content:
         return content, False
     found = False
     text = strip_complete_tool_result_id_comments(content)
     if text != content:
         found = True
-    text, hit = _strip_fake_entml_result_blocks(text)
+    text, hit = _strip_fake_entml_result_id_blocks(text)
     found = found or hit
-    text, hit = _truncate_unclosed_fake_result_tail(text)
+    text, hit = _truncate_unclosed_fake_result_id_tail(text)
     found = found or hit
-    text, hit = _strip_complete_fake_entml_tags(text)
+    text, hit = _strip_tag_only_markup(text)
     found = found or hit
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text, found
 
 
 def strip_fake_entml_structure_markup_for_display(content: str) -> Tuple[str, bool]:
-    """流式 ``partial_text``：hold 未收齐标签 + 截断未闭合 result + 剥离完整片段。"""
+    """流式 ``partial_text``：hold 未收齐标签 + 截断未闭合 id result + 剥离。"""
     if not content:
         return content, False
     found = False
@@ -160,7 +166,7 @@ def strip_fake_entml_structure_markup_for_display(content: str) -> Tuple[str, bo
     text = content[:-tail_hold] if tail_hold else content
     if tail_hold:
         found = True
-    text, hit = _truncate_unclosed_fake_result_tail(text)
+    text, hit = _truncate_unclosed_fake_result_id_tail(text)
     found = found or hit
     text, hit = strip_fake_entml_structure_markup(text)
     found = found or hit
