@@ -11,16 +11,17 @@ import json as _json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from echotools.exec.fncall.prompt.behavior_blocks import (
+    format_function_calling_behavior,
+    format_hard_constraint_restatement,
+    format_thinking_behavior,
+)
 from echotools.exec.fncall.prompt.templates import (
     _HISTORY_CLARIFY_EN,
-    _TOOL_INVOKE_REMINDER_EN,
 )
 from echotools.exec.fncall.protocols.entml_invoke import (
+    format_entml_tool_calls,
     parse_entml_tool_calls,
-)
-from echotools.exec.fncall.protocols.entml_think.blocks import (
-    parse_tool_block_calls,
-    strip_tool_block_spans,
 )
 from echotools.exec.fncall.protocols.entml_patterns import (
     entml_invoke_open_may_be_streaming,
@@ -33,7 +34,8 @@ from echotools.exec.fncall.protocols.entml_patterns import (
     strip_tool_entml_residue,
 )
 from echotools.exec.fncall.protocols.entml_think.core import (
-    build_entml_thinking_section,
+    build_entml_thinking_behavior_section,
+    build_entml_thinking_meta_section,
 )
 from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
@@ -89,8 +91,8 @@ def _render_tool_call_line(name: str, args: Dict[str, Any]) -> str:
 
 
 def _render_tool_history_block(body: str) -> str:
-    """将工具轮次正文包裹为 <tool> 块。"""
-    return f"<tool>\n{body.strip()}\n</tool>"
+    """历史内联工具轮次正文（invoke + result，无 ``<tool>`` 外壳）。"""
+    return body.strip()
 
 
 _ENTML_INSTRUCTION = """\
@@ -107,8 +109,40 @@ You can invoke functions by writing a "<entml:invoke>" block like the following 
 
 String and scalar parameters should be specified as is, while lists and objects should use JSON format.
 
+Your turn ends immediately at the closing tag of the last <entml:invoke> block you emit. You append nothing after it — no comment, no result, no id, no visible text. The execution environment then runs each tool. Once a turn is complete, the environment logs it into <entml:conversation_history> and appends, after each invocation in that log, an HTML comment stating the environment-generated result id in the form <!-- Tool Result ID:{id} -->. This comment is written by the environment when logging a completed turn; you never write it yourself, in this turn or in imitation of any prior turn, because at the moment you emit an invocation the id does not yet exist. Separately, the environment appends the full content of every result, matched by id, to a single flat top-level block named <entml:funtions_results>, positioned outside and independent of <entml:conversation_history>. This block accumulates across the whole conversation; it is never nested inside conversation_history and never adjacent to an invocation.
+
 Here are the functions available in JSONSchema format:
 """
+
+
+def format_tool_result_id_comment(tool_call_id: str) -> str:
+    """History 内 invoke 后的环境回填 id 注释（非模型实时输出）。"""
+    tid = (tool_call_id or "").strip()
+    if not tid:
+        return ""
+    return f"<!-- Tool Result ID:{tid} -->"
+
+
+def format_entml_functions_results(
+    entries: List[Tuple[str, str]],
+) -> str:
+    """顶层 ``<entml:funtions_results>``：整场对话累计的 result 条目。"""
+    if not entries:
+        return ""
+    lines: List[str] = []
+    for tid, text in entries:
+        tid = (tid or "").strip()
+        body = (text or "").strip()
+        if not tid or not body:
+            continue
+        lines.append(f'<entml:result id="{tid}">\n{body}\n</entml:result>')
+    if not lines:
+        return ""
+    return (
+        f"<entml:funtions_results>\n"
+        + "\n".join(lines)
+        + "\n</entml:funtions_results>"
+    )
 
 
 def format_entml_conversation_history(
@@ -151,7 +185,6 @@ class EntmlProtocol(ToolProtocol):
             self._TRIGGER_PREFIX,
             self._THINKING_PREFIX,
             f"{self._THINKING_PREFIX}>",
-            "<tool",
         ]
 
     def normalize_stream_buffer(self, buffer: str) -> str:
@@ -177,7 +210,9 @@ class EntmlProtocol(ToolProtocol):
         current_user_message: Optional[str] = None,
         protocol_options: Optional[Dict[str, Any]] = None,
         history_has_tool_calls: bool = False,
+        functions_results_text: str = "",
     ) -> str:
+        _ = history_has_tool_calls
         if tool_descs:
             sections: List[str] = [
                 _ENTML_INSTRUCTION.rstrip() + "\n\n" + tool_descs
@@ -190,11 +225,6 @@ class EntmlProtocol(ToolProtocol):
                 f"<user_system_prompt>\n{user_system_prompt.strip()}\n</user_system_prompt>"
             )
 
-        if history_text:
-            sections.append(
-                format_entml_conversation_history(history_text, _HISTORY_CLARIFY_EN)
-            )
-
         if loop_warning:
             sections.append(f"<loop_warning>\n{loop_warning}\n</loop_warning>")
 
@@ -203,18 +233,32 @@ class EntmlProtocol(ToolProtocol):
                 f"<history_markup_warning>\n{history_markup_warning}\n</history_markup_warning>"
             )
 
+        if tool_descs:
+            sections.append(format_function_calling_behavior())
+
+        thinking_behavior = build_entml_thinking_behavior_section(
+            protocol_options, history_text=history_text
+        )
+        if thinking_behavior:
+            sections.append(thinking_behavior)
+
+        if history_text:
+            sections.append(
+                format_entml_conversation_history(history_text, _HISTORY_CLARIFY_EN)
+            )
+
+        if functions_results_text.strip():
+            sections.append(functions_results_text.strip())
+
+        if tool_descs:
+            sections.append(format_hard_constraint_restatement())
+
         if current_user_message is not None:
             sections.append(format_entml_current_user_message(current_user_message))
 
-        if tool_descs:
-            sections.append(_TOOL_INVOKE_REMINDER_EN)
-
-        # thinking 放在最后，超限截断时优先保留在 send_text 尾部
-        thinking_section = build_entml_thinking_section(
-            protocol_options, has_tools=bool(tool_descs), history_text=history_text
-        )
-        if thinking_section:
-            sections.append(thinking_section)
+        thinking_meta = build_entml_thinking_meta_section(protocol_options)
+        if thinking_meta:
+            sections.append(thinking_meta)
 
         return "\n\n".join(sections)
 
@@ -276,6 +320,7 @@ class EntmlProtocol(ToolProtocol):
         include_tool_blocks: bool = True,
         thinking_enabled: bool = True,
     ) -> Tuple[str, List[Dict[str, Any]]]:
+        _ = include_tool_blocks
         from echotools.exec.fncall.protocols.entml_think.parse import (
             _find_earliest_thinking_open,
             has_unclosed_entml_thinking,
@@ -295,18 +340,11 @@ class EntmlProtocol(ToolProtocol):
         schema_index = _build_param_schema_index(tools) if tools else None
         known = resolve_known_tool_names(tools, schema_index)
         tool_calls = parse_entml_tool_calls(parse_text, tools, schema_index)
-        tool_block_calls: List[Dict[str, Any]] = []
-        if include_tool_blocks:
-            tool_block_calls = parse_tool_block_calls(parse_text, tools, schema_index)
-            tool_calls.extend(tool_block_calls)
         clean = text[:unclosed_open_at] if unclosed_open_at >= 0 else text
         if thinking_enabled:
             # fault ``</thinking>`` 须借后续 invoke 判定闭合；thinking 剥离必须在 invoke 移除之前。
             visible, _ = split_entml_thinking(clean, thinking_enabled=True)
             clean = visible
-        if tool_block_calls:
-            clean = strip_tool_block_spans(clean)
-        # 须在移除 invoke 之前剥离伪 history，且须晚于已解析的 ``<tool>`` 块剥离。
         clean, _ = strip_fake_history_markup(clean)
         if tool_calls:
             clean = strip_actionable_entml_invoke_blocks(clean, known_names=known)
@@ -352,18 +390,18 @@ class EntmlProtocol(ToolProtocol):
         tool_calls: List[Dict[str, Any]],
         tid_to_result: Dict[str, Dict[str, Any]],
     ) -> str:
-        """同一 assistant 轮次的全部工具调用与结果合并为一个 <tool> 块。"""
+        """同一 assistant 轮次：``<entml:invoke>`` + 环境回填 id 注释（无 result 正文）。"""
+        _ = tid_to_result
         lines: List[str] = []
         for tc in tool_calls:
-            name, args = _parse_tool_call_args(tc)
-            lines.append(_render_tool_call_line(name, args))
+            invoke = format_entml_tool_calls([tc])
+            if invoke:
+                lines.append(invoke)
             tid = tc.get("id") or ""
-            result_msg = tid_to_result.get(tid)
-            if result_msg is not None:
-                text = normalize_content(result_msg.get("content", "")).strip()
-                if text:
-                    lines.append(text)
-        return _render_tool_history_block("\n".join(lines))
+            comment = format_tool_result_id_comment(tid)
+            if comment:
+                lines.append(comment)
+        return "\n".join(lines)
 
     def supports_streaming(self) -> bool:
         return True

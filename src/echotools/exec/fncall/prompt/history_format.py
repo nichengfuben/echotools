@@ -15,6 +15,35 @@ from .prompt_helpers import (
 )
 
 
+def collect_functions_results(
+    messages: List[Dict[str, Any]],
+) -> List[Tuple[str, str]]:
+    """按消息顺序收集 tool 结果，供 ``<entml:funtions_results>`` 使用。"""
+    results: List[Tuple[str, str]] = []
+    i = 0
+    while i < len(messages):
+        m = messages[i]
+        role = m.get("role") or "user"
+        if role == "assistant" and m.get("tool_calls"):
+            j = i + 1
+            while j < len(messages) and (messages[j].get("role") or "user") == "tool":
+                tmsg = messages[j]
+                tid = tmsg.get("tool_call_id") or ""
+                text = normalize_content(tmsg.get("content", "")).strip()
+                if tid and text:
+                    results.append((tid, text))
+                j += 1
+            i = j
+            continue
+        if role == "tool":
+            tid = m.get("tool_call_id") or ""
+            text = normalize_content(m.get("content", "")).strip()
+            if tid and text:
+                results.append((tid, text))
+        i += 1
+    return results
+
+
 def history_contains_tool_calls(messages: List[Dict[str, Any]]) -> bool:
     """历史消息中是否包含 assistant tool_calls 或 tool 结果。"""
     for m in messages:
@@ -101,6 +130,9 @@ def _format_conversation_history(
             continue
 
         if role == "tool":
+            if protocol is not None and getattr(protocol, "id", None) == "entml":
+                i += 1
+                continue
             content_str = normalize_content(m.get("content", ""))
             parts.append((format_tool_block(m, content_str, call_id_to_name), True))
             i += 1

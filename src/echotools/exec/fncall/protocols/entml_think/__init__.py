@@ -1,6 +1,8 @@
 """Entml thinking: prompt section, history blocks, stream parsing."""
 
 from echotools.exec.fncall.protocols.entml_think.core import (
+    build_entml_thinking_behavior_section,
+    build_entml_thinking_meta_section,
     build_entml_thinking_section,
     is_thinking_enabled,
     parse_max_thinking_length,
@@ -21,6 +23,8 @@ from echotools.exec.fncall.protocols.entml_think.parse import (
 __all__ = [
     "EntmlThinkingStreamFilter",
     "apply_thinking_history_policy",
+    "build_entml_thinking_behavior_section",
+    "build_entml_thinking_meta_section",
     "build_entml_thinking_section",
     "extract_reasoning_text",
     "format_entml_thinking_history_block",

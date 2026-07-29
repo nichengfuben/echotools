@@ -161,6 +161,21 @@ def format_assistant_block(
     return parts
 
 
+def _merge_entml_assistant_with_tool_turn(
+    assistant: str,
+    tool_block: str,
+) -> str:
+    """将 invoke/result 序列并入 ``<assistant>`` 块正文。"""
+    if not tool_block:
+        return assistant
+    marker = "\n</assistant>"
+    idx = assistant.rfind(marker)
+    if idx < 0:
+        return f"{assistant}\n\n{tool_block}"
+    prefix = assistant[:idx]
+    return f"{prefix}\n\n{tool_block}{marker}"
+
+
 def format_assistant_block_with_results(
     m: Dict[str, Any],
     tool_msgs: List[Dict[str, Any]],
@@ -177,10 +192,13 @@ def format_assistant_block_with_results(
     assistant = _format_assistant_text_block(
         m, content_str, protocol, include_thinking_in_history=include_thinking_in_history
     )
+    tool_block = _format_tool_turn_block(tcs, tool_msgs, protocol)
+    if assistant and tool_block:
+        if protocol is not None and getattr(protocol, "id", None) == "entml":
+            parts.append(_merge_entml_assistant_with_tool_turn(assistant, tool_block))
+            return parts
     if assistant:
         parts.append(assistant)
-
-    tool_block = _format_tool_turn_block(tcs, tool_msgs, protocol)
     if tool_block:
         parts.append(tool_block)
 

@@ -72,8 +72,8 @@ def test_inject_with_thinking_options_only_when_declared() -> None:
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in with_opts
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in with_opts
     assert "<thinking_behavior>" in with_opts
-    assert "Never skip the thinking block" in with_opts
-    assert "<entml:thinking> block before any other content" in with_opts
+    assert "Every reply begins with a thinking block" in with_opts
+    assert "A tool invocation never appears inside the thinking block" in with_opts
 
 
 def test_build_entml_thinking_section_empty_without_options() -> None:
@@ -198,8 +198,8 @@ def test_thinking_prompt_off_history_thinking_no_tools() -> None:
         history_text=history,
     )
     assert "<thinking_behavior>" in section
+    assert "Extended thinking is disabled" in section
     assert "<entml:invoke>" not in section
-    assert "Reply with visible text directly" in section
 
 
 def test_thinking_prompt_on_without_max_length() -> None:
@@ -213,8 +213,7 @@ def test_thinking_prompt_on_by_level() -> None:
     section = build_entml_thinking_section({"thinking_level": "low"})
     assert "<entml:thinking_mode>low</entml:thinking_mode>" in section
     assert "<entml:max_thinking_length>12800</entml:max_thinking_length>" in section
-    assert "Never skip the thinking block" in section
-    assert "Your default is to think before it answers" in section
+    assert "Every reply begins with a thinking block" in section
 
 
 def test_thinking_prompt_medium_by_level() -> None:
@@ -227,25 +226,28 @@ def test_thinking_prompt_on() -> None:
     section = build_entml_thinking_section({"thinking_mode": "on"})
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in section
     assert "<thinking_behavior>" in section
-    assert "Your default is to think before it answers" in section
-    assert "<entml:thinking> block before any other content" in section
-    assert "<entml:invoke>" in section
+    assert section.index("<thinking_behavior>") < section.index(
+        "<entml:max_thinking_length>"
+    )
+    assert section.index("<entml:max_thinking_length>") < section.index(
+        "<entml:thinking_mode>"
+    )
+    assert "Every reply begins with a thinking block" in section
+    assert "Simplified Chinese" in section
     assert "`<entml:invoke>`" not in section
     assert "<entml:function_calls>" not in section
 
 
 def test_thinking_prompt_on_no_tools() -> None:
     section = build_entml_thinking_section({"thinking_mode": "on"}, has_tools=False)
-    assert "Never skip the thinking block" in section
-    assert "output your visible reply." in section
+    assert "Every reply begins with a thinking block" in section
     assert "<entml:invoke>" not in section
 
 
 def test_thinking_prompt_auto_no_tools() -> None:
     section = build_entml_thinking_section({"thinking_level": "auto"}, has_tools=False)
-    assert "You decide whether extended thinking helps" in section
+    assert "Every reply begins with a thinking block" in section
     assert "<tool>" not in section
-    assert "tool call" not in section
 
 
 def test_thinking_prompt_auto() -> None:
@@ -253,10 +255,8 @@ def test_thinking_prompt_auto() -> None:
     assert "<entml:thinking_mode>auto</entml:thinking_mode>" in section
     assert "<entml:max_thinking_length>" not in section
     assert "<thinking_behavior>" in section
-    assert "You decide whether extended thinking helps" in section
-    assert "<tool>" in section
-    assert "{tool_name: value}" in section or "{tool_name:" in section
-    assert "Never skip the thinking block" not in section
+    assert "Every reply begins with a thinking block" in section
+    assert "<tool>" not in section
 
 
 def test_inject_no_tools_with_thinking_off() -> None:
@@ -285,10 +285,12 @@ def test_inject_no_tools_with_thinking_on() -> None:
     )[0]["content"]
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in result
     assert "<thinking_behavior>" in result
-    assert "Never skip the thinking block" in result
+    assert "Every reply begins with a thinking block" in result
     assert "<entml:invoke>" not in result
-    # thinking 块必须在 current_user_message 之后
-    assert result.index("</current_user_message>") < result.index("<entml:thinking_mode>")
+    idx_behavior = result.index("<thinking_behavior>")
+    idx_user = result.index("</current_user_message>")
+    idx_mode = result.index("<entml:thinking_mode>")
+    assert idx_behavior < idx_user < idx_mode
 
 
 def test_inject_thinking_off_history_with_entml_thinking_injects_no_think_behavior() -> None:
@@ -329,7 +331,7 @@ def test_inject_thinking_off_history_with_entml_thinking_injects_no_think_behavi
     assert "<entml:thinking_mode>" not in prompt
     assert "<thinking_behavior>" in prompt
     assert "Do NOT output a <entml:thinking> block" in prompt
-    assert prompt.rstrip().endswith("</thinking_behavior>")
+    assert prompt.rstrip().endswith("</current_user_message>")
 
 
 def test_inject_thinking_off_history_without_entml_thinking_unchanged() -> None:
@@ -380,11 +382,16 @@ def test_render_prompt_thinking_after_current_user() -> None:
         current_user_message="new",
         protocol_options={"thinking_mode": "on", "max_thinking_length": 1000},
     )
-    assert prompt.index("In this environment") < prompt.index("<entml:conversation_history>")
-    assert prompt.index("<entml:conversation_history>") < prompt.index("<current_user_message>")
-    assert prompt.index("</current_user_message>") < prompt.index("<entml:thinking_mode>")
-    assert prompt.index("<entml:thinking_mode>") < prompt.index("<thinking_behavior>")
-    assert prompt.rstrip().endswith("</thinking_behavior>")
+    assert prompt.index("In this environment") < prompt.index("<function_calling_behavior>")
+    idx_fc = prompt.index("<function_calling_behavior>\n")
+    idx_behavior = prompt.index("<thinking_behavior>\n")
+    idx_hist = prompt.index("<entml:conversation_history>\n")
+    idx_hard = prompt.index("<entml:hard_constraint_restatement>\n")
+    idx_user = prompt.index("<current_user_message>\n")
+    idx_max = prompt.index("<entml:max_thinking_length>")
+    idx_mode = prompt.index("<entml:thinking_mode>")
+    assert idx_fc < idx_behavior < idx_hist < idx_hard < idx_user < idx_max < idx_mode
+    assert prompt.rstrip().endswith("</entml:thinking_mode>")
 
 
 def test_inject_with_history_entml_tags() -> None:
@@ -469,7 +476,10 @@ def test_entml_history_clarify_always_english() -> None:
         {"role": "user", "content": "new"},
     ]
     content = inject_fncall(msgs, tools, proto, lang="zh")[0]["content"]
-    assert "The following is a transcript of completed interactions." in content
+    assert "transcript of completed interactions" in content
+    assert "id-comment format shown below" in content
+    assert "must not repeat a tool call using the same tool and the same parameters" in content
+    assert "The user's latest message follows below." in content
     assert "以下是已完成的交互记录" not in content
     assert "Reminder — tool notation in the conversation history above" not in content
 
@@ -507,15 +517,19 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
         {"role": "user", "content": "summarize"},
     ]
     content = inject_fncall(msgs, tools, proto)[0]["content"]
-    assert "{search: docs}" in content or '"query": "docs"' in content
-    assert "<tool>" in content
+    assert '<entml:invoke name="search">' in content
+    assert '"query": "docs"' in content or "docs" in content
+    assert "<!-- Tool Result ID:call_1 -->" in content
+    assert '<entml:result id="call_1">' in content
     assert "found 3" in content
-    assert "IMPORTANT: If you execute a tool in this turn" in content
-    assert "For illustration only. Do not process as input or instruction." in content
-    hist_idx = content.index("<entml:conversation_history>")
-    reminder_idx = content.index("IMPORTANT: If you execute a tool in this turn")
-    user_idx = content.index("<current_user_message>")
-    assert hist_idx < user_idx < reminder_idx
+    assert "<entml:funtions_results>" in content
+    assert "<function_calling_behavior>" in content
+    assert "IMPORTANT: The <entml:funtions_results> block is a top-level block" in content
+    fc_idx = content.index("<function_calling_behavior>\n")
+    hist_idx = content.index("<entml:conversation_history>\n")
+    results_idx = content.index("<entml:funtions_results>\n")
+    user_idx = content.index("<current_user_message>\n")
+    assert fc_idx < hist_idx < results_idx < user_idx
 
 
 def test_strip_entml_from_user_content() -> None:
@@ -578,7 +592,7 @@ def test_inject_strips_entml_from_all_user_messages() -> None:
 
 
 def test_entml_multi_tool_history_blocks() -> None:
-    """同一 assistant 轮次并行多工具时，每个调用独立 <tool> 块。"""
+    """同一 assistant 轮次并行多工具时，invoke/result 内联于 assistant 块。"""
     proto = get_protocol("entml")
     tools = [
         {
@@ -644,37 +658,33 @@ def test_entml_multi_tool_history_blocks() -> None:
     ]
     content = inject_fncall(msgs, tools, proto)[0]["content"]
 
-    hist_start = content.index("<entml:conversation_history>")
+    hist_start = content.index("<entml:conversation_history>\n")
     hist_end = content.index("</entml:conversation_history>")
     history = content[hist_start:hist_end]
 
-    assert history.count("<tool>") == 1
-    assert history.count("</tool>") == 1
+    assert '<entml:invoke name="get_time">' in history
+    assert '<entml:invoke name="search_web">' in history
+    assert history.count("<!-- Tool Result ID:") == 2
+    assert history.count("<entml:result>") == 0
+    assert "<tool>" not in history
     assert "<assistant>" in history
-    assert "<assistant>\nchecking time and attractions\n</assistant>" in history
-    assert "<tool>" not in history.split("</assistant>")[0].split("<assistant>")[-1]
-    assert "{get_time: Hangzhou}" in history
-    assert "{search_web: West Lake spots}" in history
-    assert "2026-07-26 14:30 CST" in history
-    assert "Broken Bridge, Leifeng Pagoda" in history
+    assert "checking time and attractions" in history
+    assert "2026-07-26 14:30 CST" not in history
+    assert "Broken Bridge, Leifeng Pagoda" not in history
+
+    results_start = content.index("<entml:funtions_results>\n")
+    results_end = content.index("</entml:funtions_results>")
+    results = content[results_start:results_end]
+    assert "2026-07-26 14:30 CST" in results
+    assert "Broken Bridge, Leifeng Pagoda" in results
+    assert results.count('<entml:result id="') == 2
     assert "→ Result:" not in history
     assert "[get_time(" not in history
     assert "[search_web(" not in history
 
-    turn_block = (
-        "<tool>\n"
-        "{get_time: Hangzhou}\n"
-        "2026-07-26 14:30 CST\n"
-        "{search_web: West Lake spots}\n"
-        "Broken Bridge, Leifeng Pagoda\n"
-        "</tool>"
-    )
-    assert turn_block in history
-    assert "</assistant>\n\n<tool>" in history
-
 
 def test_entml_history_multiline_tool_uses_json_object() -> None:
-    """多行参数写入 history 时用 {Tool: json}，不用方括号或 entml:invoke。"""
+    """多行参数写入 history 时用 entml:invoke + entml:parameter。"""
     proto = get_protocol("entml")
     contents = 'print("hello")\nline2'
     args = {"file_path": "x.py", "contents": contents}
@@ -691,10 +701,9 @@ def test_entml_history_multiline_tool_uses_json_object() -> None:
         ],
         {},
     )
-    expected = f"{{Write: {json.dumps(args, ensure_ascii=False)}}}"
-    assert expected in block
+    assert '<entml:invoke name="Write">' in block
+    assert '<entml:parameter name="file_path">x.py</entml:parameter>' in block
     assert "[Write:" not in block
-    assert "<entml:invoke" not in block
 
 
 def test_entml_history_bash_multi_param_json_braces() -> None:
@@ -717,7 +726,8 @@ def test_entml_history_bash_multi_param_json_braces() -> None:
         ],
         {},
     )
-    assert block == f"<tool>\n{{Bash: {json.dumps(args, ensure_ascii=False)}}}\n</tool>"
+    assert '<entml:invoke name="Bash">' in block
+    assert '<entml:parameter name="command">' in block
     assert "[Bash:" not in block
 
 
@@ -737,7 +747,8 @@ def test_entml_history_simple_glob_stays_scalar_braces() -> None:
         ],
         {},
     )
-    assert block == "<tool>\n{Glob: **/cursor}\n</tool>"
+    assert '<entml:invoke name="Glob">' in block
+    assert "**/cursor" in block
 
 
 @pytest.mark.parametrize(
@@ -812,9 +823,10 @@ def test_entml_instruction_matches_spec_format() -> None:
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in prompt
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in prompt
     assert "<thinking_behavior>" in prompt
-    assert "Never skip the thinking block" in prompt
+    assert "Every reply begins with a thinking block" in prompt
+    assert "<function_calling_behavior>" in prompt
     assert "<function_results>" not in prompt
-    assert "<entml:conversation_history>" not in prompt
+    assert "<entml:conversation_history>\n" not in prompt
     assert "<entml:history>" not in prompt
     assert "<functions>" not in prompt
 
@@ -1251,8 +1263,8 @@ def test_entml_stream_same_tool_name_multiple_invokes() -> None:
     assert stream_args == batch_args
 
 
-def test_entml_parse_tool_block_inner_tags() -> None:
-    """``<tool><TodoList>…</TodoList></tool>`` / ``<tool><Bash>…</tool>`` 误格式容错。"""
+def test_entml_parse_tool_block_inner_tags_ignored() -> None:
+    """legacy ``<tool>`` 块不再解析为 tool_calls。"""
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
 
     tools = [
@@ -1294,24 +1306,15 @@ def test_entml_parse_tool_block_inner_tags() -> None:
         '{"command": "python main.py", "timeout": 120}\n'
         "</tool>"
     )
-    from echotools.exec.fncall.protocols.entml_think.blocks import parse_tool_block_calls
-
-    schema_index = _build_param_schema_index(tools)
-    batch = parse_entml_tool_calls(sample, tools, schema_index)
-    batch.extend(parse_tool_block_calls(sample, tools, schema_index))
-    assert len(batch) == 2
-    assert batch[0]["function"]["name"] == "TodoList"
-    assert batch[1]["function"]["name"] == "Bash"
-    assert json.loads(batch[1]["function"]["arguments"])["timeout"] == 120
+    _, batch = get_protocol("entml").parse(sample, tools)
+    assert batch == []
 
     for chunk in (1, 17, 64):
         p = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
         for i in range(0, len(sample), chunk):
             p.feed(sample[i : i + chunk])
         stream_clean, stream_calls = p.finalize()
-        assert len(stream_calls) == 2, f"chunk={chunk}"
-        assert stream_calls[0]["function"]["name"] == "TodoList", f"chunk={chunk}"
-        assert stream_calls[1]["function"]["name"] == "Bash", f"chunk={chunk}"
+        assert stream_calls == [], f"chunk={chunk}"
         assert len(p.partial_thinking) > 0, f"chunk={chunk}"
         assert "更新任务" in p.partial_text or "更新任务" in stream_clean, f"chunk={chunk}"
 
@@ -1355,8 +1358,8 @@ def test_entml_tool_block_brace_skipped_when_entml_invoke_present() -> None:
     assert calls[0]["function"]["name"] == "Read"
 
 
-def test_entml_stream_finalize_strips_thinking_when_tool_calls() -> None:
-    """有 tool call 时 finalize 可见正文仍须剥离 thinking（含 fault ``</thinking>``）。"""
+def test_entml_stream_finalize_strips_thinking_without_tool_block_calls() -> None:
+    """legacy ``<tool>`` 样本：finalize 剥离 thinking，但不解析 tool_calls。"""
     from pathlib import Path
 
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
@@ -1383,16 +1386,14 @@ def test_entml_stream_finalize_strips_thinking_when_tool_calls() -> None:
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
     parser.feed(sample)
     clean, calls = parser.finalize()
-    assert len(calls) == 1
-    assert calls[0]["function"]["name"] == "Bash"
+    assert calls == []
     assert "<entml:thinking>" not in clean
     assert "StreamAiPreviews" in parser.partial_thinking
     assert len(parser.partial_thinking) > 500
-    assert "260727" in json.loads(calls[0]["function"]["arguments"])["command"]
 
 
-def test_entml_tool_block_bash_with_output_tail_batch_and_finalize() -> None:
-    """``<tool>{Bash:...}\\n输出...</tool>`` 无 invoke 时 batch/finalize 均解析 Bash。"""
+def test_entml_tool_block_bash_with_output_tail_ignored() -> None:
+    """legacy ``<tool>`` 块不再解析为 Bash tool_calls。"""
     from pathlib import Path
 
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
@@ -1420,20 +1421,16 @@ def test_entml_tool_block_bash_with_output_tail_batch_and_finalize() -> None:
         }
     ]
     _, batch_calls = get_protocol("entml").parse(sample, tools)
-    assert len(batch_calls) == 1
-    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
-    assert "260727" in batch_args["command"]
+    assert batch_calls == []
 
     parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
     parser.feed(sample)
     _, stream_calls = parser.finalize()
-    assert len(stream_calls) == 1
-    stream_args = json.loads(stream_calls[0]["function"]["arguments"])
-    assert stream_args == batch_args
+    assert stream_calls == []
 
 
-def test_entml_tool_block_mangled_brace_entml_params() -> None:
-    """``<tool>{Bash>\\n<entml:parameter>...`` 混合格式 batch/stream 均解析 Bash。"""
+def test_entml_tool_block_mangled_brace_entml_params_ignored() -> None:
+    """legacy ``<tool>`` 混合格式不再解析。"""
     from pathlib import Path
 
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
@@ -1462,11 +1459,7 @@ def test_entml_tool_block_mangled_brace_entml_params() -> None:
         }
     ]
     clean, batch_calls = get_protocol("entml").parse(sample, tools)
-    assert len(batch_calls) == 1
-    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
-    assert batch_calls[0]["function"]["name"] == "Bash"
-    assert "alicdn-analytics" in batch_args["command"]
-    assert batch_args.get("timeout") == 30
+    assert batch_calls == []
     assert "RC4" in clean
 
     for chunk in (1, 17, 64):
@@ -1474,15 +1467,13 @@ def test_entml_tool_block_mangled_brace_entml_params() -> None:
         for i in range(0, len(sample), chunk):
             parser.feed(sample[i : i + chunk])
         stream_clean, stream_calls = parser.finalize()
-        assert len(stream_calls) == 1, f"chunk={chunk}"
-        stream_args = json.loads(stream_calls[0]["function"]["arguments"])
-        assert stream_args == batch_args, f"chunk={chunk}"
+        assert stream_calls == [], f"chunk={chunk}"
         assert len(parser.partial_thinking) > 100, f"chunk={chunk}"
         assert "RC4" in stream_clean or "RC4" in parser.partial_text, f"chunk={chunk}"
 
 
-def test_entml_tool_block_brace_read_entml_params() -> None:
-    """``<tool>{Read}\\n<entml:parameter>...`` + fault thinking（req-1785310901）。"""
+def test_entml_tool_block_brace_read_entml_params_ignored() -> None:
+    """legacy ``<tool>{Read}\\n<entml:parameter>...`` 不再解析（req-1785310901）。"""
     from pathlib import Path
 
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
@@ -1511,57 +1502,18 @@ def test_entml_tool_block_brace_read_entml_params() -> None:
         }
     ]
     clean, batch_calls = get_protocol("entml").parse(sample, tools)
-    assert len(batch_calls) == 1
-    batch_args = json.loads(batch_calls[0]["function"]["arguments"])
-    assert batch_calls[0]["function"]["name"] == "Read"
-    assert batch_args["offset"] == 0
-    assert batch_args["limit"] == 200
-    assert "b01pggtpe.txt" in batch_args["file_path"]
+    assert batch_calls == []
     assert "流发送逻辑" in clean
-    assert "entml:" not in clean
 
     for chunk in (1, 17, 64):
         parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
         for i in range(0, len(sample), chunk):
             parser.feed(sample[i : i + chunk])
         stream_clean, stream_calls = parser.finalize()
-        assert len(stream_calls) == 1, f"chunk={chunk}"
-        stream_args = json.loads(stream_calls[0]["function"]["arguments"])
-        assert stream_args == batch_args, f"chunk={chunk}"
+        assert stream_calls == [], f"chunk={chunk}"
         assert "流发送逻辑" in stream_clean, f"chunk={chunk}"
         assert "流发送逻辑" not in parser.partial_thinking, f"chunk={chunk}"
         assert len(parser.partial_thinking) > 500, f"chunk={chunk}"
-
-
-def test_entml_tool_block_mangled_brace_entml_params_brace_close() -> None:
-    """``{Read}``（非 ``{Read>``）后接 entml parameter 须解析。"""
-    from echotools.exec.fncall.protocols.entml_think.blocks import parse_tool_block_body
-    from echotools.exec.fncall.shared.coercion import _build_param_schema_index
-
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "Read",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "file_path": {"type": "string"},
-                        "offset": {"type": "integer"},
-                    },
-                    "required": ["file_path"],
-                },
-            },
-        }
-    ]
-    body = (
-        "{Read}\n"
-        '<entml:parameter name="file_path">src/a.py</entml:parameter>\n'
-        '<entml:parameter name="offset">10</entml:parameter>'
-    )
-    schema = _build_param_schema_index(tools)
-    parsed = parse_tool_block_body(body, tools=tools, schema_index=schema)
-    assert parsed == [("Read", {"file_path": "src/a.py", "offset": 10})]
 
 
 def test_prose_entml_invoke_mention_does_not_swallow_real_invoke() -> None:
@@ -1669,8 +1621,8 @@ def test_write_content_with_embedded_json_examples_not_truncated() -> None:
     assert args["file_path"].endswith("rocket-red-tornado-damage.md")
 
 
-def test_fault_thinking_close_prose_then_tool_block() -> None:
-    """``</thinking>`` 后允许可见正文，再跟 ``<tool>{Write>`` + entml 参数。"""
+def test_fault_thinking_close_prose_then_tool_block_ignored() -> None:
+    """legacy ``<tool>{Write>`` 混合格式不再解析。"""
     from pathlib import Path
 
     sample_path = Path(
@@ -1681,14 +1633,11 @@ def test_fault_thinking_close_prose_then_tool_block() -> None:
     text = sample_path.read_text(encoding="utf-8")
     proto = get_protocol("entml")
     _, batch_calls = proto.parse(text, WRITE_TOOLS)
-    assert len(batch_calls) == 1
-    args = json.loads(batch_calls[0]["function"]["arguments"])
-    assert args["file_path"].endswith("test_grpc_standard.py")
-    assert "AgentRunRequest" in args["content"]
+    assert batch_calls == []
 
 
-def test_write_path_content_hybrid_tool_block() -> None:
-    """``<tool>{Write: {"path", "content": "...`` + ``</content>`` 混合格式。"""
+def test_write_path_content_hybrid_tool_block_ignored() -> None:
+    """legacy ``<tool>{Write: ...`` 混合格式不再解析。"""
     from pathlib import Path
 
     sample_path = Path(
@@ -1699,11 +1648,7 @@ def test_write_path_content_hybrid_tool_block() -> None:
     text = sample_path.read_text(encoding="utf-8")
     proto = get_protocol("entml")
     _, batch_calls = proto.parse(text, WRITE_TOOLS)
-    assert len(batch_calls) == 1
-    args = json.loads(batch_calls[0]["function"]["arguments"])
-    assert args["file_path"].endswith("rocket-red-tornado-damage.md")
-    assert "Agent WebUI" in args["content"]
-    assert "Phase 1" in args["content"]
+    assert batch_calls == []
 
 
 def test_invoke_structural_gaps_exclude_parameter_blocks() -> None:

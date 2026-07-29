@@ -12,6 +12,7 @@ from echotools.exec.fncall.prompt.history import (
 )
 from echotools.exec.fncall.prompt.history_format import (
     _format_conversation_history,
+    collect_functions_results,
     history_contains_tool_calls,
 )
 from echotools.exec.fncall.prompt.prompt_helpers import (
@@ -21,9 +22,11 @@ from echotools.exec.fncall.prompt.prompt_helpers import (
 from echotools.exec.fncall.protocols.entml import (
     format_entml_conversation_history,
     format_entml_current_user_message,
+    format_entml_functions_results,
 )
 from echotools.exec.fncall.protocols.entml_think.core import (
-    build_entml_thinking_section,
+    build_entml_thinking_behavior_section,
+    build_entml_thinking_meta_section,
 )
 from echotools.exec.fncall.protocols.entml_think.hist import (
     apply_thinking_history_policy,
@@ -71,6 +74,7 @@ def build_tools_prompt(
     current_user_message: Optional[str] = None,
     protocol_options: Optional[Dict[str, Any]] = None,
     history_has_tool_calls: bool = False,
+    history_messages: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     loop_warning = ""
     if loop_detection_threshold > 0:
@@ -94,6 +98,9 @@ def build_tools_prompt(
     )
     if protocol.id == "entml":
         extra["history_has_tool_calls"] = history_has_tool_calls
+        if history_messages is not None:
+            entries = collect_functions_results(history_messages)
+            extra["functions_results_text"] = format_entml_functions_results(entries)
     return protocol.render_prompt(
         tool_descs=tool_descs,
         lang=lang,
@@ -141,17 +148,18 @@ def _build_entml_no_tools_prompt(
         sections.append(
             f"<user_system_prompt>\n{user_system_prompt.strip()}\n</user_system_prompt>"
         )
+    thinking_behavior = build_entml_thinking_behavior_section(
+        protocol_options, history_text=history_text
+    )
+    if thinking_behavior:
+        sections.append(thinking_behavior)
     if history_text.strip():
         sections.append(format_entml_conversation_history(history_text))
     if current_user_message is not None:
         sections.append(format_entml_current_user_message(current_user_message))
-    thinking_section = build_entml_thinking_section(
-        protocol_options,
-        has_tools=False,
-        history_text=history_text,
-    )
-    if thinking_section:
-        sections.append(thinking_section)
+    thinking_meta = build_entml_thinking_meta_section(protocol_options)
+    if thinking_meta:
+        sections.append(thinking_meta)
     return "\n\n".join(sections)
 
 
@@ -197,6 +205,7 @@ def inject_fncall(
         history_text, loop_detection_threshold, current_user_message,
         protocol_options,
         history_has_tool_calls=history_contains_tool_calls(history_messages),
+        history_messages=history_messages,
     )
     if dump_prompt:
         _maybe_dump_prompt(prompt, dump_dir)

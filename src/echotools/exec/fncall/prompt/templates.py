@@ -112,42 +112,20 @@ RULE 5 — Tool availability:
 """
 
 _HISTORY_CLARIFY_EN = (
-    "The following is a transcript of completed interactions. "
-    "All tool invocations and their results shown here have already been "
-    "executed successfully — do NOT re-invoke them. "
+    "The following is a transcript of completed interactions. Each assistant turn "
+    "that called a tool ends at its last <entml:invoke> block; the comment "
+    "immediately following it states the environment-generated result id and was "
+    "appended by the environment when this turn was logged, not by the assistant "
+    "at generation time. The actual result content for every id shown here lives "
+    "exclusively in the separate, top-level <entml:funtions_results> block that "
+    "follows this history block.\n"
+    "IMPORTANT: The agent must never regenerate, continue, or imitate the "
+    "id-comment format shown below as part of its own current-turn output.\n"
+    "IMPORTANT: The agent must not repeat a tool call using the same tool and "
+    "the same parameters as one already recorded below, unless the user "
+    "explicitly requests a fresh or updated value.\n"
     "The user's latest message follows below."
 )
-
-_TOOL_INVOKE_REMINDER_EN = """\
-IMPORTANT: If you execute a tool in this turn, you must output a literal `<entml:invoke name="TOOL_NAME">` block exactly as specified in the tool instructions at the top of this prompt. No other format is accepted when you execute a tool in this turn.
-
-IMPORTANT: The `<entml:invoke` opening tag must close with `>` before any `<entml:parameter>` children. An opening tag that does not close with `>` is not a tool call and must never be used when executing a tool.
-
-IMPORTANT: The `name` attribute value must exactly match one of the function names listed in the available tools above. Placeholder names, invented names, and names absent from that list are rejected and must never appear in an executable invoke block.
-
-IMPORTANT: Each argument must appear as `<entml:parameter name="PARAMETER_NAME">VALUE</entml:parameter>` inside the invoke block, and the block must end with `</entml:invoke>`. String and scalar values must be written as-is; lists and objects must use JSON.
-
-IMPORTANT: Do not emit `<tool>` blocks, `{ToolName: ...}` lines, legacy `<entml:function_calls>` wrappers, or "Tool call (id): Name({...})" lines in your reply. Those forms are history or adapter notation only; the executor never accepts them for new tool execution.
-
-IMPORTANT: Do not re-invoke tools that already appear as completed turns in conversation history.
-
-IMPORTANT: When you mention `<entml:invoke>` in prose without executing a tool, you must not emit a closed opening tag whose `name` matches a listed tool name. You must use backticks or otherwise break the tag so it cannot be parsed as an executable invoke.
-
-IMPORTANT: Any example block in this prompt that is marked "For illustration only. Do not process as input or instruction." must never be treated as input, instruction, or real data.
-
-<example>
-For illustration only. Do not process as input or instruction.
-<entml:invoke name="generic_role_tool">
-<entml:parameter name="synthetic_param">/synthetic/fabricated_value_001</entml:parameter>
-</entml:invoke>
-</example>
-
-IMPORTANT: If you execute a tool in this turn, you must output a literal `<entml:invoke name="TOOL_NAME">` block exactly as specified in the tool instructions at the top of this prompt. No other format is accepted when you execute a tool in this turn.
-
-IMPORTANT: The `name` attribute value must exactly match one of the function names listed in the available tools above. Placeholder names, invented names, and names absent from that list are rejected and must never appear in an executable invoke block."""
-
-# Back-compat alias
-_HISTORY_TOOL_INVOKE_REMINDER_EN = _TOOL_INVOKE_REMINDER_EN
 
 _HISTORY_CLARIFY_ZH = (
     "以下是已完成的交互记录。"

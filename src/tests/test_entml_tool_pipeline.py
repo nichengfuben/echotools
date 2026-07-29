@@ -719,10 +719,11 @@ class TestBuildMechanisms:
                 "c2": {"content": "结果B"},
             },
         )
-        assert block.startswith("<tool>")
-        assert '{search: {"query": "西湖", "limit": 2}}' in block
-        assert "{search: 灵隐}" in block
-        assert "结果A" in block and "结果B" in block
+        assert block.startswith('<entml:invoke name="search">')
+        assert "<!-- Tool Result ID:c1 -->" in block
+        assert "<!-- Tool Result ID:c2 -->" in block
+        assert "<entml:result>" not in block
+        assert "结果A" not in block and "结果B" not in block
         assert "→ Result:" not in block
 
     def test_format_assistant_tool_calls_compact_lines(self) -> None:
@@ -755,12 +756,26 @@ class TestBuildMechanisms:
         )
         idx_tools = prompt.index("### search")
         idx_sys = prompt.index("<user_system_prompt>")
-        idx_hist = prompt.index("<entml:conversation_history>")
         idx_loop = prompt.index("<loop_warning>")
-        idx_user = prompt.index("<current_user_message>")
-        idx_remind = prompt.index("IMPORTANT: If you execute a tool in this turn")
-        idx_think = prompt.index("<entml:thinking_mode>")
-        assert idx_tools < idx_sys < idx_hist < idx_loop < idx_user < idx_remind < idx_think
+        idx_fc = prompt.index("<function_calling_behavior>\n")
+        idx_behavior = prompt.index("<thinking_behavior>\n")
+        idx_hist = prompt.index("<entml:conversation_history>\n")
+        idx_hard = prompt.index("<entml:hard_constraint_restatement>\n")
+        idx_user = prompt.index("<current_user_message>\n")
+        idx_max = prompt.index("<entml:max_thinking_length>")
+        idx_mode = prompt.index("<entml:thinking_mode>")
+        assert (
+            idx_tools
+            < idx_sys
+            < idx_loop
+            < idx_fc
+            < idx_behavior
+            < idx_hist
+            < idx_hard
+            < idx_user
+            < idx_max
+            < idx_mode
+        )
 
     def test_inject_builds_history_tool_blocks(self) -> None:
         proto = _proto()
@@ -784,11 +799,12 @@ class TestBuildMechanisms:
             {"role": "user", "content": "next"},
         ]
         content = inject_fncall(msgs, SEARCH_TOOLS, proto)[0]["content"]
-        assert "<tool>" in content
-        assert "{search: q}" in content
+        assert "<function_calling_behavior>" in content
+        assert '<entml:invoke name="search">' in content
+        assert "<!-- Tool Result ID:t1 -->" in content
+        assert '<entml:result id="t1">' in content
         assert "found" in content
-        assert "<current_user_message>\nnext\n</current_user_message>" in content
-        assert "IMPORTANT: If you execute a tool in this turn" in content
+        assert "<entml:funtions_results>" in content
 
     def test_build_then_parse_multi_tool_roundtrip(self) -> None:
         rendered = format_entml_tool_calls(

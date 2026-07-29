@@ -9,6 +9,7 @@ import pytest
 from fixtures.simulated_llm_tool_responses import (
     SIMULATED_LLM_RESPONSES,
     TOOLS,
+    tools_for_case,
 )
 
 from echotools.exec.fncall import get_protocol
@@ -32,8 +33,9 @@ def _norm(text: str) -> str:
 @pytest.mark.parametrize("chunk_size", [1, 5, 17, 64], ids=lambda n: f"c{n}")
 def test_stream_finalize_never_misses_batch(case, chunk_size: int) -> None:
     proto = get_protocol("entml")
-    batch_clean, batch_calls = proto.parse(case.response, TOOLS)
-    parser = FncallStreamParser(protocol=proto, tools=TOOLS)
+    tools = tools_for_case(case)
+    batch_clean, batch_calls = proto.parse(case.response, tools)
+    parser = FncallStreamParser(protocol=proto, tools=tools)
     for i in range(0, len(case.response), chunk_size):
         parser.feed(case.response[i : i + chunk_size])
     clean, calls = parser.finalize()
@@ -103,7 +105,8 @@ def test_char_by_char_ready_matches_final_for_all_tool_cases() -> None:
     for case in SIMULATED_LLM_RESPONSES:
         if not case.expect_names:
             continue
-        parser = FncallStreamParser(protocol=proto, tools=TOOLS)
+        tools = tools_for_case(case)
+        parser = FncallStreamParser(protocol=proto, tools=tools)
         incremental: List[Dict[str, Any]] = []
         for ch in case.response:
             incremental.extend(parser.feed(ch))

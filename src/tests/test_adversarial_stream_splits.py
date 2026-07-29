@@ -9,6 +9,7 @@ import pytest
 from fixtures.simulated_llm_tool_responses import (
     SIMULATED_LLM_RESPONSES,
     TOOLS,
+    tools_for_case,
 )
 
 from echotools.exec.fncall import get_protocol
@@ -53,7 +54,8 @@ CRITICAL_IDS = [
 def test_adversarial_every_split_point(case) -> None:
     """对关键语料在每个字符位置切开，批流调用与正文必须一致。"""
     proto = get_protocol("entml")
-    batch_clean, batch_calls = proto.parse(case.response, TOOLS)
+    tools = tools_for_case(case)
+    batch_clean, batch_calls = proto.parse(case.response, tools)
     batch_display, _ = split_entml_thinking(batch_clean)
     expect_names = _names(batch_calls)
     expect_args = _args(batch_calls)
@@ -72,7 +74,7 @@ def test_adversarial_every_split_point(case) -> None:
     for cut in sorted(cut_points):
         if cut < 0 or cut > len(text):
             continue
-        parser = FncallStreamParser(protocol=proto, tools=TOOLS)
+        parser = FncallStreamParser(protocol=proto, tools=tools)
         if cut > 0:
             parser.feed(text[:cut])
         if cut < len(text):
@@ -131,9 +133,10 @@ def test_split_at_closing_angle_of_parameter() -> None:
 def test_raw_buf_equals_concat_for_adversarial_feed() -> None:
     case = next(c for c in SIMULATED_LLM_RESPONSES if c.id == "thinking_then_wrapper")
     proto = get_protocol("entml")
+    tools = tools_for_case(case)
     text = case.response
     for cut in (1, 17, 41, 63, 64, 65, 100):
-        parser = FncallStreamParser(protocol=proto, tools=TOOLS)
+        parser = FncallStreamParser(protocol=proto, tools=tools)
         parser.feed(text[:cut])
         parser.feed(text[cut:])
         assert parser._raw_buf == text

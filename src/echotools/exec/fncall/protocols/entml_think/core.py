@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from echotools.exec.fncall.prompt.behavior_blocks import format_thinking_behavior
 
 _CANONICAL_LEVELS = frozenset({"none", "low", "medium", "high", "xhigh", "max", "auto"})
 _CANONICAL_INJECTION_MODES = frozenset({"off", "on", "auto"})
@@ -61,34 +63,6 @@ _DEFAULT_MAX_BY_LEVEL: Dict[str, int] = {
 }
 
 _LEGACY_ON_DEFAULT_MAX = _DEFAULT_MAX_BY_LEVEL["medium"]
-
-_THINKING_BEHAVIOR_ON_WITH_TOOLS = """\
-Your default is to think before it answers to give the person the best possible answer. Even for questions that might seem obvious, if there are any signs of lurking complexity, You takes the time to open up an extended thinking block and dig in to make sure it's got the details figured out and isn't just pattern-matching to the familiar. At the end of its thinking, You restates which language it should respond in.
-
-You MUST output a <entml:thinking> block before any other content in every reply. Only after that block closes with </entml:thinking>, output your visible reply and/or <entml:invoke> tool call(s). Never place <entml:invoke> inside <entml:thinking>. Never skip the thinking block."""
-
-_THINKING_BEHAVIOR_ON_NO_TOOLS = """\
-Your default is to think before it answers to give the person the best possible answer. Even for questions that might seem obvious, if there are any signs of lurking complexity, You takes the time to open up an extended thinking block and dig in to make sure it's got the details figured out and isn't just pattern-matching to the familiar. At the end of its thinking, You restates which language it should respond in.
-
-You MUST output a <entml:thinking> block before any other content in every reply. Only after that block, output your visible reply. Never skip the thinking block."""
-
-_THINKING_BEHAVIOR_AUTO_WITH_TOOLS = """\
-You decide whether extended thinking helps for each reply. When the question has hidden complexity, when tool results need interpretation, or when you are uncertain, open a <entml:thinking> block before continuing and strongly prefer to do so rather than guessing.
-
-After completed tool turns appear in conversation history inside <tool> blocks (for example a line like {tool_name: {"param": "value"}} followed by its result), strongly consider outputting a <entml:thinking> block before your next visible reply or tool call."""
-
-_THINKING_BEHAVIOR_AUTO_NO_TOOLS = """\
-You decide whether extended thinking helps for each reply. When the question has hidden complexity or when you are uncertain, open a <entml:thinking> block before continuing and strongly prefer to do so rather than guessing."""
-
-_THINKING_BEHAVIOR_OFF_WITH_HISTORY_WITH_TOOLS = """\
-Extended thinking is disabled for this reply. Do NOT output a <entml:thinking> block.
-
-Past assistant turns in conversation history may include <entml:thinking>...</entml:thinking> blocks for context only. Do not imitate or continue those blocks. Reply with visible text and/or <entml:invoke> tool call(s) directly."""
-
-_THINKING_BEHAVIOR_OFF_WITH_HISTORY_NO_TOOLS = """\
-Extended thinking is disabled for this reply. Do NOT output a <entml:thinking> block.
-
-Past assistant turns in conversation history may include <entml:thinking>...</entml:thinking> blocks for context only. Do not imitate or continue those blocks. Reply with visible text directly."""
 
 
 def normalize_thinking_level(level: Any) -> Optional[str]:
@@ -179,25 +153,40 @@ def is_thinking_enabled(protocol_options: Optional[Dict[str, Any]] = None) -> bo
     return resolve_thinking_injection(protocol_options) is not None
 
 
-def _uses_forced_thinking_behavior(injection_mode: str) -> bool:
-    return injection_mode != "auto"
-
-
-def _format_thinking_behavior(injection_mode: str, *, has_tools: bool) -> str:
-    if _uses_forced_thinking_behavior(injection_mode):
-        body = _THINKING_BEHAVIOR_ON_WITH_TOOLS if has_tools else _THINKING_BEHAVIOR_ON_NO_TOOLS
-    else:
-        body = _THINKING_BEHAVIOR_AUTO_WITH_TOOLS if has_tools else _THINKING_BEHAVIOR_AUTO_NO_TOOLS
-    return f"<thinking_behavior>\n{body}\n</thinking_behavior>"
-
-
-def _format_forced_no_thinking_behavior(*, has_tools: bool) -> str:
-    body = (
-        _THINKING_BEHAVIOR_OFF_WITH_HISTORY_WITH_TOOLS
-        if has_tools
-        else _THINKING_BEHAVIOR_OFF_WITH_HISTORY_NO_TOOLS
+def build_entml_thinking_behavior_section(
+    protocol_options: Optional[Dict[str, Any]] = None,
+    *,
+    history_text: str = "",
+) -> str:
+    """注入 ``<thinking_behavior>``（位于 history 之前）。"""
+    from echotools.exec.fncall.protocols.entml_think.hist import (
+        history_text_contains_entml_thinking,
     )
-    return f"<thinking_behavior>\n{body}\n</thinking_behavior>"
+
+    resolved = resolve_thinking_injection(protocol_options)
+    if resolved is None:
+        if history_text_contains_entml_thinking(history_text):
+            return format_thinking_behavior(enabled=False)
+        return ""
+    return format_thinking_behavior(enabled=True)
+
+
+def build_entml_thinking_meta_section(
+    protocol_options: Optional[Dict[str, Any]] = None,
+) -> str:
+    """注入 ``max_thinking_length`` + ``thinking_mode``（位于 prompt 最末）。"""
+    resolved = resolve_thinking_injection(protocol_options)
+    if resolved is None:
+        return ""
+
+    injection_mode, max_length = resolved
+    meta_lines: List[str] = []
+    if max_length is not None:
+        meta_lines.append(
+            f"<entml:max_thinking_length>{max_length}</entml:max_thinking_length>"
+        )
+    meta_lines.append(f"<entml:thinking_mode>{injection_mode}</entml:thinking_mode>")
+    return "\n".join(meta_lines)
 
 
 def build_entml_thinking_section(
@@ -206,25 +195,12 @@ def build_entml_thinking_section(
     has_tools: bool = True,
     history_text: str = "",
 ) -> str:
-    """按思考挡位构建注入块：thinking_mode + max_thinking_length + thinking_behavior。
-
-    思考关闭时：默认不注入；若 history 含 ``<entml:thinking>`` 则仅注入强制不思考的
-    ``<thinking_behavior>``（不含 ``<entml:thinking_mode>``）。
-    """
-    from echotools.exec.fncall.protocols.entml_think.hist import (
-        history_text_contains_entml_thinking,
+    """兼容旧调用：``thinking_behavior`` + ``max_thinking_length`` + ``thinking_mode``。"""
+    _ = has_tools
+    behavior = build_entml_thinking_behavior_section(
+        protocol_options, history_text=history_text
     )
-
-    resolved = resolve_thinking_injection(protocol_options)
-    if resolved is None:
-        if history_text_contains_entml_thinking(history_text):
-            return _format_forced_no_thinking_behavior(has_tools=has_tools)
-        return ""
-
-    injection_mode, max_length = resolved
-    lines = [f"<entml:thinking_mode>{injection_mode}</entml:thinking_mode>"]
-    if max_length is not None:
-        lines.append(f"<entml:max_thinking_length>{max_length}</entml:max_thinking_length>")
-    lines.append("")
-    lines.append(_format_thinking_behavior(injection_mode, has_tools=has_tools))
-    return "\n".join(lines)
+    meta = build_entml_thinking_meta_section(protocol_options)
+    if behavior and meta:
+        return f"{behavior}\n\n{meta}"
+    return behavior or meta

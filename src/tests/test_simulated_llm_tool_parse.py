@@ -11,6 +11,7 @@ from fixtures.simulated_llm_tool_responses import (
     TOOLS,
     SimulatedCase,
     iter_simulated_cases,
+    tools_for_case,
 )
 
 from echotools.exec.fncall import get_protocol
@@ -80,14 +81,16 @@ def _stream_parse(
 @pytest.mark.parametrize("case", iter_simulated_cases(), ids=lambda c: c.id)
 def test_simulated_llm_response_batch_parse(case: SimulatedCase) -> None:
     proto = get_protocol("entml")
-    clean, calls = proto.parse(case.response, TOOLS)
+    tools = tools_for_case(case)
+    clean, calls = proto.parse(case.response, tools)
     _assert_case_result(case, clean, calls, source_text=case.response)
 
 
 @pytest.mark.parametrize("case", iter_simulated_cases(), ids=lambda c: c.id)
 @pytest.mark.parametrize("chunk_size", [1, 3, 7, 16, 64, 0], ids=lambda n: f"chunk{n}")
 def test_simulated_llm_response_stream_chunks(case: SimulatedCase, chunk_size: int) -> None:
-    clean, calls, thinking = _stream_parse(case.response, TOOLS, chunk_size)
+    tools = tools_for_case(case)
+    clean, calls, thinking = _stream_parse(case.response, tools, chunk_size)
     _assert_case_result(
         case, clean, calls, thinking_extra=thinking, source_text=case.response
     )
@@ -118,8 +121,9 @@ def test_simulated_batch_and_stream_agree_on_all_cases() -> None:
     proto = get_protocol("entml")
     mismatches = []
     for case in SIMULATED_LLM_RESPONSES:
-        batch_clean, batch_calls = proto.parse(case.response, TOOLS)
-        stream_clean, stream_calls, _ = _stream_parse(case.response, TOOLS, 5)
+        tools = tools_for_case(case)
+        batch_clean, batch_calls = proto.parse(case.response, tools)
+        stream_clean, stream_calls, _ = _stream_parse(case.response, tools, 5)
         if _names(batch_calls) != _names(stream_calls) or _args(batch_calls) != _args(
             stream_calls
         ):
