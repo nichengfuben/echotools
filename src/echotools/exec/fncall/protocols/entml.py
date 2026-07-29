@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from echotools.exec.fncall.prompt.templates import (
     _HISTORY_CLARIFY_EN,
-    _HISTORY_TOOL_INVOKE_REMINDER_EN,
+    _TOOL_INVOKE_REMINDER_EN,
 )
 from echotools.exec.fncall.protocols.entml_invoke import (
     parse_entml_tool_calls,
@@ -194,8 +194,6 @@ class EntmlProtocol(ToolProtocol):
             sections.append(
                 format_entml_conversation_history(history_text, _HISTORY_CLARIFY_EN)
             )
-            if tool_descs and history_has_tool_calls:
-                sections.append(_HISTORY_TOOL_INVOKE_REMINDER_EN)
 
         if loop_warning:
             sections.append(f"<loop_warning>\n{loop_warning}\n</loop_warning>")
@@ -207,6 +205,9 @@ class EntmlProtocol(ToolProtocol):
 
         if current_user_message is not None:
             sections.append(format_entml_current_user_message(current_user_message))
+
+        if tool_descs:
+            sections.append(_TOOL_INVOKE_REMINDER_EN)
 
         # thinking 放在最后，超限截断时优先保留在 send_text 尾部
         thinking_section = build_entml_thinking_section(

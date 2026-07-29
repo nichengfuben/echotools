@@ -756,11 +756,11 @@ class TestBuildMechanisms:
         idx_tools = prompt.index("### search")
         idx_sys = prompt.index("<user_system_prompt>")
         idx_hist = prompt.index("<entml:conversation_history>")
-        idx_remind = prompt.index("IMPORTANT:")
         idx_loop = prompt.index("<loop_warning>")
         idx_user = prompt.index("<current_user_message>")
+        idx_remind = prompt.index("IMPORTANT — Tool invocation format")
         idx_think = prompt.index("<entml:thinking_mode>")
-        assert idx_tools < idx_sys < idx_hist < idx_remind < idx_loop < idx_user < idx_think
+        assert idx_tools < idx_sys < idx_hist < idx_loop < idx_user < idx_remind < idx_think
 
     def test_inject_builds_history_tool_blocks(self) -> None:
         proto = _proto()
@@ -788,7 +788,7 @@ class TestBuildMechanisms:
         assert "{search: q}" in content
         assert "found" in content
         assert "<current_user_message>\nnext\n</current_user_message>" in content
-        assert "IMPORTANT:" in content
+        assert "IMPORTANT — Tool invocation format" in content
 
     def test_build_then_parse_multi_tool_roundtrip(self) -> None:
         rendered = format_entml_tool_calls(

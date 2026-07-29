@@ -118,13 +118,23 @@ _HISTORY_CLARIFY_EN = (
     "The user's latest message follows below."
 )
 
-_HISTORY_TOOL_INVOKE_REMINDER_EN = (
-    "IMPORTANT: Completed tool turns in conversation history are context only — "
-    "never re-invoke them and never use the history `<tool>` block notation in "
-    "your reply. To execute a tool in this turn, you must output a valid "
-    "`<entml:invoke>` block exactly as specified in the tool instructions at "
-    "the top of this prompt."
+_TOOL_INVOKE_REMINDER_EN = (
+    "IMPORTANT — Tool invocation format for THIS reply (mandatory):\n"
+    "1. To execute a tool, output a literal `<entml:invoke name=\"TOOL_NAME\">` block "
+    "exactly as shown at the top of this prompt. The opening tag MUST close with `>`; "
+    "`TOOL_NAME` MUST be one of the available functions listed above (not a placeholder "
+    "or invented name).\n"
+    "2. Each argument goes in "
+    "`<entml:parameter name=\"PARAMETER_NAME\">VALUE</entml:parameter>` inside the invoke; "
+    "close with `</entml:invoke>`. String/scalar values as-is; lists and objects as JSON.\n"
+    "3. Do NOT copy `<tool>` blocks or `{ToolName: ...}` lines from conversation history — "
+    "those turns are already executed. History is context only; never re-invoke completed tools.\n"
+    "4. When mentioning `<entml:invoke>` in prose without executing, use backticks or otherwise "
+    "avoid a closed tag with a real tool name."
 )
+
+# Back-compat alias
+_HISTORY_TOOL_INVOKE_REMINDER_EN = _TOOL_INVOKE_REMINDER_EN
 
 _HISTORY_CLARIFY_ZH = (
     "以下是已完成的交互记录。"

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.90] - 2026-07-29
+
+### Changed
+
+- entml 有 tools 时在 prompt 末尾（``<current_user_message>`` 之后、thinking 之前）追加加强版 ``IMPORTANT — Tool invocation format`` 块，再次强调闭合 ``<entml:invoke name="…">``、已知工具名、parameter 格式及勿复用 history ``<tool>`` 记号
+
 ## [2.3.89] - 2026-07-29
 
 ### Fixed

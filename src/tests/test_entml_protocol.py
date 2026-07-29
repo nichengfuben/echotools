@@ -510,12 +510,12 @@ def test_entml_history_tool_invoke_reminder_when_tools_in_history() -> None:
     assert "{search: docs}" in content or '"query": "docs"' in content
     assert "<tool>" in content
     assert "found 3" in content
-    assert "IMPORTANT: Completed tool turns in conversation history" in content
-    assert "`<entml:invoke>` block" in content
+    assert "IMPORTANT — Tool invocation format for THIS reply" in content
+    assert "`<entml:invoke name=\"TOOL_NAME\">`" in content
     hist_idx = content.index("<entml:conversation_history>")
-    reminder_idx = content.index("IMPORTANT: Completed tool turns")
+    reminder_idx = content.index("IMPORTANT — Tool invocation format")
     user_idx = content.index("<current_user_message>")
-    assert hist_idx < reminder_idx < user_idx
+    assert hist_idx < user_idx < reminder_idx
 
 
 def test_strip_entml_from_user_content() -> None:
