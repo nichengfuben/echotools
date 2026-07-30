@@ -163,9 +163,12 @@ def test_mangled_json_tail_in_command_param_batch_and_stream() -> None:
     """未闭合 parameter + JSON 尾缀误写入 command：batch/stream json_buf 须可解析且一致。"""
     from pathlib import Path
 
-    text = Path(
+    text_path = Path(
         r"X:/Project/Public/Qwen/logs/responses/req-1785296513-7782eb161d4d.txt"
-    ).read_text(encoding="utf-8")
+    )
+    if not text_path.is_file():
+        pytest.skip("fixture log not available")
+    text = text_path.read_text(encoding="utf-8")
     proto = get_protocol("entml")
     batch_args = json.loads(proto.parse(text, BASH_TOOLS)[1][0]["function"]["arguments"])
     assert "command" in batch_args
@@ -342,9 +345,12 @@ def test_ask_user_question_array_param_not_split_on_description_key() -> None:
     """JSON 数组参数内的 ``description`` 字段不得触发 mangled command 尾缀截断。"""
     from pathlib import Path
 
-    text = Path(
+    text_path = Path(
         r"X:/Project/Public/Qwen/logs/responses/req-1785299204-c84e955dbf7d.txt"
-    ).read_text(encoding="utf-8")
+    )
+    if not text_path.is_file():
+        pytest.skip("fixture log not available")
+    text = text_path.read_text(encoding="utf-8")
     proto = get_protocol("entml")
     _, batch_calls = proto.parse(text, ASK_USER_QUESTION_TOOLS)
     batch_args = json.loads(batch_calls[0]["function"]["arguments"])

@@ -253,6 +253,18 @@ def _corpus_cases() -> List[CorpusCase]:
 
 CORPUS_CASES = _corpus_cases()
 
+# 空列表 + ids=lambda 在 pytest/py3.8 下会在收集期对 NotSetType 取 .id 崩溃；
+# skipif 无法阻止空 parametrize 的展开。
+_CORPUS_PARAMS = [
+    pytest.param(c, id=c.id) for c in CORPUS_CASES
+] or [
+    pytest.param(
+        None,
+        id="no-corpus",
+        marks=pytest.mark.skip(reason="Qwen response corpus not available"),
+    )
+]
+
 
 @pytest.mark.parametrize("case", iter_simulated_cases(), ids=lambda c: c.id)
 @pytest.mark.parametrize("chunk_size", _CHUNK_SIZES, ids=lambda n: f"chunk{n}")
@@ -280,8 +292,7 @@ def test_fake_history_batch_stream_no_tag_leak(case, chunk_size: int) -> None:
     )
 
 
-@pytest.mark.skipif(not CORPUS_CASES, reason="Qwen response corpus not available")
-@pytest.mark.parametrize("case", CORPUS_CASES, ids=lambda c: c.id)
+@pytest.mark.parametrize("case", _CORPUS_PARAMS)
 @pytest.mark.parametrize("chunk_size", _CHUNK_SIZES, ids=lambda n: f"chunk{n}")
 def test_qwen_corpus_batch_stream_parity(case: CorpusCase, chunk_size: int) -> None:
     text = case.path.read_text(encoding="utf-8")

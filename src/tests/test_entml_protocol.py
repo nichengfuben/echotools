@@ -1525,9 +1525,12 @@ def test_prose_entml_invoke_mention_does_not_swallow_real_invoke() -> None:
 
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
 
-    text = Path(
+    sample_path = Path(
         r"X:/Project/Public/Qwen/logs/responses/req-1785299710-addb90714d4d.txt"
-    ).read_text(encoding="utf-8")
+    )
+    if not sample_path.is_file():
+        pytest.skip("corpus sample not available")
+    text = sample_path.read_text(encoding="utf-8")
     tools = [
         {
             "type": "function",
