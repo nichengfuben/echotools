@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from echotools.exec.fncall.prompt.behavior_blocks import (
     format_function_calling_behavior,
     format_hard_constraint_restatement,
-    format_thinking_behavior,
 )
 from echotools.exec.fncall.prompt.templates import (
     _HISTORY_CLARIFY_EN,
@@ -25,23 +24,20 @@ from echotools.exec.fncall.protocols.entml_invoke import (
 )
 from echotools.exec.fncall.protocols.entml_patterns import (
     entml_invoke_open_may_be_streaming,
-    extract_attr_value,
     find_actionable_entml_invoke_open,
-    normalize_entml_name,
     resolve_known_tool_names,
     strip_actionable_entml_invoke_blocks,
     strip_legacy_function_calls_wrapper,
     strip_tool_entml_residue,
 )
+from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
 from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_behavior_section,
     build_entml_thinking_meta_section,
 )
-from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 from echotools.exec.fncall.shared.history_markup import strip_fake_history_markup
 from echotools.exec.fncall.shared.normalization import (
-    normalize_content,
     normalize_tool_calls,
 )
 from echotools.exec.protocol.base import ToolProtocol
@@ -139,7 +135,7 @@ def format_entml_functions_results(
     if not lines:
         return ""
     return (
-        f"<entml:funtions_results>\n"
+        "<entml:funtions_results>\n"
         + "\n".join(lines)
         + "\n</entml:funtions_results>"
     )

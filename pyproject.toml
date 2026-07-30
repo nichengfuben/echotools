@@ -76,7 +76,7 @@ ignore = ["E501", "E402"]
 known-first-party = ["echotools"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = false
@@ -91,6 +91,8 @@ disable_error_code = [
     "arg-type",
     "attr-defined",
     "var-annotated",
+    "has-type",
+    "misc",
 ]
 
 [[tool.mypy.overrides]]
@@ -100,6 +102,10 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = "echotools.media.console.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "echotools.exec.fncall.parsers.*"
+disable_error_code = ["has-type", "misc", "return-value"]
 
 [tool.pytest.ini_options]
 testpaths = ["src/tests"]

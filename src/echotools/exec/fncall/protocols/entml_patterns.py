@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -545,7 +544,10 @@ def strip_tool_entml_residue(
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
-from echotools.exec.fncall.protocols.entml_schema import (
-    mangled_json_param_tail_in_progress,
-    split_mangled_json_param_tail,
-)
+
+# 兼容旧 import 路径（body/invoke/stream 等仍从本模块取 mangled helpers）
+import echotools.exec.fncall.protocols.entml_schema as _entml_schema
+
+mangled_json_param_tail_in_progress = _entml_schema.mangled_json_param_tail_in_progress
+split_mangled_json_param_tail = _entml_schema.split_mangled_json_param_tail
+

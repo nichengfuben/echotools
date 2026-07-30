@@ -15,6 +15,7 @@ from echotools.exec.fncall.protocols.entml_stream.body import (
     _parse_parameter_entries,
 )
 
+
 def _parameters_block_snapshot(
     inner: str,
     *,

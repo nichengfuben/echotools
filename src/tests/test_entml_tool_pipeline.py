@@ -22,12 +22,12 @@ from echotools.exec.fncall.protocols.entml_patterns import (
     normalize_entml_name,
     strip_tool_entml_residue,
 )
-from echotools.exec.fncall.protocols.entml_think.parse import split_entml_thinking
-from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
 from echotools.exec.fncall.protocols.entml_schema import (
     coerce_entml_arguments,
     coerce_entml_parameter_value,
+    format_entml_tool_descs,
 )
+from echotools.exec.fncall.protocols.entml_think.parse import split_entml_thinking
 from echotools.exec.fncall.shared.coercion import (
     _build_param_schema_index,
     _coerce_param_value,

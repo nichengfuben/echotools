@@ -4,7 +4,10 @@ import json
 import re
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from echotools.exec.fncall.shared.coercion import _coerce_param_value, _resolve_effective_type
+from echotools.exec.fncall.shared.coercion import (
+    _coerce_param_value,
+    _resolve_effective_type,
+)
 
 _TYPE_HINT_TO_JSON_TYPE = {
     "str": "string",

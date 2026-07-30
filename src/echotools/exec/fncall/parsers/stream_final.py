@@ -1,7 +1,7 @@
 """FncallStreamParser finalize / partial display helpers."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 class StreamFinalMixin:
@@ -13,11 +13,8 @@ class StreamFinalMixin:
         """与 batch ``parse`` 一致：未闭合 thinking 之后的正文不参与可见/剥离。"""
         from echotools.exec.fncall.protocols.entml_think.parse import (
             clean_stream_partial_visible,
-            stream_safe_visible_prefix,
-        )
-
-        from echotools.exec.fncall.protocols.entml_think.parse import (
             split_entml_thinking,
+            stream_safe_visible_prefix,
         )
 
         buf = stream_safe_visible_prefix(
@@ -34,11 +31,11 @@ class StreamFinalMixin:
 
     def _stream_display_text(self) -> str:
         """流式可见正文：在完整 raw 缓冲上剥离伪 history（保留 thinking 保护区）。"""
-        from echotools.exec.fncall.shared.history_markup import (
-            strip_fake_history_markup_for_display,
-        )
         from echotools.exec.fncall.protocols.entml_think.parse import (
             split_entml_thinking,
+        )
+        from echotools.exec.fncall.shared.history_markup import (
+            strip_fake_history_markup_for_display,
         )
 
         buf = self._stream_visible_buffer()
@@ -52,13 +49,13 @@ class StreamFinalMixin:
 
     def _stream_partial_display_text(self) -> str:
         """流式 ``partial_text``：在 invoke 起点前截断 raw，保留尾部 holdback 空白。"""
-        from echotools.exec.fncall.shared.history_markup import (
-            strip_fake_history_markup_for_display,
-        )
         from echotools.exec.fncall.protocols.entml_think.parse import (
             clean_stream_partial_visible,
             split_entml_thinking,
             stream_safe_visible_prefix,
+        )
+        from echotools.exec.fncall.shared.history_markup import (
+            strip_fake_history_markup_for_display,
         )
 
         raw = self._raw_buf

@@ -23,8 +23,8 @@ def _make_thinking_filter(protocol: ToolProtocol, *, thinking_enabled: bool = Tr
     return None
 
 
-from echotools.exec.fncall.parsers.stream_feed import StreamFeedMixin
 from echotools.exec.fncall.parsers.stream_delta import StreamDeltaMixin
+from echotools.exec.fncall.parsers.stream_feed import StreamFeedMixin
 from echotools.exec.fncall.parsers.stream_final import StreamFinalMixin
 
 
@@ -101,7 +101,9 @@ class FncallStreamParser(StreamFeedMixin, StreamDeltaMixin, StreamFinalMixin):
         return self._schema_index
 
     def _get_known_tool_names(self):
-        from echotools.exec.fncall.protocols.entml_patterns import resolve_known_tool_names
+        from echotools.exec.fncall.protocols.entml_patterns import (
+            resolve_known_tool_names,
+        )
 
         return resolve_known_tool_names(self._tools, self._get_schema_index())
 

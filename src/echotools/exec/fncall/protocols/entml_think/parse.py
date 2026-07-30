@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from echotools.exec.fncall.protocols.entml_fake_structure_markup import (
     leading_partial_fake_entml_structure_len,
-    strip_fake_entml_structure_markup,
     strip_fake_entml_structure_markup_for_display,
     trailing_partial_fake_entml_structure_len,
 )
@@ -40,6 +39,7 @@ _LEADING_HOLD_PREFIXES = _AMBIGUOUS_ENTML_PREFIXES + _ORPHAN_CLOSE_PREFIXES + (
 )
 
 
+from echotools.exec.fncall.protocols.entml_think.filter import EntmlThinkingStreamFilter
 from echotools.exec.fncall.protocols.entml_think.hold import (
     _find_earliest_thinking_open,
     _find_thinking_close,
@@ -49,7 +49,6 @@ from echotools.exec.fncall.protocols.entml_think.hold import (
     invoke_index_inside_unclosed_thinking,
     tool_markup_follows_entml_thinking_close,
 )
-from echotools.exec.fncall.protocols.entml_think.filter import EntmlThinkingStreamFilter
 
 __all__ = [
     "EntmlThinkingStreamFilter",

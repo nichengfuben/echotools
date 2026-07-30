@@ -1,8 +1,6 @@
 """FncallStreamParser waiting/feed helpers."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
-
 
 class StreamFeedMixin:
     def _normalize_stream_chunk(self, text: str) -> str:

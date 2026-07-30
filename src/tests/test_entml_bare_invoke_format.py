@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Tuple
 
 import pytest
 from fixtures.simulated_llm_tool_responses import (
-    TOOLS,
     SimulatedCase,
     iter_bare_invoke_cases,
     tools_for_case,

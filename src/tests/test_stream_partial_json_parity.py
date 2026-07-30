@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 
 import pytest
-from fixtures.simulated_llm_tool_responses import TOOLS, tools_for_case
 from fixtures.simulated_llm_tool_responses import (
+    TOOLS,
     iter_cases_with_tools,
+    tools_for_case,
 )
 
 from echotools.exec.fncall import get_protocol

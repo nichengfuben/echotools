@@ -11,6 +11,7 @@ from echotools.exec.fncall.protocols.entml_patterns import (
     invoke_structural_gaps,
     parameter_block_spans,
 )
+from echotools.exec.fncall.protocols.entml_schema import coerce_entml_parameter_value
 from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_section,
     default_max_thinking_length_for_level,
@@ -18,7 +19,6 @@ from echotools.exec.fncall.protocols.entml_think.core import (
     normalize_thinking_mode,
     resolve_thinking_injection,
 )
-from echotools.exec.fncall.protocols.entml_schema import coerce_entml_parameter_value
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 
 
@@ -1126,7 +1126,6 @@ def test_entml_parse_bare_parameter_tags_in_invoke() -> None:
 
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
 
-    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
     for chunk in (1, 64, 9999):
         p = FncallStreamParser(protocol=get_protocol("entml"), tools=tools)
         for i in range(0, len(sample), chunk):

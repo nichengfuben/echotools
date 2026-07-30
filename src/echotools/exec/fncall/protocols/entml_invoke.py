@@ -19,7 +19,11 @@ from .entml_patterns import (
     split_mangled_json_param_tail,
     synthetic_close_invoke_body,
 )
-from .entml_schema import coerce_entml_arguments, coerce_entml_parameter_value, _coerce_entml_arg_value
+from .entml_schema import (
+    _coerce_entml_arg_value,
+    coerce_entml_arguments,
+    coerce_entml_parameter_value,
+)
 
 
 def _parse_direct_child_tags(

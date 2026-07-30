@@ -1,13 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
-
-from echotools.exec.fncall.protocols.entml_patterns import (
-    entml_invoke_open_may_be_streaming,
-    extract_attr_value,
-    normalize_entml_name,
-)
+from typing import List, Tuple
 
 THINKING_BLOCK_RE = re.compile(
     r"<entml:thinking\b[^>]*>([\s\S]*?)</entml:thinking>",
@@ -42,16 +36,13 @@ from echotools.exec.fncall.protocols.entml_think.hold import (
     _FAULT_THINKING_CLOSE,
     _THINKING_CLOSE,
     _THINKING_OPEN_PREFIX,
-    _PLAIN_THINKING_OPEN_PREFIX,
-    _INVOKE_PREFIX,
     _find_earliest_thinking_open,
-    _find_thinking_close,
-    _hold_ambiguous_tool_markup,
     _hold_prefix,
     _hold_thinking_open_prefixes,
     find_complete_entml_invoke_open,
     tool_markup_follows_entml_thinking_close,
 )
+
 
 class EntmlThinkingStreamFilter:
     """流式拆分 entml:thinking 与可见正文。

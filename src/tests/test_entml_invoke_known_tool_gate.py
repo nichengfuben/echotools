@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
+from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.protocols.entml import EntmlProtocol
 from echotools.exec.fncall.protocols.entml_patterns import (
@@ -18,8 +19,6 @@ from echotools.exec.fncall.protocols.entml_patterns import (
     strip_actionable_entml_invoke_blocks,
 )
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
-from echotools.exec.fncall import get_protocol
-
 
 READ_TOOLS: List[Dict[str, Any]] = [
     {
