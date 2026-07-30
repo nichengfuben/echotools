@@ -286,48 +286,19 @@ def format_entml_tool_descs(tools: List[Dict[str, Any]]) -> str:
         )
     return "\n\n".join(blocks)
 
-# --- mangled param tail (from entml_patterns) ---
+# --- mangled param tail ---
+#
+# 模型偶发把 schema 尾缀 ``", "description": "...", "timeout": N}}`` 粘进标量 parameter。
+# 通用规则：仅当「从候选起点到 EOS」整段都是该尾缀（可未写完）时才截断；
+# 一旦后续偏离（例如内嵌 JSON 的 ``"method"``），一律视为正文。不依赖参数名黑名单。
 
 _MANGLED_PARAM_JSON_TAIL_RE = re.compile(
     r'"\s*,\s*"description"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"timeout"\s*:\s*(\d+)\s*\}\}?\s*$',
     re.DOTALL,
 )
-_MANGLED_PARAM_JSON_TAIL_START_RE = re.compile(
-    r'"\s*,\s*"description"\s*:\s*"',
-    re.DOTALL,
-)
-_MANGLED_PARAM_JSON_TAIL_EARLY_RE = re.compile(
-    r'"\s*,\s*"(?:description|timeout)\b',
-    re.DOTALL,
-)
-_MANGLED_PARAM_JSON_TAIL_IN_PROGRESS_RE = re.compile(
-    r'"\s*,\s*"(?:d|t)',
-    re.DOTALL,
-)
-_MANGLED_TAIL_SKIP_PARAM_NAMES = frozenset(
-    {
-        "content",
-        "contents",
-        "text",
-        "body",
-        "file_path",
-        "path",
-        "message",
-        "html",
-        "data",
-        "code",
-    }
-)
 
-
-_MANGLED_PARAM_JSON_COMMA_QUOTE_END_RE = re.compile(
-    r'"\s*,\s*"$',
-    re.DOTALL,
-)
-_MANGLED_PARAM_JSON_COMMA_AFTER_QUOTE_RE = re.compile(
-    r'"\s*,\s*$',
-    re.DOTALL,
-)
+_DESC_KEY = "description"
+_TIMEOUT_KEY = "timeout"
 
 
 def _param_value_is_json_container(value: str) -> bool:
@@ -335,11 +306,156 @@ def _param_value_is_json_container(value: str) -> bool:
     return bool(stripped) and stripped[0] in "{["
 
 
+def _match_schema_key_prefix(
+    text: str,
+    pos: int,
+    *,
+    allowed: Tuple[str, ...] = (_DESC_KEY, _TIMEOUT_KEY),
+) -> Optional[Tuple[str, int]]:
+    """匹配 schema 键。
+
+    返回 ``("<key>"|"partial", new_pos)``；已偏离则 ``None``。
+    """
+    if pos >= len(text):
+        return ("partial", pos)
+    for key in allowed:
+        if text.startswith(key, pos):
+            return (key, pos + len(key))
+    remain = text[pos:]
+    for key in allowed:
+        if key.startswith(remain):
+            return ("partial", len(text))
+    return None
+
+
+def _consume_json_string_body(text: str, pos: int) -> Tuple[int, bool]:
+    """从 JSON 字符串内容起点消费（不含开引号）。返回 ``(new_pos, closed)``。"""
+    i = pos
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\":
+            if i + 1 >= len(text):
+                return len(text), False
+            i += 2
+            continue
+        if ch == '"':
+            return i + 1, True
+        i += 1
+    return len(text), False
+
+
+def _is_mangled_schema_tail_suffix(suffix: str) -> bool:
+    """``suffix`` 是否整段为 mangled schema 尾缀（允许流式未写完）。
+
+    必须以 ``description``（或其真前缀）起头；禁止把文末单独的
+    ``", "timeout": N`` 当成尾缀（避免截断正文 JSON）。
+    """
+    if not suffix:
+        return False
+    m = re.match(r'^"\s*,\s*"', suffix)
+    if not m:
+        return False
+    pos = m.end()
+    # 首键只能是 description（或其真前缀），避免 ", \"t" 误伤 type/timeout 正文
+    key_match = _match_schema_key_prefix(suffix, pos, allowed=(_DESC_KEY,))
+    if key_match is None:
+        return False
+    key, pos = key_match
+    if key == "partial":
+        return pos == len(suffix)
+    if key != _DESC_KEY:
+        return False
+    if pos >= len(suffix):
+        return True
+    if suffix[pos] != '"':
+        return False
+    pos += 1
+    m_colon = re.match(r"\s*:\s*", suffix[pos:])
+    if not m_colon:
+        return bool(re.match(r"\s*$", suffix[pos:]))
+    pos += m_colon.end()
+    if pos >= len(suffix):
+        return True
+    if suffix[pos] != '"':
+        return False
+    pos += 1
+    pos, closed = _consume_json_string_body(suffix, pos)
+    if not closed:
+        return pos == len(suffix)
+    if pos == len(suffix):
+        # description 已闭合、timeout 尚未出现：流式未完成或残缺尾缀，仍视为 mangled
+        return True
+    m_rest = re.match(r"\s*,\s*", suffix[pos:])
+    if not m_rest:
+        return re.match(r"\s*\}{0,2}\s*$", suffix[pos:]) is not None
+    pos += m_rest.end()
+    if pos >= len(suffix):
+        return True
+    if suffix[pos] != '"':
+        return False
+    pos += 1
+    key2 = _match_schema_key_prefix(suffix, pos, allowed=(_TIMEOUT_KEY,))
+    if key2 is None:
+        return False
+    key2_name, pos = key2
+    if key2_name == "partial":
+        return pos == len(suffix)
+    if key2_name != _TIMEOUT_KEY:
+        return False
+    if pos >= len(suffix):
+        return True
+    if suffix[pos] != '"':
+        return False
+    pos += 1
+    m_colon2 = re.match(r"\s*:\s*", suffix[pos:])
+    if not m_colon2:
+        return bool(re.match(r"\s*$", suffix[pos:]))
+    pos += m_colon2.end()
+    m_num2 = re.match(r"\d*", suffix[pos:])
+    assert m_num2 is not None
+    pos += m_num2.end()
+    return re.match(r"\s*\}{0,2}\s*$", suffix[pos:]) is not None
+
+
+def _ambiguous_comma_hold_end(value: str) -> int:
+    """值以 ``",`` / ``", "`` 结尾且下一键未明时，返回应保留到的终点（含引号）。
+
+    流式在键名出现前无法区分 mangled 尾缀与正文 JSON 换键；先截到引号以保持
+    partial_json 单调，待后续字符证明不是 description 后再放出全文。
+    """
+    m = re.search(r'"\s*,\s*"?$', value)
+    if not m:
+        return -1
+    return m.start() + 1
+
+
+def _find_mangled_schema_tail_start(value: str) -> int:
+    """返回 mangled 尾缀起点；无则 -1。
+
+    取最左合法起点，保证一旦出现 ``", "description"...`` 就截在 command 侧，
+    避免流式先发出更长前缀再无法回缩。
+    """
+    starts = [m.start() for m in re.finditer(r'"\s*,\s*"', value)]
+    for start in starts:
+        if _is_mangled_schema_tail_suffix(value[start:]):
+            return start
+    hold = _ambiguous_comma_hold_end(value)
+    if hold >= 0:
+        # 把 hold 点前的引号视为尾缀起点（与合法 mangled 起点同形）
+        return hold - 1
+    return -1
+
+
 def mangled_json_param_tail_in_progress(value: str) -> bool:
-    """parameter 值中出现误写入 JSON 尾缀但尚未收齐时不应继续增长 partial_json。"""
+    """值末尾正在形成 mangled schema 尾缀（尚未收齐）时抑制 partial_json 增长。"""
     if not value or _param_value_is_json_container(value):
         return False
-    return bool(_MANGLED_PARAM_JSON_TAIL_IN_PROGRESS_RE.search(value))
+    start = _find_mangled_schema_tail_start(value)
+    if start < 0:
+        return False
+    if _MANGLED_PARAM_JSON_TAIL_RE.search(value[start:]):
+        return False
+    return True
 
 
 def split_mangled_json_param_tail(
@@ -348,45 +464,27 @@ def split_mangled_json_param_tail(
     param_name: str = "",
 ) -> Tuple[str, Dict[str, Any]]:
     """模型把 ``", "description": ..., "timeout": ...}}`` 误写入 parameter 值时的拆分。"""
+    _ = param_name
     if not value:
-        return value, {}
-    if param_name in _MANGLED_TAIL_SKIP_PARAM_NAMES:
         return value, {}
     if _param_value_is_json_container(value):
         try:
             json.loads(value)
             return value, {}
         except json.JSONDecodeError:
-            # 合法 JSON 数组/对象（含 options.description 等）不得走标量 command 尾缀启发式。
             return value, {}
+
     match = _MANGLED_PARAM_JSON_TAIL_RE.search(value)
     if match:
-        command = value[: match.start() + 1]
-        extra: Dict[str, Any] = {
+        return value[: match.start() + 1], {
             "description": match.group(1),
             "timeout": int(match.group(2)),
         }
-        return command, extra
-    partial = _MANGLED_PARAM_JSON_TAIL_START_RE.search(value)
-    if partial:
-        return value[: partial.start() + 1], {}
-    early = _MANGLED_PARAM_JSON_TAIL_EARLY_RE.search(value)
-    if early:
-        return value[: early.start() + 1], {}
-    inprog = _MANGLED_PARAM_JSON_TAIL_IN_PROGRESS_RE.search(value)
-    if inprog:
-        before = value[: inprog.start()]
-        matches = list(re.finditer(r'"\s*,\s*"', before))
-        if matches:
-            return value[: matches[-1].start() + 1], {}
-        return value[: inprog.start() + 1], {}
-    comma_quote_end = _MANGLED_PARAM_JSON_COMMA_QUOTE_END_RE.search(value)
-    if comma_quote_end:
-        return value[: comma_quote_end.start() + 1], {}
-    comma_after_quote = _MANGLED_PARAM_JSON_COMMA_AFTER_QUOTE_RE.search(value)
-    if comma_after_quote:
-        return value[: comma_after_quote.start() + 1], {}
-    return value, {}
+
+    start = _find_mangled_schema_tail_start(value)
+    if start < 0:
+        return value, {}
+    return value[: start + 1], {}
 
 
 

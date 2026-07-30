@@ -52,7 +52,7 @@ def test_force_close_matches_batch_on_truncated_invoke() -> None:
 
 def test_bare_parameter_close_at_buffer_end_snapshot() -> None:
     """裸 ``<parameter>`` 在 buffer 末尾闭合时，streaming snapshot 应视为参数已完成。"""
-    from echotools.exec.fncall.protocols.entml_stream import (
+    from echotools.exec.fncall.protocols.entml_stream_json import (
         build_streaming_json_snapshot,
     )
 
@@ -188,6 +188,116 @@ def test_mangled_json_tail_in_command_param_batch_and_stream() -> None:
             json_buf += comp[1]
         parser.finalize()
         assert json.loads(json_buf) == batch_args, f"chunk={chunk}"
+
+
+EDIT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "Edit",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "old_string": {"type": "string"},
+                    "new_string": {"type": "string"},
+                },
+                "required": ["path", "old_string", "new_string"],
+            },
+        },
+    }
+]
+
+
+def test_edit_params_with_embedded_description_json_not_truncated() -> None:
+    """内嵌 ``", \"description\"`` 的自由文本不得被 mangled-tail 截断（不靠参数名特判）。"""
+    old = (
+        '    parameters={\n'
+        '            "type": "object",\n'
+        '            "properties": {\n'
+        '                "query": {"type": "string", "description": "The HTTP or HTTPS URL to fetch."},\n'
+        '                "method": {"type": "string", "description": "HTTP method"},\n'
+        '            },\n'
+        '            "required": ["url"],\n'
+        '        },\n'
+        '        requires_approval=True,\n'
+        '    )'
+    )
+    new = (
+        '    parameters={\n'
+        '            "type": "object",\n'
+        '            "properties": {\n'
+        '                "query": {"type": "string", "description": "The search query string."},\n'
+        '                "count": {"type": "integer", "description": "Number of results"},\n'
+        '            },\n'
+        '            "required": ["query"],\n'
+        '        },\n'
+        '        requires_approval=False,\n'
+        '    )'
+    )
+    assert old != new
+    # 故意用非 Edit 专用参数名，确保修复是后缀结构判定而非名字黑名单
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "ApplyChange",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "target": {"type": "string"},
+                        "before": {"type": "string"},
+                        "after": {"type": "string"},
+                    },
+                    "required": ["target", "before", "after"],
+                },
+            },
+        }
+    ]
+    text = (
+        '<entml:thinking>fix</entml:thinking>\n'
+        '<entml:invoke name="ApplyChange">\n'
+        '<entml:parameter name="target">src/server/tools/registry.py</entml:parameter>\n'
+        f'<entml:parameter name="before">{old}</entml:parameter>\n'
+        f'<entml:parameter name="after">{new}</entml:parameter>\n'
+        '</entml:invoke>\n'
+    )
+    proto = get_protocol("entml")
+    _, calls = proto.parse(text, tools)
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert args["before"] == old.strip()
+    assert args["after"] == new.strip()
+    assert args["before"] != args["after"]
+    assert '"method"' in args["before"]
+    assert '"count"' in args["after"]
+
+    for chunk in (1, 17, 64, 256):
+        parser = FncallStreamParser(protocol=proto, tools=tools)
+        for i in range(0, len(text), chunk):
+            parser.feed(text[i : i + chunk])
+        _, stream_calls = parser.finalize()
+        stream_args = json.loads(stream_calls[0]["function"]["arguments"])
+        assert stream_args == args, f"chunk={chunk}"
+
+
+def test_edit_corpus_req_1785406974_not_truncated() -> None:
+    """真实语料：模型 Edit 完整，解析器不得把 old/new 截到相同的 ``\"string\"`` 前缀。"""
+    from pathlib import Path
+
+    path = Path(r"X:/Project/Public/Qwen/logs/responses/req-1785406974-586c810869b9.txt")
+    if not path.is_file():
+        import pytest
+
+        pytest.skip("corpus missing")
+    text = path.read_text(encoding="utf-8")
+    proto = get_protocol("entml")
+    _, calls = proto.parse(text, EDIT_TOOLS)
+    args = json.loads(calls[0]["function"]["arguments"])
+    assert "description\": \"The search query string." in args["new_string"]
+    assert "execute_web_search" in args["new_string"]
+    assert "execute_web_fetch" in args["old_string"]
+    assert args["old_string"] != args["new_string"]
+    assert not args["old_string"].endswith('"string"')
 
 
 ASK_USER_QUESTION_TOOLS = [
