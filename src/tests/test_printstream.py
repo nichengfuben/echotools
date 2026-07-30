@@ -315,8 +315,8 @@ class TestPrintStreamIntegration:
         """Test concurrent access to the print stream."""
         import threading
 
+        # 未 start：避免消费线程与入队竞态导致 queue_length 偶发 < 20
         stream = PrintStream()
-        stream.start()
 
         def add_messages(prefix: str, count: int) -> None:
             for i in range(count):
@@ -334,5 +334,3 @@ class TestPrintStreamIntegration:
 
         # All messages should be queued
         assert stream.queue_length == 20
-
-        stream.stop()
