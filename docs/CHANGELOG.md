@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.99] - 2026-07-30
+
+### Fixed
+
+- entml 输出过滤：``<entml:todo>`` / ``</entml:todo>`` 仅剥标签、保留正文
+- entml 输出过滤：invoke 块移除后剥离独立行/文末孤儿 ``</entml:…>`` 闭标签（如多余 ``</entml:invoke>``）
+
 ## [2.3.98] - 2026-07-30
 
 ### Fixed

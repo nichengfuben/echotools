@@ -7,6 +7,7 @@ from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.protocols.entml_fake_structure_markup import (
     strip_fake_entml_structure_markup,
     strip_fake_entml_structure_markup_for_display,
+    strip_orphan_entml_close_tags,
 )
 from echotools.exec.fncall.protocols.entml_tool_result_comment import (
     trailing_partial_tool_result_id_comment_len,
@@ -82,6 +83,18 @@ READ_TOOL = {
             "entml:result",
             "ok",
         ),
+        (
+            "除此之外</entml:todo>，<entml:todo>只过滤标签",
+            "只过滤标签",
+            "entml:todo",
+            "除此之外",
+        ),
+        (
+            "前\n<entml:todo>\n正文保留\n</entml:todo>\n后",
+            "正文保留",
+            "entml:todo",
+            "后",
+        ),
     ],
 )
 def test_strip_fake_entml_structure_batch(
@@ -141,6 +154,16 @@ def test_bare_result_tags_only_not_body() -> None:
     assert "尾" in cleaned
 
 
+def test_orphan_complete_entml_close_after_invoke_strip() -> None:
+    cleaned, found = strip_orphan_entml_close_tags("完成编辑\n</entml:invoke>")
+    assert found
+    assert cleaned.strip() == "完成编辑"
+    rest, found2 = strip_orphan_entml_close_tags("前\n后\n</entml:invoke>")
+    assert found2
+    assert "前" in rest and "后" in rest
+    assert "entml" not in rest.lower()
+
+
 def test_orphan_incomplete_entml_close_leak() -> None:
     raw = (
         "说明正文\n"
@@ -192,6 +215,81 @@ def test_batch_parse_strips_fake_structure() -> None:
     assert '{"x":1}' not in clean
     assert "标签间保留" in clean
     assert "funtions_results" not in clean
+
+
+EDIT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "Edit",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "old_string": {"type": "string"},
+                "new_string": {"type": "string"},
+                "replace_all": {"type": "boolean"},
+            },
+            "required": ["path", "old_string", "new_string"],
+        },
+    },
+}
+
+
+def test_rogator_edit_triple_invoke_corpus_batch() -> None:
+    from pathlib import Path
+
+    log = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "rogator_edit_triple_orphan_close.txt"
+    )
+    raw = log.read_text(encoding="utf-8")
+    proto = get_protocol("entml")
+    clean, calls = proto.parse(raw, [EDIT_TOOL])
+    assert len(calls) == 3
+    assert all(c["function"]["name"] == "Edit" for c in calls)
+    assert "entml" not in clean.lower()
+    assert "main.py" in clean
+
+
+@pytest.mark.parametrize("chunk", [1, 4, 8, 17, 32])
+def test_rogator_edit_triple_invoke_corpus_stream(chunk: int) -> None:
+    from pathlib import Path
+
+    log = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "rogator_edit_triple_orphan_close.txt"
+    )
+    raw = log.read_text(encoding="utf-8")
+    parser = FncallStreamParser(protocol=get_protocol("entml"), tools=[EDIT_TOOL])
+    for i in range(0, len(raw), chunk):
+        parser.feed(raw[i : i + chunk])
+        pt = parser.partial_text.lower()
+        assert "entml:invoke" not in pt
+        assert "entml:parameter" not in pt
+        assert "</entml:invoke" not in pt
+        assert "entml:todo" not in pt
+    clean, calls = parser.finalize()
+    assert len(calls) == 3
+    assert "entml" not in clean.lower()
+
+
+def test_corpus_with_inline_todo_tags_strips_tags_only() -> None:
+    from pathlib import Path
+
+    log = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "rogator_edit_triple_orphan_close.txt"
+    )
+    raw = log.read_text(encoding="utf-8") + "\n除此之外</entml:todo>，<entml:todo>只过滤标签"
+    proto = get_protocol("entml")
+    clean, calls = proto.parse(raw, [EDIT_TOOL])
+    assert len(calls) == 3
+    assert "entml" not in clean.lower()
+    assert "除此之外" in clean
+    assert "只过滤标签" in clean
 
 
 @pytest.mark.parametrize("chunk", [1, 4, 17, 32])

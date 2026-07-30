@@ -30,6 +30,7 @@ _TAG_ONLY_OPEN_RES = (
     re.compile(r"<function_calling_behavior\b[^>]*>", re.IGNORECASE),
     re.compile(r"<thinking_behavior\b[^>]*>", re.IGNORECASE),
     re.compile(r"<entml:result\b[^>]*>", re.IGNORECASE),
+    re.compile(r"<entml:todo\b[^>]*>", re.IGNORECASE),
 )
 _TAG_ONLY_CLOSE_RES = (
     re.compile(r"</entml:funtions_results\s*>", re.IGNORECASE),
@@ -39,6 +40,7 @@ _TAG_ONLY_CLOSE_RES = (
     re.compile(r"</function_calling_behavior\s*>", re.IGNORECASE),
     re.compile(r"</thinking_behavior\s*>", re.IGNORECASE),
     re.compile(r"</entml:result\s*>", re.IGNORECASE),
+    re.compile(r"</entml:todo\s*>", re.IGNORECASE),
 )
 
 _FAKE_ENTML_TAG_PREFIXES: Tuple[str, ...] = (
@@ -56,6 +58,8 @@ _FAKE_ENTML_TAG_PREFIXES: Tuple[str, ...] = (
     "</function_calling_behavior",
     "<thinking_behavior",
     "</thinking_behavior",
+    "<entml:todo",
+    "</entml:todo",
     "</entml:invoke",
     "</entml:parameter",
     "</entml:thinking",
@@ -68,6 +72,15 @@ _ORPHAN_ENTML_CLOSE_LINE_RE = re.compile(
 )
 _TRAILING_INCOMPLETE_ENTML_CLOSE_RE = re.compile(
     r"</entml:?[a-z0-9_-]*\s*$",
+    re.IGNORECASE,
+)
+# 完整闭标签泄漏：须在 invoke 块移除之后剥离（独立行或文末）。
+_ORPHAN_ENTML_CLOSE_LINE_COMPLETE_RE = re.compile(
+    r"(?m)^\s*(?:●\s*)?</entml:?[a-z0-9_-]*>\s*(?:\n|$)",
+    re.IGNORECASE,
+)
+_TRAILING_ORPHAN_ENTML_CLOSE_RE = re.compile(
+    r"(?:\n|\A)\s*</entml:?[a-z0-9_-]*>\s*$",
     re.IGNORECASE,
 )
 
@@ -89,6 +102,15 @@ def _strip_tag_only_markup(text: str) -> Tuple[str, bool]:
 def _strip_orphan_entml_close_leaks(text: str) -> Tuple[str, bool]:
     text, n1 = _ORPHAN_ENTML_CLOSE_LINE_RE.subn("", text)
     text, n2 = _TRAILING_INCOMPLETE_ENTML_CLOSE_RE.subn("", text)
+    return text, (n1 + n2) > 0
+
+
+def strip_orphan_entml_close_tags(content: str) -> Tuple[str, bool]:
+    """剥离独立行或文末的完整 ``</entml:…>`` 泄漏（invoke 块已移除后调用）。"""
+    if not content:
+        return content, False
+    text, n1 = _ORPHAN_ENTML_CLOSE_LINE_COMPLETE_RE.subn("", content)
+    text, n2 = _TRAILING_ORPHAN_ENTML_CLOSE_RE.subn("", text)
     return text, (n1 + n2) > 0
 
 

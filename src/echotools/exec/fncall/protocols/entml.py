@@ -349,6 +349,11 @@ class EntmlProtocol(ToolProtocol):
         if tool_calls:
             clean = strip_actionable_entml_invoke_blocks(clean, known_names=known)
         clean = strip_tool_entml_residue(clean, known_names=known)
+        from echotools.exec.fncall.protocols.entml_fake_structure_markup import (
+            strip_orphan_entml_close_tags,
+        )
+
+        clean, _ = strip_orphan_entml_close_tags(clean)
         return (clean, normalize_tool_calls(tool_calls, tools))
 
     def parse_fragment(
