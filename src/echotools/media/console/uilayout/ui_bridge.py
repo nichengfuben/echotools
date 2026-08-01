@@ -132,9 +132,12 @@ def render_gradient_banner(
         )
     else:
         active_theme = get_theme_preset(theme_name).gradient
+    ensure_windows_console()
     renderer = GradientRenderer(active_theme)
-    banner = renderer.render_banner("\n".join(lines), use_border_colors=True, row_offset=0)
-    return str(banner)
+    # 必须输出 ANSI：str(Rich.Text) 会丢掉样式，且 NO_COLOR 时 Console 也不上色
+    return renderer.render_banner_ansi(
+        "\n".join(lines), use_border_colors=True, row_offset=0
+    )
 
 
 def flatten_model_fields(

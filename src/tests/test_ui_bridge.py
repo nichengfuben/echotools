@@ -33,6 +33,7 @@ class TestRenderGradientBanner:
         banner = render_gradient_banner(lines, theme_name="forest")
         assert isinstance(banner, str)
         assert len(banner) > 0
+        assert "\033[38;2;" in banner
 
 
 class TestThemes:

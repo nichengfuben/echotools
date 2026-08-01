@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - entml golden 回归：`fixtures/entml_golden.json` 锁定 32 条语料的 `parse()` 输出与 `build_streaming_json_snapshot()` 快照；`test_entml_golden.py` 校验 digest 与逐 case 等价
 
+### Fixed
+
+- `render_gradient_banner` 改为输出真 ANSI 渐变（`render_banner_ansi`），避免 `str(Rich.Text)` / `NO_COLOR` 导致横幅无色
+- entml thinking 行为块移除“末行声明回复语言”硬约束
+
 ## [2.3.102] - 2026-08-01
 
 ### Changed

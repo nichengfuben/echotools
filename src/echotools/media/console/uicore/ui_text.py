@@ -127,11 +127,6 @@ class TextUtils:
         return fill_char * left + text + fill_char * (total_padding - left)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 渐变渲染器
-# ══════════════════════════════════════════════════════════════════════════════
-
-
 class GradientRenderer:
     """渐变渲染器 - 核心渲染引擎，负责所有颜色计算与渲染"""
 
@@ -244,18 +239,15 @@ class GradientRenderer:
         """渲染文本为 ANSI 转义字符串（水平渐变）"""
         if not text:
             return ""
-
         total = total_length or (start_index + len(text))
         ref_len = max(total, 30)
         start = self.theme.border_start if is_border else self.theme.primary_start
         end = self.theme.border_end if is_border else self.theme.primary_end
         parts: List[str] = []
-
         for i, char in enumerate(text):
             factor = (start_index + i) / (ref_len - 1) if ref_len > 1 else 0.0
             r, g, b = self._interpolate_cached(start, end, factor)
             parts.append(f"\033[38;2;{r};{g};{b}m{char}")
-
         parts.append(ANSI_RESET)
         return "".join(parts)
 
@@ -263,6 +255,30 @@ class GradientRenderer:
         """渲染纯色文本"""
         r, g, b = color
         return f"\033[38;2;{r};{g};{b}m{text}{ANSI_RESET}"
+
+    def _banner_metrics(self, lines: Sequence[str]) -> int:
+        width = max((len(line) for line in lines), default=0)
+        ref_width = max(width, self.reference_width // 2)
+        return ref_width + len(lines) - 2
+
+    def _banner_color(
+        self,
+        char: str,
+        col_idx: int,
+        row_idx: int,
+        max_diag: int,
+        *,
+        use_border_colors: bool,
+    ) -> RGB:
+        is_border = char in self.BORDER_CHARS
+        factor = self._diagonal_factor(col_idx, row_idx, max_diag)
+        if is_border and use_border_colors:
+            return self._interpolate_cached(
+                self.theme.border_start, self.theme.border_end, factor,
+            )
+        return self._interpolate_cached(
+            self.theme.primary_start, self.theme.primary_end, factor,
+        )
 
     def render_banner(
         self,
@@ -274,33 +290,49 @@ class GradientRenderer:
         lines = text.splitlines()
         if not lines:
             return Text()
-
-        height = len(lines)
-        width = max((len(line) for line in lines), default=0)
-        ref_width = max(width, self.reference_width // 2)
-        max_diag = ref_width + height - 2
+        max_diag = self._banner_metrics(lines)
         result = Text()
-
         for row_idx, line in enumerate(lines):
             actual_row = row_offset + row_idx
             for col_idx, char in enumerate(line):
-                is_border = char in self.BORDER_CHARS
-                factor = self._diagonal_factor(col_idx, actual_row, max_diag)
-                if is_border and use_border_colors:
-                    color = self._interpolate_cached(
-                        self.theme.border_start, self.theme.border_end, factor,
-                    )
-                else:
-                    color = self._interpolate_cached(
-                        self.theme.primary_start, self.theme.primary_end, factor,
-                    )
+                color = self._banner_color(
+                    char, col_idx, actual_row, max_diag,
+                    use_border_colors=use_border_colors,
+                )
                 result.append(
                     char, style=f"rgb({color[0]},{color[1]},{color[2]})",
                 )
-            if row_idx < height - 1:
+            if row_idx < len(lines) - 1:
                 result.append("\n")
-
         return result
+
+    def render_banner_ansi(
+        self,
+        text: str,
+        use_border_colors: bool = True,
+        row_offset: int = 0,
+    ) -> str:
+        """渲染横幅为 ANSI 字符串（不受 Rich/NO_COLOR 影响，供 print 使用）。"""
+        lines = text.splitlines()
+        if not lines:
+            return ""
+        max_diag = self._banner_metrics(lines)
+        parts: List[str] = []
+        for row_idx, line in enumerate(lines):
+            actual_row = row_offset + row_idx
+            for col_idx, char in enumerate(line):
+                if char == " ":
+                    parts.append(char)
+                    continue
+                r, g, b = self._banner_color(
+                    char, col_idx, actual_row, max_diag,
+                    use_border_colors=use_border_colors,
+                )
+                parts.append(f"\033[38;2;{r};{g};{b}m{char}")
+            parts.append(ANSI_RESET)
+            if row_idx < len(lines) - 1:
+                parts.append("\n")
+        return "".join(parts)
 
     def render_line(
         self,
@@ -313,7 +345,6 @@ class GradientRenderer:
         result = Text()
         ref_width = max(len(text) + col_offset, self.reference_width // 2)
         max_diag = ref_width + 20
-
         for i, char in enumerate(text):
             factor = self._diagonal_factor(col_offset + i, row, max_diag)
             if is_border or char in self.BORDER_CHARS:
@@ -327,7 +358,6 @@ class GradientRenderer:
             result.append(
                 char, style=f"rgb({color[0]},{color[1]},{color[2]})",
             )
-
         return result
 
     def render_progress_bar(
@@ -343,14 +373,12 @@ class GradientRenderer:
         filled_count = int(width * progress)
         empty_count = width - filled_count
         parts: List[str] = []
-
         for i in range(filled_count):
             factor = i / max(width - 1, 1)
             r, g, b = self._interpolate_cached(
                 self.theme.primary_start, self.theme.primary_end, factor,
             )
             parts.append(f"\033[38;2;{r};{g};{b}m{filled_char}")
-
         if filled_count < width:
             factor = filled_count / max(width - 1, 1)
             r, g, b = self._interpolate_cached(
@@ -358,11 +386,10 @@ class GradientRenderer:
             )
             parts.append(f"\033[38;2;{r};{g};{b}m{head_char}")
             empty_count -= 1
-
         if empty_count > 0:
             mr, mg, mb = self.theme.muted
             parts.append(f"\033[38;2;{mr};{mg};{mb}m{empty_char * empty_count}")
-
         parts.append(ANSI_RESET)
         return "".join(parts)
+
 
