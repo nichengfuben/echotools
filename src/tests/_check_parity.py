@@ -1,77 +1,75 @@
-"""Temporary parity checker — delete after fix."""
+"""Dev parity checker: batch parse vs streaming snapshot (uses golden helpers)."""
+from __future__ import annotations
+
 import json
-import re
 import sys
 
 sys.path.insert(0, "src/tests")
-from fixtures.simulated_llm_tool_responses import SIMULATED_LLM_RESPONSES, TOOLS
+from fixtures.entml_golden import _args, _invoke_snapshots, _names
+from fixtures.simulated_llm_tool_responses import SIMULATED_LLM_RESPONSES, TOOLS, tools_for_case
 
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
-from echotools.exec.fncall.protocols.entml_stream_json import (
-    build_streaming_json_snapshot,
-)
 
 proto = get_protocol("entml")
-from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 
-schema_index = _build_param_schema_index(TOOLS)
-pat = re.compile(r'<entml:invoke name="([^"]+)">(.*?)</entml:invoke>', re.S)
-
-mismatches = []
+mismatches: list[str] = []
 for case in SIMULATED_LLM_RESPONSES:
     if not case.expect_names:
         continue
-    _, batch_calls = proto.parse(case.response, TOOLS)
-    for i, m in enumerate(pat.finditer(case.response)):
-        name, body = m.group(1), m.group(2)
-        snap = build_streaming_json_snapshot(
-            body + "</entml:invoke>",
-            tool_name=name.replace("\\_", "_"),
-            schema_index=schema_index,
+    tools = tools_for_case(case)
+    _, batch_calls = proto.parse(case.response, tools)
+    snapshots = _invoke_snapshots(case.response, batch_calls, tools)
+    if len(snapshots) != len(batch_calls):
+        mismatches.append(
+            f"{case.id}: snapshot count {len(snapshots)} != batch {len(batch_calls)}"
         )
-        try:
-            stream_args = json.loads(snap)
-        except json.JSONDecodeError as e:
-            mismatches.append(f"{case.id}[{i}] JSON error: {e} snap={snap[:80]!r}")
-            continue
-        batch_args = json.loads(batch_calls[i]["function"]["arguments"])
-        if stream_args != batch_args:
-            mismatches.append(f"{case.id}[{i}] batch={batch_args!r} stream={stream_args!r}")
+        continue
+    for i, (batch_arg, snap) in enumerate(zip(_args(batch_calls), snapshots)):
+        if batch_arg != snap:
+            mismatches.append(
+                f"{case.id}[{i}] batch={batch_arg!r} stream={snap!r}"
+            )
 
-# stream merged test
 for chunk in (1, 5, 17):
     for case in SIMULATED_LLM_RESPONSES:
         if not case.expect_names:
             continue
-        parser = FncallStreamParser(protocol=proto, tools=TOOLS)
-        merged_list = []
+        tools = tools_for_case(case)
+        parser = FncallStreamParser(protocol=proto, tools=tools)
+        merged_list: list[str] = []
         cur = ""
         for j in range(0, len(case.response), chunk):
             ready = parser.feed(case.response[j : j + chunk])
-            d = parser.consume_stream_delta()
-            if d:
-                cur += d[1]
+            delta = parser.consume_stream_delta()
+            if delta:
+                cur += delta[1]
             if ready:
                 merged_list.append(cur)
                 cur = ""
         parser.finalize()
         if cur:
             merged_list.append(cur)
-        _, batch_calls = proto.parse(case.response, TOOLS)
+        _, batch_calls = proto.parse(case.response, tools)
         if len(merged_list) != len(batch_calls):
             mismatches.append(
-                f"stream count {case.id} chunk={chunk}: merged={len(merged_list)} batch={len(batch_calls)}"
+                f"stream count {case.id} chunk={chunk}: "
+                f"merged={len(merged_list)} batch={len(batch_calls)}"
             )
             continue
         for mi, (merged, call) in enumerate(zip(merged_list, batch_calls)):
             try:
                 ma = json.loads(merged)
-            except json.JSONDecodeError as e:
-                mismatches.append(f"stream merged {case.id}[{mi}] chunk={chunk}: {e} {merged[:60]!r}")
+            except json.JSONDecodeError as exc:
+                mismatches.append(
+                    f"stream merged {case.id}[{mi}] chunk={chunk}: {exc} {merged[:60]!r}"
+                )
                 continue
             ba = json.loads(call["function"]["arguments"])
             if ma != ba:
-                mismatches.append(f"stream merged {case.id}[{mi}] chunk={chunk}: batch={ba!r} merged={ma!r}")
+                mismatches.append(
+                    f"stream merged {case.id}[{mi}] chunk={chunk}: "
+                    f"batch={ba!r} merged={ma!r}"
+                )
 
 print("\n".join(mismatches) if mismatches else "ALL OK")

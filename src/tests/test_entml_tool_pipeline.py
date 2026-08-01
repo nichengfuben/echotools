@@ -12,7 +12,7 @@ from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.protocols.entml import (
     strip_entml_from_content,
 )
-from echotools.exec.fncall.protocols.entml_invoke import (
+from echotools.exec.fncall.protocols.entml_tool.invoke import (
     format_entml_parameter_value,
     format_entml_tool_calls,
     parse_invoke_args,

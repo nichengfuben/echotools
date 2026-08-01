@@ -5,7 +5,7 @@ import json
 import pytest
 
 from echotools.exec.fncall import get_protocol, inject_fncall
-from echotools.exec.fncall.protocols.entml_invoke import parse_entml_tool_calls
+from echotools.exec.fncall.protocols.entml_tool.invoke import parse_entml_tool_calls
 from echotools.exec.fncall.protocols.entml_patterns import (
     invoke_structural_gap_text,
     invoke_structural_gaps,
@@ -877,7 +877,7 @@ def test_entml_prompt_and_stream_logic_no_function_calls_wrapper() -> None:
 
 def test_entml_roundtrip_parameter_format() -> None:
     """渲染与解析均使用 <entml:parameter name=\"...\">。"""
-    from echotools.exec.fncall.protocols.entml_invoke import format_entml_tool_calls
+    from echotools.exec.fncall.protocols.entml_tool.invoke import format_entml_tool_calls
 
     sample_calls = [
         {

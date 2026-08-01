@@ -53,7 +53,7 @@ def test_force_close_matches_batch_on_truncated_invoke() -> None:
 
 def test_bare_parameter_close_at_buffer_end_snapshot() -> None:
     """裸 ``<parameter>`` 在 buffer 末尾闭合时，streaming snapshot 应视为参数已完成。"""
-    from echotools.exec.fncall.protocols.entml_stream_json import (
+    from echotools.exec.fncall.protocols.entml_stream import (
         build_streaming_json_snapshot,
     )
 

@@ -16,7 +16,7 @@ from fixtures.simulated_llm_tool_responses import (
 from echotools.exec.fncall import get_protocol, inject_fncall
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.protocols.entml import EntmlProtocol
-from echotools.exec.fncall.protocols.entml_invoke import format_entml_tool_calls
+from echotools.exec.fncall.protocols.entml_tool.invoke import format_entml_tool_calls
 from echotools.exec.fncall.protocols.entml_think.parse import split_entml_thinking
 
 # 与 entml.py _ENTML_INSTRUCTION 中示例块逐行一致
