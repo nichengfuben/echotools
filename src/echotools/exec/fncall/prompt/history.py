@@ -83,7 +83,9 @@ def _clean_entml_tags(content: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-from echotools.exec.fncall.protocols.entml_tool.invoke import format_entml_parameter_value
+from echotools.exec.fncall.protocols.entml_tool.invoke import (
+    format_entml_parameter_value,
+)
 
 
 def _render_parameter_value(v: Any) -> str:

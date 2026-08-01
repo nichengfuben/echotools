@@ -6,7 +6,6 @@ from echotools.media.console import (
     DEFAULT_THEME_NAME,
     RichCLI,
     get_theme_palette,
-    get_theme_preset,
     list_theme_names,
     normalize_theme_name,
     render_gradient_banner,

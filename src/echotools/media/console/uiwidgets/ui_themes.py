@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
-from echotools.media.console.uicore.ui_types import GradientTheme
 from rich.theme import Theme
+
+from echotools.media.console.uicore.ui_types import GradientTheme
 
 RGB = Tuple[int, int, int]
 

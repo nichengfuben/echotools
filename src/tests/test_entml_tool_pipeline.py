@@ -12,11 +12,6 @@ from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.protocols.entml import (
     strip_entml_from_content,
 )
-from echotools.exec.fncall.protocols.entml_tool.invoke import (
-    format_entml_parameter_value,
-    format_entml_tool_calls,
-    parse_invoke_args,
-)
 from echotools.exec.fncall.protocols.entml_patterns import (
     extract_attr_value,
     normalize_entml_name,
@@ -28,6 +23,11 @@ from echotools.exec.fncall.protocols.entml_schema import (
     format_entml_tool_descs,
 )
 from echotools.exec.fncall.protocols.entml_think.parse import split_entml_thinking
+from echotools.exec.fncall.protocols.entml_tool.invoke import (
+    format_entml_parameter_value,
+    format_entml_tool_calls,
+    parse_invoke_args,
+)
 from echotools.exec.fncall.shared.coercion import (
     _build_param_schema_index,
     _coerce_param_value,

@@ -3,13 +3,13 @@ from __future__ import annotations
 import re
 from typing import Optional, Set
 
+from .invoke import _strip_orphan_invoke_tags, _strip_orphan_non_invoke_tool_tags
 from .params import strip_actionable_entml_invoke_blocks
 from .regex import (
     _EMPTY_FENCE_RE,
     _FENCE_ONLY_LINE_RE,
     _TOOL_WRAPPER_PAIR_RE,
 )
-from .invoke import _strip_orphan_invoke_tags, _strip_orphan_non_invoke_tool_tags
 
 
 def strip_tool_entml_residue(

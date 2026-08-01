@@ -7,12 +7,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fixtures.simulated_llm_tool_responses import (
-    SimulatedCase,
-    iter_cases_with_tools,
-    tools_for_case,
-)
-
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.protocols.entml_patterns import (
     extract_attr_value,
@@ -21,6 +15,11 @@ from echotools.exec.fncall.protocols.entml_patterns import (
 )
 from echotools.exec.fncall.protocols.entml_stream import build_streaming_json_snapshot
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
+from fixtures.simulated_llm_tool_responses import (
+    SimulatedCase,
+    iter_cases_with_tools,
+    tools_for_case,
+)
 
 _GOLDEN_PATH = Path(__file__).with_name("entml_golden.json")
 

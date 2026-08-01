@@ -15,7 +15,6 @@ from echotools.media.console.uiwidgets.ui_select import SelectionResult
 from echotools.media.console.uiwidgets.ui_themes import (
     DEFAULT_THEME_NAME,
     get_gradient_theme,
-    get_theme_palette,
     get_theme_preset,
     normalize_theme_name,
 )

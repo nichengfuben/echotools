@@ -5,7 +5,6 @@ import json
 import pytest
 
 from echotools.exec.fncall import get_protocol, inject_fncall
-from echotools.exec.fncall.protocols.entml_tool.invoke import parse_entml_tool_calls
 from echotools.exec.fncall.protocols.entml_patterns import (
     invoke_structural_gap_text,
     invoke_structural_gaps,
@@ -19,6 +18,7 @@ from echotools.exec.fncall.protocols.entml_think.core import (
     normalize_thinking_mode,
     resolve_thinking_injection,
 )
+from echotools.exec.fncall.protocols.entml_tool.invoke import parse_entml_tool_calls
 from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 
 
@@ -863,7 +863,9 @@ def test_entml_prompt_and_stream_logic_bare_invoke() -> None:
 
 def test_entml_roundtrip_parameter_format() -> None:
     """渲染与解析均使用 <entml:parameter name=\"...\">。"""
-    from echotools.exec.fncall.protocols.entml_tool.invoke import format_entml_tool_calls
+    from echotools.exec.fncall.protocols.entml_tool.invoke import (
+        format_entml_tool_calls,
+    )
 
     sample_calls = [
         {

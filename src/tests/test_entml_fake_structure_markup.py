@@ -4,13 +4,13 @@ import pytest
 
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
+from echotools.exec.fncall.protocols.entml_tool.comment import (
+    trailing_partial_tool_result_id_comment_len,
+)
 from echotools.exec.fncall.protocols.entml_tool.fakemarkup import (
     strip_fake_entml_structure_markup,
     strip_fake_entml_structure_markup_for_display,
     strip_orphan_entml_close_tags,
-)
-from echotools.exec.fncall.protocols.entml_tool.comment import (
-    trailing_partial_tool_result_id_comment_len,
 )
 
 READ_TOOL = {

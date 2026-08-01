@@ -29,6 +29,10 @@ from .params import (
     synthetic_close_invoke_body,
 )
 from .regex import (
+    _INVOKE_CLOSE,
+    _INVOKE_OPEN_PREFIX,
+    _PARAM_CLOSE_VALID_RE,
+    _PARAM_CLOSE_VALID_STREAM_RE,
     BARE_INVOKE_CHILD_OPEN_RE,
     BARE_INVOKE_CHILD_RE,
     BLOCK_RE,
@@ -42,10 +46,6 @@ from .regex import (
     PARAM_RE,
     PARAMETERS_RE,
     SUB_TAG_RE,
-    _INVOKE_CLOSE,
-    _INVOKE_OPEN_PREFIX,
-    _PARAM_CLOSE_VALID_RE,
-    _PARAM_CLOSE_VALID_STREAM_RE,
 )
 from .strip import strip_tool_entml_residue
 

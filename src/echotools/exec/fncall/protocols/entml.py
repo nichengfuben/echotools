@@ -17,7 +17,9 @@ from echotools.exec.fncall.protocols.entml_patterns import (
     strip_tool_entml_residue,
 )
 from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
-from echotools.exec.fncall.protocols.entml_tool.fakemarkup import strip_orphan_entml_close_tags
+from echotools.exec.fncall.protocols.entml_tool.fakemarkup import (
+    strip_orphan_entml_close_tags,
+)
 from echotools.exec.fncall.protocols.entml_tool.invoke import (
     format_entml_tool_calls,
     parse_entml_tool_calls,
@@ -26,7 +28,6 @@ from echotools.exec.fncall.shared.coercion import _build_param_schema_index
 from echotools.exec.fncall.shared.entml_format import (
     _parse_tool_call_args,
     _render_tool_call_line,
-    _render_tool_history_block,
     build_entml_render_prompt,
     format_entml_conversation_history,
     format_entml_current_user_message,

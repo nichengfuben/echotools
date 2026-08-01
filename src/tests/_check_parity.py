@@ -5,8 +5,11 @@ import json
 import sys
 
 sys.path.insert(0, "src/tests")
-from fixtures.entml_golden import _args, _invoke_snapshots, _names
-from fixtures.simulated_llm_tool_responses import SIMULATED_LLM_RESPONSES, TOOLS, tools_for_case
+from fixtures.entml_golden import _args, _invoke_snapshots
+from fixtures.simulated_llm_tool_responses import (
+    SIMULATED_LLM_RESPONSES,
+    tools_for_case,
+)
 
 from echotools.exec.fncall import get_protocol
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
