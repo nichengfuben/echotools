@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.103] - 2026-08-01
+
+### Added
+
+- entml golden 回归：`fixtures/entml_golden.json` 锁定 32 条语料的 `parse()` 输出与 `build_streaming_json_snapshot()` 快照；`test_entml_golden.py` 校验 digest 与逐 case 等价
+
 ## [2.3.102] - 2026-08-01
 
 ### Changed

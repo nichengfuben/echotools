@@ -1,0 +1,632 @@
+{
+  "version": 1,
+  "digest": "cdd07a1ce8fc29ab9b8124e02490ee0b0947129ee0670f6d638d0bca14472be4",
+  "cases": {
+    "canonical_bare_invoke": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "杭州",
+          "unit": "c"
+        }
+      ],
+      "clean": "我先查一下杭州天气。",
+      "snapshots": [
+        {
+          "city": "杭州",
+          "unit": "c"
+        }
+      ]
+    },
+    "parallel_two_tools_bare": {
+      "names": [
+        "get_weather",
+        "search_web"
+      ],
+      "args": [
+        {
+          "city": "杭州"
+        },
+        {
+          "query": "杭州西湖 周边景点",
+          "limit": 5
+        }
+      ],
+      "clean": "稍等，我同时查天气和景点。",
+      "snapshots": [
+        {
+          "city": "杭州"
+        },
+        {
+          "query": "杭州西湖 周边景点",
+          "limit": 5
+        }
+      ]
+    },
+    "thinking_then_bare_invoke": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "杭州",
+          "days": 3
+        }
+      ],
+      "clean": "好的，我来查询。",
+      "snapshots": [
+        {
+          "city": "杭州",
+          "days": 3
+        }
+      ]
+    },
+    "thinking_then_wrapper": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "杭州",
+          "days": 3
+        }
+      ],
+      "clean": "好的，我来查询。",
+      "snapshots": [
+        {
+          "city": "杭州",
+          "days": 3
+        }
+      ]
+    },
+    "parallel_two_tools": {
+      "names": [
+        "get_weather",
+        "search_web"
+      ],
+      "args": [
+        {
+          "city": "杭州"
+        },
+        {
+          "query": "杭州西湖 周边景点",
+          "limit": 5
+        }
+      ],
+      "clean": "稍等，我同时查天气和景点。",
+      "snapshots": [
+        {
+          "city": "杭州"
+        },
+        {
+          "query": "杭州西湖 周边景点",
+          "limit": 5
+        }
+      ]
+    },
+    "type_attrs_reordered": {
+      "names": [
+        "search_web"
+      ],
+      "args": [
+        {
+          "query": "上海 降雨 预报",
+          "limit": 3,
+          "tags": [
+            "weather",
+            "shanghai"
+          ]
+        }
+      ],
+      "clean": "检索中。",
+      "snapshots": [
+        {
+          "query": "上海 降雨 预报",
+          "limit": 3,
+          "tags": [
+            "weather",
+            "shanghai"
+          ]
+        }
+      ]
+    },
+    "single_quotes_everywhere": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "北京",
+          "unit": "c"
+        }
+      ],
+      "clean": "调用工具：",
+      "snapshots": [
+        {
+          "city": "北京",
+          "unit": "c"
+        }
+      ]
+    },
+    "markdown_fenced_xml": {
+      "names": [
+        "read_file"
+      ],
+      "args": [
+        {
+          "path": "src/main.py",
+          "offset": 0,
+          "limit": 80
+        }
+      ],
+      "clean": "按规范调用：",
+      "snapshots": [
+        {
+          "path": "src/main.py",
+          "offset": 0,
+          "limit": 80
+        }
+      ]
+    },
+    "escaped_underscore_name": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "深圳"
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "city": "深圳"
+        }
+      ]
+    },
+    "extra_attrs_on_invoke": {
+      "names": [
+        "search_web"
+      ],
+      "args": [
+        {
+          "query": "echotools sdk",
+          "limit": 2
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "query": "echotools sdk",
+          "limit": 2
+        }
+      ]
+    },
+    "parameters_json_block": {
+      "names": [
+        "search_web"
+      ],
+      "args": [
+        {
+          "query": "西湖门票",
+          "limit": 4,
+          "tags": [
+            "travel"
+          ],
+          "filters": {
+            "lang": "zh"
+          }
+        }
+      ],
+      "clean": "执行搜索。",
+      "snapshots": [
+        {
+          "query": "西湖门票",
+          "limit": 4,
+          "tags": [
+            "travel"
+          ],
+          "filters": {
+            "lang": "zh"
+          }
+        }
+      ]
+    },
+    "parameters_sub_tags_fallback": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "成都",
+          "unit": "c",
+          "days": 2
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "city": "成都",
+          "unit": "c",
+          "days": 2
+        }
+      ]
+    },
+    "multiline_shell_command": {
+      "names": [
+        "run_shell"
+      ],
+      "args": [
+        {
+          "command": "python -m pytest src/tests -q",
+          "timeout_ms": 60000,
+          "env": {
+            "PYTHONPATH": "src",
+            "LANG": "C"
+          }
+        }
+      ],
+      "clean": "我先跑检查。",
+      "snapshots": [
+        {
+          "command": "python -m pytest src/tests -q",
+          "timeout_ms": 60000,
+          "env": {
+            "PYTHONPATH": "src",
+            "LANG": "C"
+          }
+        }
+      ]
+    },
+    "path_with_angle_brackets_noise": {
+      "names": [
+        "read_file"
+      ],
+      "args": [
+        {
+          "path": "docs/<draft>.md"
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "path": "docs/<draft>.md"
+        }
+      ]
+    },
+    "prose_then_tool_then_prose_attempt": {
+      "names": [
+        "read_file"
+      ],
+      "args": [
+        {
+          "path": "README.md"
+        }
+      ],
+      "clean": "第一步先读文件。\n\n读完再继续分析。",
+      "snapshots": [
+        {
+          "path": "README.md"
+        }
+      ]
+    },
+    "three_tools_mixed_styles": {
+      "names": [
+        "get_weather",
+        "search_web",
+        "read_file"
+      ],
+      "args": [
+        {
+          "city": "广州"
+        },
+        {
+          "query": "广州塔 开放时间",
+          "limit": 1
+        },
+        {
+          "path": "notes.txt"
+        }
+      ],
+      "clean": "开始。",
+      "snapshots": [
+        {
+          "city": "广州"
+        },
+        {
+          "query": "广州塔 开放时间",
+          "limit": 1
+        },
+        {
+          "path": "notes.txt"
+        }
+      ]
+    },
+    "english_assistant_style": {
+      "names": [
+        "search_web"
+      ],
+      "args": [
+        {
+          "query": "echotools inject_fncall",
+          "limit": 10,
+          "filters": {
+            "site": "github.com"
+          }
+        }
+      ],
+      "clean": "I'll look that up.",
+      "snapshots": [
+        {
+          "query": "echotools inject_fncall",
+          "limit": 10,
+          "filters": {
+            "site": "github.com"
+          }
+        }
+      ]
+    },
+    "boolean_like_strings_stay_string_when_schema_string": {
+      "names": [
+        "search_web"
+      ],
+      "args": [
+        {
+          "query": "true",
+          "limit": 1
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "query": "true",
+          "limit": 1
+        }
+      ]
+    },
+    "dense_no_newlines": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "南京",
+          "days": 1
+        }
+      ],
+      "clean": "查一下。",
+      "snapshots": [
+        {
+          "city": "南京",
+          "days": 1
+        }
+      ]
+    },
+    "history_style_tool_block_must_not_parse": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "杭州",
+          "unit": "c"
+        }
+      ],
+      "clean": "参考历史：\n我再确认一次实时天气。",
+      "snapshots": [
+        {
+          "city": "杭州",
+          "unit": "c"
+        }
+      ]
+    },
+    "agent_write_windows_path": {
+      "names": [
+        "Write"
+      ],
+      "args": [
+        {
+          "file_path": "C:\\Users\\dev\\project\\main.py",
+          "contents": "print(\"hello\")"
+        }
+      ],
+      "clean": "写入文件。",
+      "snapshots": [
+        {
+          "file_path": "C:\\Users\\dev\\project\\main.py",
+          "contents": "print(\"hello\")"
+        }
+      ]
+    },
+    "agent_bash_pipeline": {
+      "names": [
+        "Bash"
+      ],
+      "args": [
+        {
+          "command": "cd /tmp && grep -r \"foo\\bar\" . | head -5"
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "command": "cd /tmp && grep -r \"foo\\bar\" . | head -5"
+        }
+      ]
+    },
+    "agent_powershell_cmdlet": {
+      "names": [
+        "PowerShell"
+      ],
+      "args": [
+        {
+          "command": "Write-Output \"C:\\Users\\dev\""
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "command": "Write-Output \"C:\\Users\\dev\""
+        }
+      ]
+    },
+    "agent_todolist_array": {
+      "names": [
+        "TodoList"
+      ],
+      "args": [
+        {
+          "todos": [
+            {
+              "title": "测试 Bash 工具",
+              "status": "in_progress"
+            }
+          ]
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "todos": [
+            {
+              "title": "测试 Bash 工具",
+              "status": "in_progress"
+            }
+          ]
+        }
+      ]
+    },
+    "agent_parallel_write_bash": {
+      "names": [
+        "Write",
+        "Bash"
+      ],
+      "args": [
+        {
+          "file_path": "notes.txt",
+          "contents": "ok"
+        },
+        {
+          "command": "echo ok"
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "file_path": "notes.txt",
+          "contents": "ok"
+        },
+        {
+          "command": "echo ok"
+        }
+      ]
+    },
+    "agent_thinking_then_bash": {
+      "names": [
+        "Bash"
+      ],
+      "args": [
+        {
+          "command": "echo hello"
+        }
+      ],
+      "clean": "开始执行。",
+      "snapshots": [
+        {
+          "command": "echo hello"
+        }
+      ]
+    },
+    "agent_bash_inside_thinking": {
+      "names": [
+        "Bash"
+      ],
+      "args": [
+        {
+          "command": "echo in-thinking"
+        }
+      ],
+      "clean": "可见回复。",
+      "snapshots": [
+        {
+          "command": "echo in-thinking"
+        }
+      ]
+    },
+    "prompt_canonical_two_invoke_template": {
+      "names": [
+        "get_weather",
+        "search_web"
+      ],
+      "args": [
+        {
+          "city": "上海"
+        },
+        {
+          "query": "上海 天气"
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "city": "上海"
+        },
+        {
+          "query": "上海 天气"
+        }
+      ]
+    },
+    "model_type_str_overrides_schema_int": {
+      "names": [
+        "get_weather"
+      ],
+      "args": [
+        {
+          "city": "杭州",
+          "days": "3"
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "city": "杭州",
+          "days": "3"
+        }
+      ]
+    },
+    "model_type_int_on_limit": {
+      "names": [
+        "search_web"
+      ],
+      "args": [
+        {
+          "limit": 7
+        }
+      ],
+      "clean": "",
+      "snapshots": [
+        {
+          "limit": 7
+        }
+      ]
+    },
+    "real_world_thinking_then_get_time": {
+      "names": [
+        "get_time"
+      ],
+      "args": [
+        {
+          "city": "杭州"
+        }
+      ],
+      "clean": "好的，我推荐上午去**灵隐寺**（清净幽深，适合清晨游览），下午去**雷峰塔**（俯瞰西湖全景，傍晚时分尤其美）。我先确认一下当前时间，方便您安排行程。",
+      "snapshots": [
+        {
+          "city": "杭州"
+        }
+      ]
+    }
+  }
+}
