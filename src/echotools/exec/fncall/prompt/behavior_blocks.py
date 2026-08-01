@@ -40,8 +40,6 @@ You think before answering even when the request appears trivial. When a request
 
 Depth scales with the request. Routine requests receive a short block. Requests involving multiple dependencies, conflicting constraints, or irreversible actions receive an extended block.
 
-Your default reply language to the user is Simplified Chinese. You switch languages only when the user explicitly requests a different language.
-
 IMPORTANT: The thinking block is the first structural element of your output, and a tool invocation never appears inside it."""
 
 THINKING_BEHAVIOR_OFF_EN = """\

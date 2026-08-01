@@ -233,7 +233,8 @@ def test_thinking_prompt_on() -> None:
         "<entml:thinking_mode>"
     )
     assert "Every reply begins with a thinking block" in section
-    assert "Simplified Chinese" in section
+    assert "Simplified Chinese" not in section
+    assert "default reply language" not in section.lower()
     assert "`<entml:invoke>`" not in section
     assert "<entml:function_calls>" not in section
 

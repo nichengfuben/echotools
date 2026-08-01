@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.104] - 2026-08-01
+
+### Fixed
+
+- entml thinking 行为块移除默认回复语言强制（Simplified Chinese / switch languages）
+
 ## [2.3.103] - 2026-08-01
 
 ### Added
