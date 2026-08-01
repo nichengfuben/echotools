@@ -30,11 +30,36 @@ def _parameters_block_snapshot(
     close_pos = inner.find(_PARAMETERS_CLOSE, content_start)
     if close_pos >= 0:
         closed_body = inner[: close_pos + len(_PARAMETERS_CLOSE)]
-        from echotools.exec.fncall.protocols.entml_invoke import parse_invoke_args
+        from echotools.exec.fncall.protocols.entml_tool.invoke import parse_invoke_args
 
         args = parse_invoke_args(closed_body, tool_name, schema_index)
         return json.dumps(args, ensure_ascii=False)
     return ""
+
+
+def _json_object_from_entries(
+    entries: List[tuple],
+    func_schema: Dict[str, Dict[str, Any]],
+) -> str:
+    parts: List[str] = ["{"]
+    for idx, (key, value, is_complete, type_hint) in enumerate(entries):
+        if idx > 0:
+            parts.append(", ")
+        parts.append(json.dumps(key, ensure_ascii=False))
+        parts.append(": ")
+        pschema = func_schema.get(key) or {}
+        param_type = _effective_param_type(value, pschema, type_hint)
+        fragment = _parameter_json_fragment(
+            value, is_complete, param_type, pschema, type_hint
+        )
+        if fragment is None:
+            if idx == 0:
+                return ""
+            return "".join(parts)
+        parts.append(fragment)
+        if not is_complete:
+            return "".join(parts)
+    return "".join(parts)
 
 
 def build_streaming_json_snapshot(
@@ -44,11 +69,7 @@ def build_streaming_json_snapshot(
     schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None,
     force_close: bool = False,
 ) -> str:
-    """构造当前应已发出的 partial_json 累积串（可未完成）。
-
-    invoke 闭合（或 force_close）时直接走 ``parse_invoke_args``，与批量解析一致。
-    未完成时仅输出合法 JSON 前缀，且不在 ``</entml:invoke>`` 前闭合最外层 ``}``。
-    """
+    """构造当前应已发出的 partial_json 累积串（可未完成）。"""
     invoke_closed = _INVOKE_CLOSE in body
     inner = body[: body.index(_INVOKE_CLOSE)] if invoke_closed else body
 
@@ -80,26 +101,7 @@ def build_streaming_json_snapshot(
         return ""
 
     func_schema = (schema_index or {}).get(tool_name) or {}
-    parts: List[str] = ["{"]
-    for idx, (key, value, is_complete, type_hint) in enumerate(entries):
-        if idx > 0:
-            parts.append(", ")
-        parts.append(json.dumps(key, ensure_ascii=False))
-        parts.append(": ")
-        pschema = func_schema.get(key) or {}
-        param_type = _effective_param_type(value, pschema, type_hint)
-        fragment = _parameter_json_fragment(
-            value, is_complete, param_type, pschema, type_hint
-        )
-        if fragment is None:
-            if idx == 0:
-                return ""
-            return "".join(parts)
-        parts.append(fragment)
-        if not is_complete:
-            return "".join(parts)
-
-    return "".join(parts)
+    return _json_object_from_entries(entries, func_schema)
 
 
 def _parse_partial_parameter_body(body: str) -> Dict[str, Any]:

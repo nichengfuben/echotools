@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Tuple
 
-from echotools.exec.fncall.protocols.entml_tool_result_comment import (
+from .comment import (
     leading_partial_tool_result_id_comment_len,
     strip_complete_tool_result_id_comments,
     trailing_partial_tool_result_id_comment_len,

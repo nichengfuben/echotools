@@ -3,23 +3,27 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
-from .entml_patterns import (
+from ..entml_patterns.invoke import (
+    iter_actionable_entml_invoke_blocks,
+    resolve_known_tool_names,
+)
+from ..entml_patterns.params import (
+    extract_attr_value,
+    extract_parameter_type_attr,
+    invoke_structural_gap_text,
+    normalize_entml_name,
+    parse_sub_tags,
+    synthetic_close_invoke_body,
+)
+from ..entml_patterns.regex import (
     BARE_INVOKE_CHILD_RE,
     INVOKE_DIRECT_CHILD_RE,
     INVOKE_DIRECT_CHILD_SKIP,
     PARAM_RE,
     PARAMETERS_RE,
-    extract_attr_value,
-    extract_parameter_type_attr,
-    invoke_structural_gap_text,
-    iter_actionable_entml_invoke_blocks,
-    normalize_entml_name,
-    parse_sub_tags,
-    resolve_known_tool_names,
-    split_mangled_json_param_tail,
-    synthetic_close_invoke_body,
 )
-from .entml_schema import (
+from ..entml_schema.mangled import split_mangled_json_param_tail
+from .values import (
     _coerce_entml_arg_value,
     coerce_entml_arguments,
     coerce_entml_parameter_value,

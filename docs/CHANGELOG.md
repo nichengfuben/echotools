@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.102] - 2026-08-01
+
+### Changed
+
+- `media.console` UI 桥接层改为通用多主题：`RichCLI` + `ui_themes` 预设（ocean/forest/sunset/violet/rose/slate/cyan）；移除 Blue 专用命名与 `BlueCLI`
+- 旧配置值 `blue` 自动映射为 `ocean`
+
+## [2.3.101] - 2026-08-01
+
+### Added
+
+- `media.console` 新增 `uilayout/ui_bridge.py`：同步 `run_select`/`run_confirm`、`create_themed_ui`、蓝色渐变主题、ASCII 横幅渲染、配置 flatten/coerce、`render_bar`/`truncate_ansi`
+- `media.console` 新增 `uiwidgets/ui_blue_cli.py`：`BlueCLI`、Rich 蓝色主题与 `get_console` 工厂
+
 ## [2.3.99] - 2026-07-30
 
 ### Fixed

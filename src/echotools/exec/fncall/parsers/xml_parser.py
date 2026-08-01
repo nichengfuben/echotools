@@ -17,7 +17,7 @@ from echotools.exec.fncall.shared.coercion import (
     _coerce_param_value,
 )
 from echotools.exec.fncall.shared.normalization import normalize_tool_calls
-from echotools.exec.fncall.shared.xml_helpers import (
+from echotools.exec.fncall.shared.loop_detect import (
     _PROVIDER_BLOCK_RE,
     _PROVIDER_INVOKE_RE,
     _PROVIDER_PARAM_RE,

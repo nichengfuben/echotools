@@ -117,7 +117,7 @@ def _final_invoke_arguments_json(
     force_close: bool = False,
 ) -> str:
     """与批量 parse_invoke_args 完全一致的可解析 JSON。"""
-    from echotools.exec.fncall.protocols.entml_invoke import parse_invoke_args
+    from echotools.exec.fncall.protocols.entml_tool.invoke import parse_invoke_args
 
     invoke_closed = _INVOKE_CLOSE in body
     inner = body[: body.index(_INVOKE_CLOSE)] if invoke_closed else body

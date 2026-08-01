@@ -7,7 +7,7 @@ import re
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from ..entml_patterns import INVOKE_RE, normalize_entml_name
-from ..entml_schema import coerce_entml_arguments
+from ..entml_tool.values import coerce_entml_arguments
 
 _TOOL_BLOCK_OPEN_RE = re.compile(r"<tool\s*>", re.IGNORECASE)
 _TOOL_BLOCK_CLOSE_RE = re.compile(
@@ -291,7 +291,7 @@ def _parse_mangled_brace_entml_params(
     rest = body[match.end() :].lstrip()
     if not _PARAM_MARKER_RE.search(rest):
         return []
-    from ..entml_invoke import parse_invoke_args
+    from ..entml_tool.invoke import parse_invoke_args
 
     args = parse_invoke_args(rest, name, schema_index)
     if not args:

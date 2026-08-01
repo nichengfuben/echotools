@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Tuple
 
-from echotools.exec.fncall.protocols.entml_fake_structure_markup import (
+from echotools.exec.fncall.protocols.entml_tool.fakemarkup import (
     strip_fake_entml_structure_markup,
     strip_fake_entml_structure_markup_for_display,
 )

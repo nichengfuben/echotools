@@ -95,3 +95,42 @@ def detect_tool_loop(
         return LoopDetectionResult(True, count, last_fp, suggestion)
 
     return LoopDetectionResult(False, count, last_fp, "")
+
+
+import re as _re
+
+_CDATA_RE = _re.compile(r'<!\[CDATA\[([\s\S]*?)\]\]>')
+_XML_ESCAPE_MAP = {
+    '&': '&amp;',
+    '"': '&quot;',
+    "'": '&apos;',
+    '<': '&lt;',
+    '>': '&gt;',
+}
+
+
+def extract_cdata(value: str) -> str:
+    cdata = _CDATA_RE.search(value)
+    if cdata:
+        return cdata.group(1).strip()
+    return value.strip()
+
+
+def escape_xml_attr(value: str) -> str:
+    for char, escape in _XML_ESCAPE_MAP.items():
+        value = value.replace(char, escape)
+    return value
+
+
+_PROVIDER_BLOCK_RE = _re.compile(
+    r'<\|PROVIDER\|tool_calls>([\s\S]*?)</\|PROVIDER\|tool_calls>',
+    _re.DOTALL,
+)
+_PROVIDER_INVOKE_RE = _re.compile(
+    r'<\|PROVIDER\|invoke\s+name="([^"]+)"\s*>([\s\S]*?)</\|PROVIDER\|invoke>',
+    _re.DOTALL,
+)
+_PROVIDER_PARAM_RE = _re.compile(
+    r'<\|PROVIDER\|parameter\s+name="([^"]+)"\s*>([\s\S]*?)</\|PROVIDER\|parameter>',
+    _re.DOTALL,
+)
