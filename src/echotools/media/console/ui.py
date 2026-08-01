@@ -1,4 +1,4 @@
-"""Backward-compatible re-exports for console UI."""
+"""Console UI public exports."""
 
 from __future__ import annotations
 

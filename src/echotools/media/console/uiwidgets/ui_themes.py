@@ -12,8 +12,6 @@ RGB = Tuple[int, int, int]
 
 DEFAULT_THEME_NAME = "ocean"
 
-_LEGACY_ALIASES = {"blue": "ocean", "default": "ocean"}
-
 
 @dataclass(frozen=True)
 class ThemePreset:
@@ -219,7 +217,6 @@ def normalize_theme_name(name: str | None) -> str:
     if not name:
         return DEFAULT_THEME_NAME
     key = name.strip().lower()
-    key = _LEGACY_ALIASES.get(key, key)
     return key if key in THEME_PRESETS else DEFAULT_THEME_NAME
 
 

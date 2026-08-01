@@ -630,14 +630,15 @@ def test_duplicate_assistant_invoke_both_parsed() -> None:
     assert _names(calls) == ["Read", "Read"]
 
 
-def test_legacy_function_calls_wrapper_still_parses() -> None:
+def test_function_calls_wrapper_stripped_from_output() -> None:
     text = (
         "<entml:function_calls>\n"
         f"{WEATHER_INVOKE}\n"
         "</entml:function_calls>"
     )
-    _, calls, _ = _stream_parse(text, STANDARD_TOOLS, 11)
+    clean, calls, _ = _stream_parse(text, STANDARD_TOOLS, 11)
     assert _names(calls) == ["get_weather"]
+    assert "function_calls" not in clean
 
 
 def test_scenario_corpus_covers_required_shapes() -> None:

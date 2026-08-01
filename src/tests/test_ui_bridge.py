@@ -40,10 +40,8 @@ class TestThemes:
     def test_default_theme(self) -> None:
         assert DEFAULT_THEME_NAME == "ocean"
 
-    def test_legacy_blue_alias(self) -> None:
-        assert normalize_theme_name("blue") == "ocean"
-
     def test_unknown_theme_falls_back(self) -> None:
+        assert normalize_theme_name("blue") == "ocean"
         assert normalize_theme_name("not-a-theme") == "ocean"
 
     def test_theme_diversity(self) -> None:

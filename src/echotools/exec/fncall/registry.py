@@ -11,44 +11,12 @@ from echotools.exec.protocol.base import (
     get_protocol_by_id,
 )
 
-__all__ = ["get_protocol", "list_protocols", "set_custom_protocol_factory", "clear_custom_protocol_factory"]
+__all__ = ["get_protocol", "list_protocols"]
 
 logger = get_logger(__name__)
 
-_custom_instance: Optional[ToolProtocol] = None
 _registered = False
 _mapping_logged: set = set()
-
-
-_custom_factory = None
-
-
-def set_custom_protocol_factory(factory) -> None:
-    """由 Provider-Fncall-Util 等插件注入 custom 协议工厂。"""
-    global _custom_factory
-    _custom_factory = factory
-
-
-def clear_custom_protocol_factory() -> None:
-    """清除 custom 协议工厂与缓存实例（插件 on_unload 时调用）。"""
-    global _custom_factory, _custom_instance
-    _custom_factory = None
-    _custom_instance = None
-
-
-def _get_custom_protocol(
-    prompt_en: str = "", prompt_zh: str = ""
-) -> ToolProtocol:
-    """获取或创建 custom 协议（由 fncall 插件提供）。"""
-    global _custom_instance
-    if _custom_instance is not None:
-        return _custom_instance
-    if _custom_factory is not None:
-        _custom_instance = _custom_factory(prompt_en, prompt_zh)
-        return _custom_instance
-    raise ValueError(
-        "custom 协议需要 Provider-Fncall-Util 插件；请安装并启用 fncall 插件"
-    )
 
 
 def _ensure_registered() -> None:
@@ -66,8 +34,6 @@ def get_protocol(
     protocol_id: str = "",
     *,
     default_protocol: str = "entml",
-    custom_prompt_en: str = "",
-    custom_prompt_zh: str = "",
     platform_id: str = "",
     mapping: Optional[Dict[str, str]] = None,
 ) -> ToolProtocol:
@@ -76,8 +42,6 @@ def get_protocol(
     Args:
         protocol_id: 协议 ID。
         default_protocol: 缺省协议。
-        custom_prompt_en: custom 英文模板。
-        custom_prompt_zh: custom 中文模板。
         platform_id: 平台 ID（用于 mapping 查找）。
         mapping: 平台到协议的映射。
 
@@ -99,8 +63,6 @@ def get_protocol(
                     _mapping_logged.add(key)
     if not protocol_id:
         protocol_id = default_protocol
-    if protocol_id == "custom":
-        return _get_custom_protocol(custom_prompt_en, custom_prompt_zh)
     _ensure_registered()
     return get_protocol_by_id(protocol_id)
 

@@ -1,8 +1,41 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+本文件记录 [echotools](https://github.com/nichengfuben/echotools) 的所有 notable 变更。
+格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号与
+[PyPI](https://pypi.org/project/echotools/) / `pyproject.toml` 同步。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+## 版本概览
+
+| 主版本 | 要点 |
+|--------|------|
+| **2.4.0** | **Breaking**：移除旧模块路径别名、`custom` 协议工厂、XML 解析器、`<tool>` 块解析、`function_calls` 外壳兼容、主题 `blue` 别名、Write `path`→`file_path` 映射 |
+| **2.3.x** | entml 协议持续增强：流式 partial_json、thinking 容错、伪 history 剥离、prompt 块顺序、golden 回归；`media.console` 多主题 UI 桥接 |
+| **2.1.0** | **Breaking**：内置 fncall 仅保留 `entml`；`get_protocol` 默认改为 `entml`；其余协议移至 Provider-Fncall-Util 插件 |
+| **2.0.0** | 主版本升至 2.x，与 provider-v2 依赖对齐 |
+| **1.0.x** | 基础设施 SDK：懒加载、`EchoTools.startup()`、CI/PyPI 发布、核心模块测试覆盖 |
+
+安装与快速示例见仓库根目录 [README.md](../README.md)。
+
+## [Unreleased]
+
+（暂无）
+
+## [2.4.0] - 2026-08-02
+
+### Removed
+
+- **Breaking** `echotools.compat` 及 pre-2.3.9 模块路径别名（`echotools.config` 等）
+- **Breaking** `set_custom_protocol_factory` / `clear_custom_protocol_factory` 与 `custom` 协议
+- **Breaking** `parse_fncall` / `parse_fncall_xml`（XML 协议解析器）
+- **Breaking** `<tool>` 块解析（`entml_tool/blocks.py`、`entml_think/blocks.py` 重复实现）
+- **Breaking** `strip_legacy_function_calls_wrapper` 与 `function_calls` 开闭标签静默剥离
+- **Breaking** 主题名 `blue` / `default` → `ocean` 别名
+- **Breaking** Write 工具 `path` → `file_path` 参数名映射
+
+### Changed
+
+- entml 流式/批解析统一为裸 `<entml:invoke>` 一等格式
+- `media.console` 仅接受 `THEME_PRESETS` 内主题名
 
 ## [2.3.104] - 2026-08-01
 

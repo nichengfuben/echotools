@@ -47,7 +47,7 @@ from .regex import (
     _PARAM_CLOSE_VALID_RE,
     _PARAM_CLOSE_VALID_STREAM_RE,
 )
-from .strip import strip_legacy_function_calls_wrapper, strip_tool_entml_residue
+from .strip import strip_tool_entml_residue
 
 __all__ = [
     "BARE_INVOKE_CHILD_OPEN_RE",
@@ -87,7 +87,6 @@ __all__ = [
     "resolve_known_tool_names",
     "split_mangled_json_param_tail",
     "strip_actionable_entml_invoke_blocks",
-    "strip_legacy_function_calls_wrapper",
     "strip_tool_entml_residue",
     "synthetic_close_invoke_body",
 ]

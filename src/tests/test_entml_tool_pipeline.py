@@ -584,11 +584,11 @@ class TestStreamPipeline:
     def test_wrapper_without_invoke_name_not_detected(self) -> None:
         parser = FncallStreamParser(protocol=_proto(), tools=RICH_TOOLS)
         parser.feed("前文\n<entml:function_calls>\n")
-        assert parser.partial_text == "前文\n"
+        assert parser.partial_text.startswith("前文")
+        assert "<entml:function_calls>" in parser.partial_text
         assert not parser.has_calls
         parser.feed('<entml:invoke name="rich_tool">')
         assert parser.has_calls
-        assert parser.partial_text == "前文"
         parser.feed(
             '<entml:parameter name="s">x</entml:parameter></entml:invoke>\n'
             "</entml:function_calls>"
@@ -596,6 +596,7 @@ class TestStreamPipeline:
         clean, calls = parser.finalize()
         assert clean == "前文"
         assert _args(calls)[0]["s"] == "x"
+        assert "function_calls" not in clean
 
     def test_prose_before_invoke_name_line_streams_after_stable(self) -> None:
         parser = FncallStreamParser(protocol=_proto(), tools=RICH_TOOLS)

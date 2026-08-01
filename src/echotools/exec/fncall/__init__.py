@@ -3,10 +3,6 @@ from __future__ import annotations
 """fncall 模块导出。"""
 
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
-from echotools.exec.fncall.parsers.xml_parser import (
-    parse_fncall,
-    parse_fncall_xml,
-)
 from echotools.exec.fncall.prompt.inject import inject_fncall
 from echotools.exec.fncall.registry import get_protocol, list_protocols
 from echotools.exec.fncall.shared.loop_detect import (
@@ -27,8 +23,6 @@ from echotools.exec.protocol.base import (
 
 __all__ = [
     "inject_fncall",
-    "parse_fncall",
-    "parse_fncall_xml",
     "FncallStreamParser",
     "format_tool_descs",
     "normalize_content",

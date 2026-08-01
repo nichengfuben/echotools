@@ -836,40 +836,25 @@ def test_entml_instruction_matches_spec_format() -> None:
     assert "<functions>" not in prompt
 
 
-def test_entml_prompt_and_stream_logic_no_function_calls_wrapper() -> None:
-    """提示词与流式检测均不以 function_calls 为一等公民。"""
+def test_entml_prompt_and_stream_logic_bare_invoke() -> None:
+    """提示词与流式检测以裸 ``<entml:invoke>`` 为一等格式。"""
     from echotools.exec.fncall.parsers.stream import FncallStreamParser
-    from echotools.exec.fncall.protocols.entml_patterns import (
-        strip_legacy_function_calls_wrapper,
-    )
 
     proto = get_protocol("entml")
     tags = proto.get_trigger_tags()
     assert "function_calls" not in " ".join(tags)
 
-    # legacy 完整开标签在流式 normalize 时静默剥离
-    stripped = strip_legacy_function_calls_wrapper(
-        "前文\n<entml:function_calls>\n<entml:invoke name=\"x\">"
-    )
-    assert "function_calls" not in stripped
-    assert stripped.startswith("前文\n<entml:invoke")
-
-    # detect_start 只认 invoke 起点，不因 wrapper 提前切换
-    found, pos = proto.detect_start(
-        "<entml:function_calls>\n<entml:invoke name=\"rich_tool\">"
-    )
+    found, pos = proto.detect_start('<entml:invoke name="rich_tool">')
     assert found
-    assert pos == len("<entml:function_calls>\n")
+    assert pos == 0
 
     parser = FncallStreamParser(protocol=proto, tools=[])
-    parser.feed("说明\n<entml:function_calls>\n")
+    parser.feed("说明\n")
     assert parser.partial_text == "说明\n"
-    assert "function_calls" not in parser.partial_text
     parser.feed('<entml:invoke name="echo">')
     assert parser.has_calls
     parser.feed(
         '<entml:parameter name="msg">hi</entml:parameter></entml:invoke>'
-        "</entml:function_calls>"
     )
     clean, calls = parser.finalize()
     assert clean == "说明"
@@ -1698,7 +1683,7 @@ def test_write_parameter_payload_opaque_to_alternate_syntax() -> None:
     calls = parse_entml_tool_calls(sample, WRITE_TOOLS, schema_index)
     assert len(calls) == 1
     args = json.loads(calls[0]["function"]["arguments"])
-    assert set(args.keys()) == {"file_path", "content"}
+    assert set(args.keys()) == {"path", "content"}
     assert "<slot></slot>" in args["content"]
     assert "{{ title }}" in args["content"]
 

@@ -130,19 +130,6 @@ def parse_invoke_args(
     _fill_parameter_tag_args(body, args, func_props)
     _parse_bare_invoke_children(body, args, func_props)
     _parse_direct_child_tags(body, args, func_props)
-    return _alias_write_path_arg(args, name, func_props)
-
-
-def _alias_write_path_arg(
-    args: Dict[str, Any],
-    name: str,
-    func_props: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any]:
-    """Write schema 仅有 ``file_path`` 时，将模型输出的 ``path`` 映射过去。"""
-    if name == "Write" and "path" in args and "file_path" in func_props and "path" not in func_props:
-        out = dict(args)
-        out["file_path"] = out.pop("path")
-        return out
     return args
 
 

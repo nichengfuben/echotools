@@ -1,6 +1,6 @@
 """Entropy ML (entml) 协议实现。
 
-- 工具调用：<entml:invoke> / <entml:parameter>（legacy ``function_calls`` 外壳仅解析兼容）
+- 工具调用：<entml:invoke> / <entml:parameter>
 - 对话历史：<entml:conversation_history>
 - 当前用户消息：<current_user_message>
 """
@@ -14,7 +14,6 @@ from echotools.exec.fncall.protocols.entml_patterns import (
     find_actionable_entml_invoke_open,
     resolve_known_tool_names,
     strip_actionable_entml_invoke_blocks,
-    strip_legacy_function_calls_wrapper,
     strip_tool_entml_residue,
 )
 from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
@@ -58,7 +57,6 @@ class EntmlProtocol(ToolProtocol):
 
     _TRIGGER = "<entml:invoke>"
     _TRIGGER_PREFIX = "<entml:invoke"
-    _LEGACY_WRAPPER_PREFIX = "<entml:function_calls"
     _THINKING_PREFIX = "<entml:thinking"
 
     def get_trigger_tags(self) -> List[str]:
@@ -70,7 +68,7 @@ class EntmlProtocol(ToolProtocol):
         ]
 
     def normalize_stream_buffer(self, buffer: str) -> str:
-        return strip_legacy_function_calls_wrapper(buffer)
+        return buffer
 
     def get_stream_end_tags(self) -> List[str]:
         return []
@@ -126,11 +124,6 @@ class EntmlProtocol(ToolProtocol):
         if find_actionable_entml_invoke_open(buffer, known_names=known) >= 0:
             return None
         hold: Optional[int] = None
-        legacy_pos = buffer.find(self._LEGACY_WRAPPER_PREFIX)
-        if legacy_pos >= 0:
-            close = buffer.find(">", legacy_pos)
-            if close < 0 and (hold is None or legacy_pos < hold):
-                hold = legacy_pos
         invoke_pos = buffer.find(self._TRIGGER_PREFIX)
         if (
             invoke_pos >= 0

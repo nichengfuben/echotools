@@ -13,14 +13,14 @@ from echotools.exec.fncall.shared.normalization import normalize_tool_call
     [
         (
             "entml",
-            '<entml:function_calls><entml:invoke name="tool_a">'
-            '<entml:parameters>{"x":1}</entml:parameters></entml:invoke></entml:function_calls>',
+            '<entml:invoke name="tool_a">'
+            '<entml:parameters>{"x":1}</entml:parameters></entml:invoke>',
             "tool_a",
         ),
         (
             "entml",
-            '<entml:function_calls><entml:invoke name="tool_x">'
-            '<entml:parameter name="x">1</entml:parameter></entml:invoke></entml:function_calls>',
+            '<entml:invoke name="tool_x">'
+            '<entml:parameter name="x">1</entml:parameter></entml:invoke>',
             "tool_x",
         ),
     ],
@@ -34,11 +34,6 @@ def test_protocol_parse(protocol_id: str, sample: str, expected_name: str) -> No
 
 def test_list_protocols_includes_builtins() -> None:
     assert list_protocols() == ["entml"]
-
-
-def test_custom_protocol_requires_plugin() -> None:
-    with pytest.raises(ValueError, match="Provider-Fncall-Util"):
-        get_protocol("custom", custom_prompt_en="Use tools")
 
 
 def test_get_protocol_platform_mapping() -> None:

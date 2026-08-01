@@ -62,7 +62,6 @@ class StreamFinalMixin:
         if not raw:
             return ""
 
-        lower = raw.lower()
         cut = len(raw)
         from echotools.exec.fncall.protocols.entml_patterns import (
             find_actionable_entml_invoke_open,
@@ -73,9 +72,6 @@ class StreamFinalMixin:
         )
         if invoke_pos >= 0:
             cut = min(cut, invoke_pos)
-        legacy_pos = lower.find("<entml:function_calls")
-        if legacy_pos >= 0:
-            cut = min(cut, legacy_pos)
         segment = raw[:cut]
 
         buf = stream_safe_visible_prefix(

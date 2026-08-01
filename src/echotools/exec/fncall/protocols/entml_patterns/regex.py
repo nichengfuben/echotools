@@ -71,14 +71,6 @@ _TOOL_WRAPPER_PAIR_RE = re.compile(
     r"<entml:function_calls\b[^>]*>[\s\S]*?</entml:function_calls>",
     re.DOTALL,
 )
-_LEGACY_WRAPPER_OPEN_RE = re.compile(
-    r"<entml:function_calls\b[^>]*>\s*",
-    re.IGNORECASE,
-)
-_LEGACY_WRAPPER_CLOSE_RE = re.compile(
-    r"\s*</entml:function_calls\s*>",
-    re.IGNORECASE,
-)
 _TOOL_ORPHAN_TAG_RE = re.compile(
     r"</?entml:(?:function_calls|invoke|parameter|parameters)\b[^>]*/?>",
     re.DOTALL,
