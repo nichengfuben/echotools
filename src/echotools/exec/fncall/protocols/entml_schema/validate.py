@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
+from echotools.exec.fncall.shared.coercion import is_null_literal, schema_allows_null
+
 _SCALAR_CHECK = {
     "string": lambda v: isinstance(v, str),
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
@@ -45,30 +47,6 @@ class ToolArgValidationError(Exception):
         prefix = f"Tool {self.tool_name!r} arguments invalid." if self.tool_name else ""
         body = "\n".join(lines)
         return f"{prefix}\n{body}".strip() if prefix else body
-
-
-def schema_allows_null(schema: Dict[str, Any]) -> bool:
-    if not schema:
-        return False
-    raw_type = schema.get("type")
-    if raw_type == "null":
-        return True
-    if isinstance(raw_type, list) and "null" in raw_type:
-        return True
-    for key in ("anyOf", "oneOf"):
-        combiner = schema.get(key)
-        if not isinstance(combiner, list):
-            continue
-        for sub in combiner:
-            if isinstance(sub, dict) and sub.get("type") == "null":
-                return True
-    return False
-
-
-def is_null_literal(raw: str) -> bool:
-    if raw is None:
-        return True
-    return raw.strip().lower() in ("", "null", "none")
 
 
 def _enum_values(schema: Dict[str, Any]) -> Optional[List[Any]]:

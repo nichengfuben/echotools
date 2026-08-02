@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.3** | 修复 coercion 循环导入导致 entml_think 等模块无法加载 |
 | **2.4.2** | entml fakemarkup 全路径、assistant 历史清理、参数原文保留、coerce+validate 分层、多行参数回归 |
 | **2.4.1** | entml thinking prompt 恢复 `<entml:thinking>` 显式格式与 on/auto/off 全分支；thinking 约束仅由 `<thinking_behavior>` 承担 |
 | **2.4.0** | **Breaking**：移除旧模块路径别名、`custom` 协议工厂、XML 解析器、`<tool>` 块解析、`function_calls` 外壳兼容、主题 `blue` 别名、Write `path`→`file_path` 映射 |
@@ -21,6 +22,12 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.3] - 2026-08-03
+
+### Fixed
+
+- `shared/coercion.py` 顶层 import `entml_schema.validate` 触发 `protocols` 包注册链，造成循环导入；Rogator 等场景加载 `entml_think` 即失败。null union 辅助函数改由 `coercion` 定义，`validate` 单向复用。
 
 ## [2.4.2] - 2026-08-03
 

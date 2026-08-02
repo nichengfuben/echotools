@@ -10,15 +10,35 @@ import json
 from typing import Any, Dict, List, Optional, Sequence
 
 from echotools.base.logger.manager import get_logger
-from echotools.exec.fncall.protocols.entml_schema.validate import (
-    is_null_literal,
-    schema_allows_null,
-)
 
 logger = get_logger(__name__)
 
 _SCALAR_TYPES = frozenset({"string", "integer", "number", "boolean", "null"})
 _CONTAINER_TYPES = frozenset({"array", "object"})
+
+
+def schema_allows_null(schema: Dict[str, Any]) -> bool:
+    if not schema:
+        return False
+    raw_type = schema.get("type")
+    if raw_type == "null":
+        return True
+    if isinstance(raw_type, list) and "null" in raw_type:
+        return True
+    for key in ("anyOf", "oneOf"):
+        combiner = schema.get(key)
+        if not isinstance(combiner, list):
+            continue
+        for sub in combiner:
+            if isinstance(sub, dict) and sub.get("type") == "null":
+                return True
+    return False
+
+
+def is_null_literal(raw: str) -> bool:
+    if raw is None:
+        return True
+    return raw.strip().lower() in ("", "null", "none")
 
 
 def _build_param_schema_index(
