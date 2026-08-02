@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.1** | entml thinking prompt 恢复 `<entml:thinking>` 显式格式与 on/auto/off 全分支；thinking 约束仅由 `<thinking_behavior>` 承担 |
 | **2.4.0** | **Breaking**：移除旧模块路径别名、`custom` 协议工厂、XML 解析器、`<tool>` 块解析、`function_calls` 外壳兼容、主题 `blue` 别名、Write `path`→`file_path` 映射 |
 | **2.3.x** | entml 协议持续增强：流式 partial_json、thinking 容错、伪 history 剥离、prompt 块顺序、golden 回归；`media.console` 多主题 UI 桥接 |
 | **2.1.0** | **Breaking**：内置 fncall 仅保留 `entml`；`get_protocol` 默认改为 `entml`；其余协议移至 Provider-Fncall-Util 插件 |
@@ -19,6 +20,15 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.1] - 2026-08-02
+
+### Fixed
+
+- entml `<thinking_behavior>` 恢复显式 `<entml:thinking>...</entml:thinking>` 格式说明（2.3.93 重构后丢失）
+- entml thinking 分支恢复 on / auto / off（含 history 有 thinking 时）与 has_tools 分路
+- entml `<entml:hard_constraint_restatement>` 不再重复 thinking 约束，避免与 off 模式冲突
+- `achecker.py` logger 导入对齐 2.4.0 包布局（`echotools.base.logger`）
 
 ## [2.4.0] - 2026-08-02
 
