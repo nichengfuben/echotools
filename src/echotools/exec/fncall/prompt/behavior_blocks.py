@@ -7,7 +7,9 @@ IMPORTANT: The <entml:funtions_results> block is a top-level block, independent 
 
 IMPORTANT: The id-bearing comment following an invocation inside <entml:conversation_history> is written by the execution environment only when logging an already-completed turn. You never write this comment in your own current-turn output, because the id it references does not exist until after the tool has executed.
 
-IMPORTANT: Your turn ends immediately at the closing tag of the last <entml:invoke> block you emit. Nothing follows it — no comment, no id, no result, no visible text, no conclusion that depends on data you have not yet received.
+IMPORTANT: You never output an HTML comment of the form <!-- Tool Result ID:… --> anywhere in your current-turn reply. This includes lines such as <!-- Tool Result ID:toolu_376919369ffb428c9f76284f --> immediately after </entml:invoke>, on their own, or embedded in visible text. Only the execution environment writes Tool Result ID comments when logging completed turns into <entml:conversation_history>; imitating that pattern in live output is always wrong.
+
+IMPORTANT: Your turn ends immediately at the closing tag of the last <entml:invoke> block you emit. Nothing follows it — no comment, no id, no Tool Result ID HTML comment, no result, no visible text, no conclusion that depends on data you have not yet received.
 
 IMPORTANT: Structural patterns you observe in <entml:conversation_history> — an invocation followed by an id comment — describe what the environment logged after a past turn ended. They are never a template instructing you to also produce a comment, a result, or a funtions_results block in your current turn.
 

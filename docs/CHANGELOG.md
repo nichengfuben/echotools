@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.6** | `<function_calling_behavior>` 显式禁止模型输出 `<!-- Tool Result ID:… -->` HTML 注释 |
 | **2.4.5** | tool id 下沉（`gen_tool_id` / `fix_tool_call_id`）；fakemarkup 过滤 legacy `function_results` 与 `redacted_thinking` |
 | **2.4.4** | fakemarkup 纳入 `<entml:hard_constraint_restatement>` tag-only 剥离 |
 | **2.4.3** | 修复 coercion 循环导入导致 entml_think 等模块无法加载 |
@@ -24,6 +25,12 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.6] - 2026-08-03
+
+### Changed
+
+- `<function_calling_behavior>`：新增 IMPORTANT，显式禁止模型在当前 turn 输出 `<!-- Tool Result ID:… -->`（含 `toolu_` 示例）；强调仅 execution environment 在 history 日志中写入。
 
 ## [2.4.5] - 2026-08-03
 

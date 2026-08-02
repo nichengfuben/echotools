@@ -854,6 +854,7 @@ def test_entml_instruction_matches_spec_format() -> None:
     assert "<thinking_behavior>" in prompt
     assert "Every reply begins with a <entml:thinking>" in prompt
     assert "<function_calling_behavior>" in prompt
+    assert "Tool Result ID:toolu_376919369ffb428c9f76284f" in prompt
     assert "<function_results>" not in prompt
     assert "<entml:conversation_history>\n" not in prompt
     assert "<entml:history>" not in prompt
