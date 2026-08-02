@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Tuple
+from typing import List, Tuple
 
 from .comment import (
     leading_partial_tool_result_id_comment_len,
@@ -81,6 +81,10 @@ _ORPHAN_ENTML_CLOSE_LINE_COMPLETE_RE = re.compile(
 )
 _TRAILING_ORPHAN_ENTML_CLOSE_RE = re.compile(
     r"(?:\n|\A)\s*</entml:?[a-z0-9_-]*>\s*$",
+    re.IGNORECASE,
+)
+_ENTML_INVOKE_BLOCK_RE = re.compile(
+    r"<entml:invoke\b[^>]*>[\s\S]*?</entml:invoke>",
     re.IGNORECASE,
 )
 
@@ -184,6 +188,30 @@ def _truncate_unclosed_fake_result_id_tail(text: str) -> Tuple[str, bool]:
     return text, found
 
 
+def _collapse_excess_blank_lines(text: str) -> str:
+    """压缩连续空行；``<entml:invoke>`` 块内原样保留（含 parameter 多行值）。"""
+    if not text:
+        return text
+    parts: List[Tuple[str, bool]] = []
+    i = 0
+    while i < len(text):
+        match = _ENTML_INVOKE_BLOCK_RE.search(text, i)
+        if not match:
+            parts.append((text[i:], False))
+            break
+        if match.start() > i:
+            parts.append((text[i : match.start()], False))
+        parts.append((match.group(0), True))
+        i = match.end()
+    out: List[str] = []
+    for chunk, protected in parts:
+        if protected:
+            out.append(chunk)
+        else:
+            out.append(re.sub(r"\n{3,}", "\n\n", chunk))
+    return "".join(out)
+
+
 def strip_fake_entml_structure_markup(content: str) -> Tuple[str, bool]:
     """batch：id result 整块 → 仅标签 → Tool Result ID 注释。"""
     if not content:
@@ -200,7 +228,7 @@ def strip_fake_entml_structure_markup(content: str) -> Tuple[str, bool]:
     found = found or hit
     text, hit = _strip_orphan_entml_close_leaks(text)
     found = found or hit
-    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = _collapse_excess_blank_lines(text)
     return text, found
 
 

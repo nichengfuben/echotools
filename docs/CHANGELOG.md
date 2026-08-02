@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.2** | entml fakemarkup 全路径、assistant 历史清理、参数原文保留、coerce+validate 分层、多行参数回归 |
 | **2.4.1** | entml thinking prompt 恢复 `<entml:thinking>` 显式格式与 on/auto/off 全分支；thinking 约束仅由 `<thinking_behavior>` 承担 |
 | **2.4.0** | **Breaking**：移除旧模块路径别名、`custom` 协议工厂、XML 解析器、`<tool>` 块解析、`function_calls` 外壳兼容、主题 `blue` 别名、Write `path`→`file_path` 映射 |
 | **2.3.x** | entml 协议持续增强：流式 partial_json、thinking 容错、伪 history 剥离、prompt 块顺序、golden 回归；`media.console` 多主题 UI 桥接 |
@@ -20,6 +21,26 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.2] - 2026-08-03
+
+### Added
+
+- entml schema 校验层（`entml_schema/validate.py`）：enum、null union、基础类型匹配；`ToolArgValidationError.to_llm_feedback()` 供模型自修正
+- `coerce_entml_arguments(..., strict=True)` 可选严格校验（默认 soft，兼容既有行为）
+- 多行 parameter 全方位回归（`test_multiline_parameter_comprehensive.py`）与 schema validate 单测
+
+### Changed
+
+- entml 解析与 assistant 历史清理统一走 `strip_fake_entml_structure_markup`；空行折叠跳过 `<entml:invoke>` 块以保护 parameter 内换行
+- string 参数保留模型原文（不 strip），流式完成态与 batch 对齐
+- 删除未使用的 `prompt/templates.py`；`_HISTORY_CLARIFY_EN` 迁入 `shared/entml_format.py`
+
+### Fixed
+
+- fakemarkup 全局 `\n{3,}` 折叠破坏 invoke 内多行 parameter 的问题
+- 流式 string 参数 lstrip 导致与 batch 不一致的问题
+- null union（`["string","null"]`）在 coerce 阶段正确解析为 `None`
 
 ## [2.4.1] - 2026-08-02
 

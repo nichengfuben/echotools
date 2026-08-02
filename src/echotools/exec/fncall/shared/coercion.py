@@ -7,9 +7,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from echotools.base.logger.manager import get_logger
+from echotools.exec.fncall.protocols.entml_schema.validate import (
+    is_null_literal,
+    schema_allows_null,
+)
 
 logger = get_logger(__name__)
 
@@ -49,6 +53,24 @@ def _build_param_schema_index(
             for pname, pschema in props.items()
         }
     return index
+
+
+def required_params_for_func(
+    tools: Optional[List[Dict[str, Any]]],
+    func_name: str,
+) -> List[str]:
+    if not tools or not func_name:
+        return []
+    for tool in tools:
+        fn: Dict[str, Any] = tool.get("function", tool)  # type: ignore[arg-type]
+        if (fn.get("name") or "") != func_name:
+            continue
+        params = fn.get("parameters") or {}
+        required = params.get("required")
+        if isinstance(required, list):
+            return [str(k) for k in required if k]
+        return []
+    return []
 
 
 def _resolve_effective_type(schema: Dict[str, Any]) -> Optional[str]:
@@ -254,17 +276,16 @@ def _coerce_param_value(raw: str, schema: Dict[str, Any]) -> Any:
     if not schema:
         return parsed
 
+    if schema_allows_null(schema) and is_null_literal(raw):
+        return None
+
     effective_type = _resolve_effective_type(schema)
 
     if effective_type is None:
         return parsed
 
     if effective_type == "string":
-        # string 字段保留原文；仅当整段是 JSON 字符串字面量 ("...") 时才解包
-        if len(stripped) >= 2 and stripped[0] == '"' and stripped[-1] == '"':
-            if isinstance(parsed, str):
-                return parsed
-        return stripped
+        return raw
 
     if effective_type == "integer":
         return _coerce_to_integer(stripped, parsed)

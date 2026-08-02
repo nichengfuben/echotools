@@ -18,6 +18,7 @@ from echotools.exec.fncall.protocols.entml_patterns import (
 )
 from echotools.exec.fncall.protocols.entml_schema import format_entml_tool_descs
 from echotools.exec.fncall.protocols.entml_tool.fakemarkup import (
+    strip_fake_entml_structure_markup,
     strip_orphan_entml_close_tags,
 )
 from echotools.exec.fncall.protocols.entml_tool.invoke import (
@@ -179,6 +180,7 @@ class EntmlProtocol(ToolProtocol):
         if tool_calls:
             clean = strip_actionable_entml_invoke_blocks(clean, known_names=known)
         clean = strip_tool_entml_residue(clean, known_names=known)
+        clean, _ = strip_fake_entml_structure_markup(clean)
         clean, _ = strip_orphan_entml_close_tags(clean)
         return (clean, normalize_tool_calls(tool_calls, tools))
 
@@ -193,6 +195,14 @@ class EntmlProtocol(ToolProtocol):
     def clean_tags(self, content: str) -> str:
         return strip_entml_from_content(content)
 
+    def clean_history_assistant_content(self, content: str) -> str:
+        """构建 conversation_history 时清理 assistant 正文（伪 history 块 + fakemarkup）。"""
+        if not content:
+            return content
+        cleaned, _ = strip_fake_history_markup(content)
+        cleaned, _ = strip_fake_entml_structure_markup(cleaned)
+        return cleaned
+
     def clean_tool_tags(
         self,
         content: str,
@@ -202,6 +212,8 @@ class EntmlProtocol(ToolProtocol):
         known = resolve_known_tool_names(tools, schema_index)
         cleaned = strip_tool_entml_residue(content, known_names=known)
         cleaned, _ = strip_fake_history_markup(cleaned)
+        cleaned, _ = strip_fake_entml_structure_markup(cleaned)
+        cleaned, _ = strip_orphan_entml_close_tags(cleaned)
         return cleaned
 
     def format_assistant_tool_calls(

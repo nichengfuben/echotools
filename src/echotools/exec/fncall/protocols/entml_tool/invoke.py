@@ -23,6 +23,7 @@ from ..entml_patterns.regex import (
     PARAMETERS_RE,
 )
 from ..entml_schema.mangled import split_mangled_json_param_tail
+from .fakemarkup import strip_fake_entml_structure_markup
 from .values import (
     _coerce_entml_arg_value,
     coerce_entml_arguments,
@@ -41,7 +42,7 @@ def _parse_direct_child_tags(
         key = normalize_entml_name(match.group(1))
         if not key or key.lower() in INVOKE_DIRECT_CHILD_SKIP or key in args:
             continue
-        raw = (match.group(2) or "").strip()
+        raw = match.group(2) or ""
         args[key] = coerce_entml_parameter_value(
             raw,
             func_props.get(key) or None,
@@ -58,7 +59,7 @@ def _parse_bare_invoke_children(
         key = normalize_entml_name(match.group(1))
         if not key or key in args:
             continue
-        raw = (match.group(2) or "").strip()
+        raw = match.group(2) or ""
         args[key] = coerce_entml_parameter_value(
             raw,
             func_props.get(key) or None,
@@ -93,7 +94,7 @@ def _fill_parameter_tag_args(
         if not pname:
             continue
         pname = normalize_entml_name(pname)
-        pval = (param_m.group(2) or "").strip()
+        pval = param_m.group(2) or ""
         pval, extra = split_mangled_json_param_tail(pval, param_name=pname)
         type_hint = extract_parameter_type_attr(attrs)
         pschema = func_props.get(pname) or {}
@@ -124,7 +125,7 @@ def parse_invoke_args(
     params_m = PARAMETERS_RE.search(body)
     if params_m:
         return _parse_parameters_block_args(
-            params_m.group(1).strip(), name, schema_index
+            params_m.group(1), name, schema_index
         )
     args: Dict[str, Any] = {}
     _fill_parameter_tag_args(body, args, func_props)
@@ -138,6 +139,8 @@ def parse_entml_tool_calls(
     tools: Optional[List[Dict[str, Any]]],
     schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
 ) -> List[Dict[str, Any]]:
+    if text:
+        text, _ = strip_fake_entml_structure_markup(text)
     tool_calls: List[Dict[str, Any]] = []
     known = resolve_known_tool_names(tools, schema_index)
     for _start, _end, attrs, body in iter_actionable_entml_invoke_blocks(

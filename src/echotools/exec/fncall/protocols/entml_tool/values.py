@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from echotools.exec.fncall.shared.coercion import (
     _coerce_param_value,
     _resolve_effective_type,
+)
+from echotools.exec.fncall.protocols.entml_schema.validate import (
+    assert_valid_tool_arguments,
 )
 
 _TYPE_HINT_TO_JSON_TYPE = {
@@ -61,17 +64,16 @@ def coerce_entml_parameter_value(
     if effective:
         return _coerce_param_value(raw, effective)
 
-    stripped = (raw or "").strip()
-    if not stripped:
+    if raw is None or raw == "":
         return ""
 
-    if stripped[0] in "{[":
+    if raw.lstrip().startswith(("{", "[")):
         try:
-            return json.loads(stripped)
+            return json.loads(raw)
         except json.JSONDecodeError:
-            return stripped
+            return raw
 
-    return stripped
+    return raw
 
 
 def effective_entml_param_json_type(
@@ -116,8 +118,11 @@ def coerce_entml_arguments(
     args: Dict[str, Any],
     func_name: str,
     schema_index: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
+    *,
+    strict: bool = False,
+    required: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    """对已解析参数字典按工具 schema 做逐项类型转换。"""
+    """对已解析参数字典按工具 schema 做逐项类型转换，可选 strict 校验。"""
     if not schema_index or not func_name:
         return args
     func_schema = schema_index.get(func_name) or {}
@@ -131,4 +136,8 @@ def coerce_entml_arguments(
             out[key] = _coerce_entml_arg_value(value, pschema)
         else:
             out[key] = value
+    if strict:
+        assert_valid_tool_arguments(
+            out, func_name, schema_index, required=required
+        )
     return out

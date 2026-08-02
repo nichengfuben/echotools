@@ -127,10 +127,10 @@ def _final_invoke_arguments_json(
 
 
 def _streaming_string_value(raw: str, *, is_complete: bool) -> str:
-    """与 ``parse_invoke_args`` 的 ``strip()`` 对齐，并避免 XML 换行导致非单调前缀。"""
+    """流式 string 参数：保留模型原文；未完成时仅去掉尾部未收齐的标签前缀。"""
     if is_complete:
-        return raw.strip()
-    return raw.lstrip().rstrip("\r\n")
+        return raw
+    return _strip_incomplete_markup_suffix(raw)
 
 
 def _parameter_json_fragment(
@@ -197,7 +197,7 @@ def _parse_bare_invoke_entries(body: str) -> List[Tuple[str, str, bool, Optional
         key = normalize_entml_name(match.group(1))
         if not key:
             continue
-        tagged.append((match.start(), key, (match.group(2) or "").strip(), True, None))
+        tagged.append((match.start(), key, match.group(2) or "", True, None))
     for match in BARE_INVOKE_CHILD_OPEN_RE.finditer(body):
         key = normalize_entml_name(match.group(1))
         if not key:
@@ -229,7 +229,7 @@ def _parse_direct_child_entries(body: str) -> List[Tuple[str, str, bool, Optiona
         key = normalize_entml_name(match.group(1))
         if not key or key.lower() in INVOKE_DIRECT_CHILD_SKIP:
             continue
-        tagged.append((match.start(), key, (match.group(2) or "").strip(), True, None))
+        tagged.append((match.start(), key, match.group(2) or "", True, None))
     for match in INVOKE_DIRECT_CHILD_OPEN_RE.finditer(gap_text):
         key = normalize_entml_name(match.group(1))
         if not key or key.lower() in INVOKE_DIRECT_CHILD_SKIP:
@@ -284,7 +284,7 @@ def _parse_parameter_entries(body: str) -> List[Tuple[str, str, bool, Optional[s
             for extra_key, extra_val in extra.items():
                 entries.append((extra_key, str(extra_val), True, None))
             break
-        raw = body[val_start:close].strip()
+        raw = body[val_start:close]
         raw, extra = split_mangled_json_param_tail(raw, param_name=key)
         entries.append((key, raw, True, type_hint))
         for extra_key, extra_val in extra.items():

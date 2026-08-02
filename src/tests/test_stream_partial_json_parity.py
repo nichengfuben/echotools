@@ -269,8 +269,8 @@ def test_edit_params_with_embedded_description_json_not_truncated() -> None:
     proto = get_protocol("entml")
     _, calls = proto.parse(text, tools)
     args = json.loads(calls[0]["function"]["arguments"])
-    assert args["before"] == old.strip()
-    assert args["after"] == new.strip()
+    assert args["before"] == old
+    assert args["after"] == new
     assert args["before"] != args["after"]
     assert '"method"' in args["before"]
     assert '"count"' in args["after"]

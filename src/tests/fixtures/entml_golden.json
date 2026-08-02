@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "digest": "cdd07a1ce8fc29ab9b8124e02490ee0b0947129ee0670f6d638d0bca14472be4",
+  "digest": "3feb6fbc26c04bf67a67c879512f8a2d2f747a46dfc9b2768d334d4aab08b820",
   "cases": {
     "canonical_bare_invoke": {
       "names": [
@@ -260,7 +260,7 @@
       ],
       "args": [
         {
-          "command": "python -m pytest src/tests -q",
+          "command": "\npython -m pytest src/tests -q\n",
           "timeout_ms": 60000,
           "env": {
             "PYTHONPATH": "src",
@@ -271,7 +271,7 @@
       "clean": "我先跑检查。",
       "snapshots": [
         {
-          "command": "python -m pytest src/tests -q",
+          "command": "\npython -m pytest src/tests -q\n",
           "timeout_ms": 60000,
           "env": {
             "PYTHONPATH": "src",

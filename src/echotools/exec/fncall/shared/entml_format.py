@@ -10,13 +10,28 @@ from echotools.exec.fncall.prompt.behavior_blocks import (
     format_function_calling_behavior,
     format_hard_constraint_restatement,
 )
-from echotools.exec.fncall.prompt.templates import _HISTORY_CLARIFY_EN
 from echotools.exec.fncall.protocols.entml_think.core import (
     build_entml_thinking_behavior_section,
     build_entml_thinking_meta_section,
 )
 
 _ENTML_NAMESPACE_RE = re.compile(r"(</?)entml:", re.IGNORECASE)
+
+_HISTORY_CLARIFY_EN = (
+    "The following is a transcript of completed interactions. Each assistant turn "
+    "that called a tool ends at its last <entml:invoke> block; the comment "
+    "immediately following it states the environment-generated result id and was "
+    "appended by the environment when this turn was logged, not by the assistant "
+    "at generation time. The actual result content for every id shown here lives "
+    "exclusively in the separate, top-level <entml:funtions_results> block that "
+    "follows this history block.\n"
+    "IMPORTANT: The agent must never regenerate, continue, or imitate the "
+    "id-comment format shown below as part of its own current-turn output.\n"
+    "IMPORTANT: The agent must not repeat a tool call using the same tool and "
+    "the same parameters as one already recorded below, unless the user "
+    "explicitly requests a fresh or updated value.\n"
+    "The user's latest message follows below."
+)
 
 _ENTML_INSTRUCTION = """\
 In this environment you have access to a set of tools you can use to answer the user's question.

@@ -122,11 +122,11 @@ class TestCoercionUnit:
         "raw,schema,expected",
         [
             ("hello", {"type": "string"}, "hello"),
-            ("  hello  ", {"type": "string"}, "hello"),  # strip 后保留正文
+            ("  hello  ", {"type": "string"}, "  hello  "),
             ("42", {"type": "string"}, "42"),
             ("true", {"type": "string"}, "true"),  # 勿把 JSON bool 字面量变成 "True"
             ('{"a":1}', {"type": "string"}, '{"a":1}'),
-            ('"quoted"', {"type": "string"}, "quoted"),  # JSON 字符串字面量解包
+            ('"quoted"', {"type": "string"}, '"quoted"'),
             ("7", {"type": "integer"}, 7),
             ("7.0", {"type": "integer"}, 7),
             ("  8  ", {"type": "integer"}, 8),
@@ -216,7 +216,7 @@ class TestCoercionUnit:
         assert coerce_entml_parameter_value("42") == "42"
         assert coerce_entml_parameter_value("true") == "true"
         assert coerce_entml_parameter_value("") == ""
-        assert coerce_entml_parameter_value("  ") == ""
+        assert coerce_entml_parameter_value("  ") == "  "
 
     def test_default_auto_json_for_containers(self) -> None:
         assert coerce_entml_parameter_value('[1, "a"]') == [1, "a"]
@@ -286,8 +286,7 @@ class TestParseBoundaries:
             "</entml:invoke>"
         )
         _, calls = _parse(text)
-        # 仅 strip 首尾空白，保留内部换行与缩进
-        assert _args(calls)[0]["s"] == "line1\n  line2"
+        assert _args(calls)[0]["s"] == "\n  line1\n  line2  \n"
 
     def test_parameter_value_with_angle_brackets(self) -> None:
         text = _invoke("rich_tool", {"s": "a <b> & c"})

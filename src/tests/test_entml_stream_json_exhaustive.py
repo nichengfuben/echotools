@@ -148,7 +148,7 @@ def test_parameter_value_may_contain_fake_close_tag() -> None:
     proto = get_protocol("entml")
     _, batch_calls = proto.parse(text, WRITE_TOOL)
     parsed = json.loads(batch_calls[0]["function"]["arguments"])
-    assert parsed["contents"] == contents.strip()
+    assert parsed["contents"] == contents
     _, stream_calls, merged = _feed_stream(text, WRITE_TOOL, chunk=5)
     assert json.loads(merged) == parsed
     assert json.loads(stream_calls[0]["function"]["arguments"]) == parsed

@@ -192,7 +192,7 @@ def parse_sub_tags(
     args: Dict[str, Any] = {}
     for m in SUB_TAG_RE.finditer(content):
         pname = m.group(1).strip()
-        pval = m.group(2).strip()
+        pval = m.group(2) or ""
         pschema = schema_index.get(func_name, {}).get(pname, {}) if schema_index else {}
         args[pname] = coerce_entml_parameter_value(pval, pschema or None)
     return args

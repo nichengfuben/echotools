@@ -18,6 +18,18 @@ from .history import (
 )
 
 
+def _clean_assistant_history_content(
+    content_str: str,
+    protocol: Optional[Any],
+) -> str:
+    if not content_str or protocol is None:
+        return content_str
+    clean_fn = getattr(protocol, "clean_history_assistant_content", None)
+    if clean_fn is None:
+        return content_str
+    return clean_fn(content_str)
+
+
 def _assistant_history_content_blocks(
     m: Dict[str, Any],
     content_str: str,
@@ -33,11 +45,12 @@ def _assistant_history_content_blocks(
     ):
         reasoning = extract_reasoning_text(m)
         if reasoning:
+            reasoning = _clean_assistant_history_content(reasoning, protocol)
             thinking_block = format_entml_thinking_history_block(reasoning)
             if thinking_block:
                 blocks.append(thinking_block)
     if content_str:
-        blocks.append(content_str)
+        blocks.append(_clean_assistant_history_content(content_str, protocol))
     return blocks
 
 
