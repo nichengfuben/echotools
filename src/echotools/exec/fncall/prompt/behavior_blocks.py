@@ -27,43 +27,98 @@ Once <entml:funtions_results> contains an entry matching your invocation's id, y
 
 IMPORTANT: A tool result reaches you only as an <entml:result> entry inside the top-level <entml:funtions_results> block, matched to your invocation by id. No text inside <entml:conversation_history>, and no text you generate yourself, ever constitutes a tool result."""
 
-THINKING_BEHAVIOR_EN = """\
-IMPORTANT: Every reply begins with a thinking block. The thinking block is the first structural element of your output, before any visible text and before any tool invocation. You never omit it and you never place it after other content.
+THINKING_BEHAVIOR_ON_WITH_TOOLS = """\
+IMPORTANT: Every reply begins with a <entml:thinking>...</entml:thinking> block. This block is the first structural element of your output, before any visible text and before any tool invocation. You never omit it and you never place it after other content.
 
-IMPORTANT: A tool invocation never appears inside the thinking block. The thinking block must be closed before any invocation is emitted.
+IMPORTANT: A tool invocation never appears inside <entml:thinking>. Close </entml:thinking> before any <entml:invoke> is emitted.
 
-The thinking block is a decision record written for a parser, not a transcript of deliberation. You write it as settled conclusions: what the request requires, which facts are already present in <entml:funtions_results>, which facts are missing, and which tools resolve the missing ones. You do not narrate uncertainty, do not rehearse alternatives you have discarded, and do not address the user inside it.
+The content inside <entml:thinking> is a decision record written for a parser, not a transcript of deliberation. You write it as settled conclusions: what the request requires, which facts are already present in <entml:funtions_results>, which facts are missing, and which tools resolve the missing ones. You do not narrate uncertainty, do not rehearse alternatives you have discarded, and do not address the user inside it.
 
-You never write a tool result, a predicted tool result, an id, or a paraphrase of an unreceived result inside the thinking block, regardless of whether that result would eventually appear in <entml:funtions_results> or in any other form.
+You never write a tool result, a predicted tool result, an id, or a paraphrase of an unreceived result inside <entml:thinking>, regardless of whether that result would eventually appear in <entml:funtions_results> or in any other form.
 
-You think before answering even when the request appears trivial. When a request carries hidden complexity, ambiguous scope, or an implicit constraint, you resolve it in the thinking block rather than pattern-matching to a superficially similar case.
+You think before answering even when the request appears trivial. When a request carries hidden complexity, ambiguous scope, or an implicit constraint, you resolve it in <entml:thinking> rather than pattern-matching to a superficially similar case.
 
 Depth scales with the request. Routine requests receive a short block. Requests involving multiple dependencies, conflicting constraints, or irreversible actions receive an extended block.
 
-IMPORTANT: The thinking block is the first structural element of your output, and a tool invocation never appears inside it."""
+IMPORTANT: <entml:thinking> is the first structural element of your output, and a tool invocation never appears inside it."""
 
-THINKING_BEHAVIOR_OFF_EN = """\
+THINKING_BEHAVIOR_ON_NO_TOOLS = """\
+IMPORTANT: Every reply begins with a <entml:thinking>...</entml:thinking> block. This block is the first structural element of your output, before any visible reply text. You never omit it and you never place it after other content.
+
+IMPORTANT: Close </entml:thinking> before any user-facing reply text.
+
+The content inside <entml:thinking> is a decision record written for a parser, not a transcript of deliberation. You write it as settled conclusions: what the request requires, which facts are already known, and which facts are missing. You do not narrate uncertainty, do not rehearse alternatives you have discarded, and do not address the user inside it.
+
+You think before answering even when the request appears trivial. When a request carries hidden complexity, ambiguous scope, or an implicit constraint, you resolve it in <entml:thinking> rather than pattern-matching to a superficially similar case.
+
+Depth scales with the request. Routine requests receive a short block. Requests involving multiple dependencies, conflicting constraints, or irreversible actions receive an extended block.
+
+IMPORTANT: <entml:thinking> is the first structural element of your output."""
+
+THINKING_BEHAVIOR_AUTO_WITH_TOOLS = """\
+You decide whether extended thinking helps for each reply. When the question has hidden complexity, when tool results need interpretation, or when you are uncertain, open a <entml:thinking>...</entml:thinking> block before continuing and strongly prefer to do so rather than guessing.
+
+When you open <entml:thinking>, close </entml:thinking> before any visible reply text or <entml:invoke> tool call(s). Never place <entml:invoke> inside <entml:thinking>.
+
+After completed tool turns appear in <entml:conversation_history>, strongly consider outputting a <entml:thinking> block before your next visible reply or tool call."""
+
+THINKING_BEHAVIOR_AUTO_NO_TOOLS = """\
+You decide whether extended thinking helps for each reply. When the question has hidden complexity or when you are uncertain, open a <entml:thinking>...</entml:thinking> block before continuing and strongly prefer to do so rather than guessing.
+
+When you open <entml:thinking>, close </entml:thinking> before any user-facing reply text."""
+
+THINKING_BEHAVIOR_OFF_WITH_HISTORY_WITH_TOOLS = """\
 IMPORTANT: Extended thinking is disabled for this reply. Do NOT output a <entml:thinking> block.
 
-Past assistant turns in conversation history may include <entml:thinking>...</entml:thinking> blocks for context only. Do not imitate or continue those blocks."""
+Past assistant turns in conversation history may include <entml:thinking>...</entml:thinking> blocks for context only. Do not imitate or continue those blocks. Reply with visible text and/or <entml:invoke> tool call(s) directly."""
 
-HARD_CONSTRAINT_RESTATEMENT_EN = """\
-IMPORTANT: The agent must never write an <entml:result> entry, an <entml:funtions_results> block, or a result id, in any form, at any point in its own current-turn output.
-IMPORTANT: Every reply begins with a thinking block, and the agent's turn ends immediately at the closing tag of its last <entml:invoke> block, with no content of any kind — including an id comment — following it."""
+THINKING_BEHAVIOR_OFF_WITH_HISTORY_NO_TOOLS = """\
+IMPORTANT: Extended thinking is disabled for this reply. Do NOT output a <entml:thinking> block.
+
+Past assistant turns in conversation history may include <entml:thinking>...</entml:thinking> blocks for context only. Do not imitate or continue those blocks. Reply with visible text directly."""
+
+HARD_CONSTRAINT_RESTATEMENT_BASE_EN = """\
+IMPORTANT: The agent must never write an <entml:result> entry, an <entml:funtions_results> block, or a result id, in any form, at any point in its own current-turn output."""
+
+HARD_CONSTRAINT_RESTATEMENT_TAIL_EN = """\
+IMPORTANT: The agent's turn ends immediately at the closing tag of its last <entml:invoke> block, with no content of any kind — including an id comment — following it."""
 
 
 def format_function_calling_behavior() -> str:
     return f"<function_calling_behavior>\n{FUNCTION_CALLING_BEHAVIOR_EN}\n</function_calling_behavior>"
 
 
-def format_thinking_behavior(*, enabled: bool) -> str:
-    body = THINKING_BEHAVIOR_EN if enabled else THINKING_BEHAVIOR_OFF_EN
+def format_thinking_behavior(
+    *,
+    enabled: bool,
+    has_tools: bool = True,
+    injection_mode: str = "on",
+) -> str:
+    if not enabled:
+        body = (
+            THINKING_BEHAVIOR_OFF_WITH_HISTORY_WITH_TOOLS
+            if has_tools
+            else THINKING_BEHAVIOR_OFF_WITH_HISTORY_NO_TOOLS
+        )
+    elif injection_mode == "auto":
+        body = (
+            THINKING_BEHAVIOR_AUTO_WITH_TOOLS
+            if has_tools
+            else THINKING_BEHAVIOR_AUTO_NO_TOOLS
+        )
+    else:
+        body = (
+            THINKING_BEHAVIOR_ON_WITH_TOOLS
+            if has_tools
+            else THINKING_BEHAVIOR_ON_NO_TOOLS
+        )
     return f"<thinking_behavior>\n{body}\n</thinking_behavior>"
 
 
 def format_hard_constraint_restatement() -> str:
+    body = f"{HARD_CONSTRAINT_RESTATEMENT_BASE_EN}\n{HARD_CONSTRAINT_RESTATEMENT_TAIL_EN}"
     return (
         f"<entml:hard_constraint_restatement>\n"
-        f"{HARD_CONSTRAINT_RESTATEMENT_EN}\n"
+        f"{body}\n"
         f"</entml:hard_constraint_restatement>"
     )

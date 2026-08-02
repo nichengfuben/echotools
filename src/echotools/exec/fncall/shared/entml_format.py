@@ -155,7 +155,7 @@ def build_entml_render_prompt(
     if tool_descs:
         sections.append(format_function_calling_behavior())
     thinking_behavior = build_entml_thinking_behavior_section(
-        protocol_options, history_text=history_text
+        protocol_options, history_text=history_text, has_tools=bool(tool_descs)
     )
     if thinking_behavior:
         sections.append(thinking_behavior)

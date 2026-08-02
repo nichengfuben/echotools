@@ -72,8 +72,8 @@ def test_inject_with_thinking_options_only_when_declared() -> None:
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in with_opts
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in with_opts
     assert "<thinking_behavior>" in with_opts
-    assert "Every reply begins with a thinking block" in with_opts
-    assert "A tool invocation never appears inside the thinking block" in with_opts
+    assert "Every reply begins with a <entml:thinking>" in with_opts
+    assert "A tool invocation never appears inside <entml:thinking>" in with_opts
 
 
 def test_build_entml_thinking_section_empty_without_options() -> None:
@@ -182,6 +182,28 @@ def test_thinking_prompt_off_with_history_thinking_injects_no_think_behavior() -
     assert "Do not imitate or continue those blocks" in section
 
 
+def test_thinking_off_history_thinking_hard_constraint_omits_thinking_rule() -> None:
+    """off/未配置 + history 有 thinking：仅 behavior 禁止 thinking，hard_constraint 不重复。"""
+    proto = get_protocol("entml")
+    history = (
+        "<user>\nfirst\n</user>\n"
+        "<assistant>\n<entml:thinking>\nplan\n</entml:thinking>\nok\n</assistant>"
+    )
+    prompt = proto.render_prompt(
+        tool_descs="### search\nDescription:\nSearch\n",
+        lang="en",
+        history_text=history,
+        current_user_message="next",
+        protocol_options={"thinking_mode": "off"},
+    )
+    assert "<thinking_behavior>" in prompt
+    assert "Do NOT output a <entml:thinking> block" in prompt
+    hard = prompt.split("<entml:hard_constraint_restatement>\n", 1)[1].split(
+        "</entml:hard_constraint_restatement>", 1
+    )[0]
+    assert "Every reply begins with a <entml:thinking>" not in hard
+
+
 def test_thinking_prompt_off_without_history_thinking_stays_empty() -> None:
     history = "<user>\nfirst\n</user>\n<assistant>\nok\n</assistant>"
     assert build_entml_thinking_section(
@@ -213,7 +235,7 @@ def test_thinking_prompt_on_by_level() -> None:
     section = build_entml_thinking_section({"thinking_level": "low"})
     assert "<entml:thinking_mode>low</entml:thinking_mode>" in section
     assert "<entml:max_thinking_length>12800</entml:max_thinking_length>" in section
-    assert "Every reply begins with a thinking block" in section
+    assert "Every reply begins with a <entml:thinking>" in section
 
 
 def test_thinking_prompt_medium_by_level() -> None:
@@ -232,7 +254,7 @@ def test_thinking_prompt_on() -> None:
     assert section.index("<entml:max_thinking_length>") < section.index(
         "<entml:thinking_mode>"
     )
-    assert "Every reply begins with a thinking block" in section
+    assert "Every reply begins with a <entml:thinking>" in section
     assert "Simplified Chinese" not in section
     assert "default reply language" not in section.lower()
     assert "`<entml:invoke>`" not in section
@@ -241,14 +263,15 @@ def test_thinking_prompt_on() -> None:
 
 def test_thinking_prompt_on_no_tools() -> None:
     section = build_entml_thinking_section({"thinking_mode": "on"}, has_tools=False)
-    assert "Every reply begins with a thinking block" in section
+    assert "Every reply begins with a <entml:thinking>" in section
     assert "<entml:invoke>" not in section
 
 
 def test_thinking_prompt_auto_no_tools() -> None:
     section = build_entml_thinking_section({"thinking_level": "auto"}, has_tools=False)
-    assert "Every reply begins with a thinking block" in section
-    assert "<tool>" not in section
+    assert "You decide whether extended thinking helps" in section
+    assert "open a <entml:thinking>" in section
+    assert "<entml:invoke>" not in section
 
 
 def test_thinking_prompt_auto() -> None:
@@ -256,7 +279,8 @@ def test_thinking_prompt_auto() -> None:
     assert "<entml:thinking_mode>auto</entml:thinking_mode>" in section
     assert "<entml:max_thinking_length>" not in section
     assert "<thinking_behavior>" in section
-    assert "Every reply begins with a thinking block" in section
+    assert "You decide whether extended thinking helps" in section
+    assert "Every reply begins with a <entml:thinking>" not in section
     assert "<tool>" not in section
 
 
@@ -286,7 +310,7 @@ def test_inject_no_tools_with_thinking_on() -> None:
     )[0]["content"]
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in result
     assert "<thinking_behavior>" in result
-    assert "Every reply begins with a thinking block" in result
+    assert "Every reply begins with a <entml:thinking>" in result
     assert "<entml:invoke>" not in result
     idx_behavior = result.index("<thinking_behavior>")
     idx_user = result.index("</current_user_message>")
@@ -828,7 +852,7 @@ def test_entml_instruction_matches_spec_format() -> None:
     assert "<entml:thinking_mode>on</entml:thinking_mode>" in prompt
     assert "<entml:max_thinking_length>22000</entml:max_thinking_length>" in prompt
     assert "<thinking_behavior>" in prompt
-    assert "Every reply begins with a thinking block" in prompt
+    assert "Every reply begins with a <entml:thinking>" in prompt
     assert "<function_calling_behavior>" in prompt
     assert "<function_results>" not in prompt
     assert "<entml:conversation_history>\n" not in prompt

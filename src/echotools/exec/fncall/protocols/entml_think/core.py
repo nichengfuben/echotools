@@ -157,6 +157,7 @@ def build_entml_thinking_behavior_section(
     protocol_options: Optional[Dict[str, Any]] = None,
     *,
     history_text: str = "",
+    has_tools: bool = True,
 ) -> str:
     """注入 ``<thinking_behavior>``（位于 history 之前）。"""
     from echotools.exec.fncall.protocols.entml_think.hist import (
@@ -166,9 +167,14 @@ def build_entml_thinking_behavior_section(
     resolved = resolve_thinking_injection(protocol_options)
     if resolved is None:
         if history_text_contains_entml_thinking(history_text):
-            return format_thinking_behavior(enabled=False)
+            return format_thinking_behavior(
+                enabled=False, has_tools=has_tools
+            )
         return ""
-    return format_thinking_behavior(enabled=True)
+    injection_mode, _ = resolved
+    return format_thinking_behavior(
+        enabled=True, has_tools=has_tools, injection_mode=injection_mode
+    )
 
 
 def build_entml_thinking_meta_section(
@@ -196,9 +202,8 @@ def build_entml_thinking_section(
     history_text: str = "",
 ) -> str:
     """兼容旧调用：``thinking_behavior`` + ``max_thinking_length`` + ``thinking_mode``。"""
-    _ = has_tools
     behavior = build_entml_thinking_behavior_section(
-        protocol_options, history_text=history_text
+        protocol_options, history_text=history_text, has_tools=has_tools
     )
     meta = build_entml_thinking_meta_section(protocol_options)
     if behavior and meta:

@@ -151,7 +151,7 @@ def _build_entml_no_tools_prompt(
     if history_text.strip():
         sections.append(format_entml_conversation_history(history_text))
     thinking_behavior = build_entml_thinking_behavior_section(
-        protocol_options, history_text=history_text
+        protocol_options, history_text=history_text, has_tools=False
     )
     if thinking_behavior:
         sections.append(thinking_behavior)
