@@ -2,7 +2,7 @@
 
 通用基础设施 SDK：配置、日志、事件、调度、插件、调用链，以及 **entml** LLM 工具调用协议与终端 Console UI。
 
-完全项目无关，兼容 Python 3.8–3.14。当前版本：**2.4.4**（详见 [CHANGELOG](docs/CHANGELOG.md)）。
+完全项目无关，兼容 Python 3.8–3.14。当前版本：**2.4.5**（详见 [CHANGELOG](docs/CHANGELOG.md)）。
 
 ## 安装
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from echotools.base.ids import short_id, span_id, trace_id, uuid7
+from echotools.base.ids import short_id, span_id, trace_id, uuid7, gen_tool_id
 
 
 def test_uuid7_format() -> None:
@@ -23,3 +23,9 @@ def test_short_id_invalid_length() -> None:
 def test_trace_and_span_ids() -> None:
     assert len(trace_id()) == 32
     assert len(span_id()) == 16
+
+
+def test_gen_tool_id_unique() -> None:
+    a = gen_tool_id()
+    b = gen_tool_id()
+    assert a != b

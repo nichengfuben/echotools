@@ -15,6 +15,12 @@ from echotools.exec.fncall.shared.normalization import (
     normalize_tool_call,
     normalize_tool_calls,
 )
+from echotools.base.ids.generator import gen_tool_id
+from echotools.exec.fncall.tool_id import (
+    ensure_toolu_tool_call_id,
+    fix_tool_call_id,
+    is_placeholder_tool_call_id,
+)
 from echotools.exec.protocol.base import (
     ToolProtocol,
     get_protocol_by_id,
@@ -28,6 +34,10 @@ __all__ = [
     "normalize_content",
     "normalize_tool_call",
     "normalize_tool_calls",
+    "gen_tool_id",
+    "is_placeholder_tool_call_id",
+    "ensure_toolu_tool_call_id",
+    "fix_tool_call_id",
     "detect_tool_loop",
     "LoopDetectionResult",
     "ToolProtocol",

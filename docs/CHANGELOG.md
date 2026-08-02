@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.5** | tool id 下沉（`gen_tool_id` / `fix_tool_call_id`）；fakemarkup 过滤 legacy `function_results` 与 `redacted_thinking` |
 | **2.4.4** | fakemarkup 纳入 `<entml:hard_constraint_restatement>` tag-only 剥离 |
 | **2.4.3** | 修复 coercion 循环导入导致 entml_think 等模块无法加载 |
 | **2.4.2** | entml fakemarkup 全路径、assistant 历史清理、参数原文保留、coerce+validate 分层、多行参数回归 |
@@ -23,6 +24,17 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.5] - 2026-08-03
+
+### Added
+
+- `echotools.base.ids.gen_tool_id()`：Anthropic 兼容 `toolu_` id 生成
+- `echotools.exec.fncall.tool_id`：`fix_tool_call_id`、`ensure_toolu_tool_call_id`、`is_placeholder_tool_call_id`
+
+### Fixed
+
+- fakemarkup tag-only 剥离：`<function_results>` / `<function_result>` / `<think>` 开闭标签；流式 partial hold 同步
 
 ## [2.4.4] - 2026-08-03
 

@@ -13,6 +13,8 @@ from echotools.exec.fncall.protocols.entml_tool.fakemarkup import (
     strip_orphan_entml_close_tags,
 )
 
+_REDACTED_THINKING = "redacted" + "_thinking"
+
 READ_TOOL = {
     "type": "function",
     "function": {
@@ -84,6 +86,18 @@ READ_TOOL = {
             "后",
         ),
         (
+            "正文\n<function_results>\n假结果\n</function_results>\n继续",
+            "假结果",
+            "function_results",
+            "继续",
+        ),
+        (
+            "除此之外</function_result>，中间保留",
+            "中间保留",
+            "function_result",
+            "除此之外",
+        ),
+        (
             "<entml:result>\nbody\n</entml:result>\nok",
             "body",
             "entml:result",
@@ -115,6 +129,16 @@ def test_strip_fake_entml_structure_batch(
     assert expect_absent not in cleaned
     if expect_present:
         assert expect_present in cleaned
+
+
+def test_strip_redacted_thinking_tags_only() -> None:
+    rt = _REDACTED_THINKING
+    raw = f"前\n<{rt}>\n已脱敏思考\n</{rt}>\n后"
+    cleaned, found = strip_fake_entml_structure_markup(raw)
+    assert found
+    assert rt not in cleaned
+    assert "已脱敏思考" in cleaned
+    assert "后" in cleaned
 
 
 def test_tool_result_comment_partial_hold() -> None:

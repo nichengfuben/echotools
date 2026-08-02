@@ -7,7 +7,7 @@ import struct
 import time
 import uuid
 
-__all__ = ["uuid7", "short_id", "trace_id", "span_id"]
+__all__ = ["uuid7", "short_id", "trace_id", "span_id", "gen_tool_id"]
 
 
 def uuid7() -> str:
@@ -60,3 +60,8 @@ def span_id() -> str:
         span_id 字符串。
     """
     return secrets.token_hex(8)
+
+
+def gen_tool_id() -> str:
+    """生成 Anthropic 兼容的 tool_use id（``toolu_`` + 24 位十六进制）。"""
+    return f"toolu_{uuid.uuid4().hex[:24]}"
