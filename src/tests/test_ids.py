@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from echotools.base.ids import short_id, span_id, trace_id, uuid7, gen_tool_id
+from echotools.base.ids import gen_tool_id, short_id, span_id, trace_id, uuid7
 
 
 def test_uuid7_format() -> None:

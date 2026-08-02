@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from echotools.base.ids import gen_tool_id
 from echotools.exec.fncall.tool_id import (
     ensure_toolu_tool_call_id,

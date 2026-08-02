@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional, Sequence
 
+from echotools.exec.fncall.protocols.entml_schema.validate import (
+    assert_valid_tool_arguments,
+)
 from echotools.exec.fncall.shared.coercion import (
     _coerce_param_value,
     _resolve_effective_type,
-)
-from echotools.exec.fncall.protocols.entml_schema.validate import (
-    assert_valid_tool_arguments,
 )
 
 _TYPE_HINT_TO_JSON_TYPE = {

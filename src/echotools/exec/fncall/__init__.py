@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """fncall 模块导出。"""
 
+from echotools.base.ids.generator import gen_tool_id
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.prompt.inject import inject_fncall
 from echotools.exec.fncall.registry import get_protocol, list_protocols
@@ -15,7 +16,6 @@ from echotools.exec.fncall.shared.normalization import (
     normalize_tool_call,
     normalize_tool_calls,
 )
-from echotools.base.ids.generator import gen_tool_id
 from echotools.exec.fncall.tool_id import (
     ensure_toolu_tool_call_id,
     fix_tool_call_id,
