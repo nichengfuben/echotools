@@ -29,6 +29,7 @@ _TAG_ONLY_OPEN_RES = (
     re.compile(r"<entml:call\b[^>]*>", re.IGNORECASE),
     re.compile(r"<function_calling_behavior\b[^>]*>", re.IGNORECASE),
     re.compile(r"<thinking_behavior\b[^>]*>", re.IGNORECASE),
+    re.compile(r"<entml:hard_constraint_restatement\b[^>]*>", re.IGNORECASE),
     re.compile(r"<entml:result\b[^>]*>", re.IGNORECASE),
     re.compile(r"<entml:todo\b[^>]*>", re.IGNORECASE),
 )
@@ -39,6 +40,7 @@ _TAG_ONLY_CLOSE_RES = (
     re.compile(r"</entml:call\s*>", re.IGNORECASE),
     re.compile(r"</function_calling_behavior\s*>", re.IGNORECASE),
     re.compile(r"</thinking_behavior\s*>", re.IGNORECASE),
+    re.compile(r"</entml:hard_constraint_restatement\s*>", re.IGNORECASE),
     re.compile(r"</entml:result\s*>", re.IGNORECASE),
     re.compile(r"</entml:todo\s*>", re.IGNORECASE),
 )
@@ -58,6 +60,8 @@ _FAKE_ENTML_TAG_PREFIXES: Tuple[str, ...] = (
     "</function_calling_behavior",
     "<thinking_behavior",
     "</thinking_behavior",
+    "<entml:hard_constraint_restatement",
+    "</entml:hard_constraint_restatement",
     "<entml:todo",
     "</entml:todo",
     "</entml:invoke",

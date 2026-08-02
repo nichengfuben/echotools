@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.4** | fakemarkup 纳入 `<entml:hard_constraint_restatement>` tag-only 剥离 |
 | **2.4.3** | 修复 coercion 循环导入导致 entml_think 等模块无法加载 |
 | **2.4.2** | entml fakemarkup 全路径、assistant 历史清理、参数原文保留、coerce+validate 分层、多行参数回归 |
 | **2.4.1** | entml thinking prompt 恢复 `<entml:thinking>` 显式格式与 on/auto/off 全分支；thinking 约束仅由 `<thinking_behavior>` 承担 |
@@ -22,6 +23,12 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.4] - 2026-08-03
+
+### Fixed
+
+- fakemarkup：`<entml:hard_constraint_restatement>` 开闭标签纳入 tag-only 剥离（保留块内正文），与 `function_calling_behavior`、`thinking_behavior` 一致；流式 partial hold 同步支持。
 
 ## [2.4.3] - 2026-08-03
 

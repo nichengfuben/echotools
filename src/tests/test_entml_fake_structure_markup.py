@@ -78,6 +78,12 @@ READ_TOOL = {
             "后",
         ),
         (
+            "前\n<entml:hard_constraint_restatement>\n硬约束复述\n</entml:hard_constraint_restatement>\n后",
+            "硬约束复述",
+            "hard_constraint_restatement",
+            "后",
+        ),
+        (
             "<entml:result>\nbody\n</entml:result>\nok",
             "body",
             "entml:result",
