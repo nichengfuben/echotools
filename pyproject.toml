@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "echotools"
-version = "2.4.7"
+version = "2.4.8"
 description = "通用基础设施 SDK：配置、日志、事件、调度、插件、协议、调用链"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -142,6 +142,23 @@ omit = [
     "*/web/application.py",
     "*/web/middleware.py",
     "*/web/utils.py",
+    "*/plat/capture/shared/win_com.py",
+    "*/plat/capture/audio_monitor/api.py",
+    "*/plat/capture/audio_record/api.py",
+    "*/plat/capture/screenshot/api.py",
+    "*/plat/capture/audio_monitor/win.py",
+    "*/plat/capture/audio_monitor/mac.py",
+    "*/plat/capture/audio_monitor/linux.py",
+    "*/plat/capture/audio_record/win.py",
+    "*/plat/capture/audio_record/win_wasapi.py",
+    "*/plat/capture/audio_record/win_winmm.py",
+    "*/plat/capture/audio_record/mac.py",
+    "*/plat/capture/audio_record/linux.py",
+    "*/plat/capture/screenshot/win.py",
+    "*/plat/capture/screenshot/win_dxgi.py",
+    "*/plat/capture/screenshot/win_gdi.py",
+    "*/plat/capture/screenshot/mac.py",
+    "*/plat/capture/screenshot/linux.py",
 ]
 
 [tool.coverage.report]

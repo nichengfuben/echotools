@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.8** | CI 修复：`WINFUNCTYPE` 非 Windows 导入、capture 覆盖率与 shared 单测补全 |
 | **2.4.7** | 新增 `plat.capture`：跨平台音频会话监控、多设备录音、多帧截图（WASAPI/DXGI/XCB 等 ctypes 直调） |
 | **2.4.6** | `<function_calling_behavior>` 显式禁止模型输出 `<!-- Tool Result ID:… -->` HTML 注释 |
 | **2.4.5** | tool id 下沉（`gen_tool_id` / `fix_tool_call_id`）；fakemarkup 过滤 legacy `function_results` 与 `redacted_thinking` |
@@ -26,6 +27,18 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.8] - 2026-08-03
+
+### Fixed
+
+- `plat.capture.shared.win_com`：非 Windows 环境 `WINFUNCTYPE` 导入失败（CI Linux 矩阵）
+- `plat.capture.shared`：Windows 专用 `win_com` 延迟导入，避免 coverage 在 Linux 加载 COM 辅助
+
+### Changed
+
+- `test_plat_capture`：补全 `pcm`/`platform`/`bmp`/`AudioProcess` 单测，满足覆盖率门槛
+- coverage omit：平台相关 capture 后端与 API 编排模块（与既有 terminal/network 等策略一致）
 
 ## [2.4.7] - 2026-08-03
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 """Windows COM vtable helpers shared by capture backends."""
 
 from ctypes import (
+    CFUNCTYPE,
     POINTER,
-    WINFUNCTYPE,
     Structure,
     byref,
     c_int,
@@ -15,6 +15,11 @@ from ctypes import (
     cast,
     sizeof,
 )
+
+try:
+    from ctypes import WINFUNCTYPE
+except ImportError:  # non-Windows: coverage import only
+    WINFUNCTYPE = CFUNCTYPE  # type: ignore[misc,assignment]
 
 HRESULT = c_int
 PTR_SIZE = sizeof(c_void_p)

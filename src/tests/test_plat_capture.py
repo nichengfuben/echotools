@@ -12,8 +12,15 @@ from echotools.plat.capture import (
     ScreenshotConfig,
     get_playing_processes,
 )
-from echotools.plat.capture.shared.bmp import write_bmp
-from echotools.plat.capture.shared.pcm import mix_streams
+from echotools.plat.capture.shared.bmp import rgba_to_bgra, write_bmp
+from echotools.plat.capture.shared.pcm import clamp, mix_streams, resample_pcm
+from echotools.plat.capture.shared.platform import (
+    _OS,
+    IS_LINUX,
+    IS_MACOS,
+    IS_WINDOWS,
+    load_lib,
+)
 from echotools.plat.capture.shared.wav import write_wav
 
 
@@ -33,9 +40,94 @@ def test_audio_process_unknown_volume() -> None:
     assert "vol=" not in repr(ap)
 
 
+def test_audio_process_eq_not_implemented() -> None:
+    assert AudioProcess(1, "x").__eq__(None) is NotImplemented
+    assert AudioProcess(0, "anon") == AudioProcess(0, "anon")
+    assert "anon" in repr(AudioProcess(0, "anon"))
+
+
+def test_mix_streams_empty() -> None:
+    assert mix_streams([], 16) == b""
+
+
 def test_mix_streams_single() -> None:
     data = b"\x00\x01\x00\x02"
     assert mix_streams([data], 16) == data
+
+
+def test_mix_streams_pads_shorter_stream() -> None:
+    s1 = struct.pack("<hh", 1000, 2000)
+    s2 = struct.pack("<h", 3000)
+    mixed = mix_streams([s1, s2], 16, mix_normalize=False)
+    assert len(mixed) == len(s1)
+
+
+def test_mix_streams_32bit() -> None:
+    s1 = struct.pack("<ii", 1000, 2000)
+    s2 = struct.pack("<ii", 3000, 4000)
+    mixed = mix_streams([s1, s2], 32, mix_normalize=False)
+    v1, v2 = struct.unpack("<ii", mixed)
+    assert v1 == 2000
+    assert v2 == 3000
+
+
+def test_clamp() -> None:
+    assert clamp(5, 0, 10) == 5
+    assert clamp(-1, 0, 10) == 0
+    assert clamp(100, 0, 10) == 10
+
+
+def test_resample_pcm_identity() -> None:
+    pcm = struct.pack("<hh", 100, 200)
+    assert resample_pcm(pcm, 44100, 2, 16, 44100, 2, 16) == pcm
+
+
+def test_resample_pcm_mono_to_stereo() -> None:
+    pcm = struct.pack("<h", 1000)
+    out = resample_pcm(pcm, 44100, 1, 16, 44100, 2, 16)
+    v1, v2 = struct.unpack("<hh", out)
+    assert v1 == v2 == 1000
+
+
+def test_resample_pcm_downsample() -> None:
+    pcm = struct.pack("<hh", 100, 200) * 20
+    out = resample_pcm(pcm, 44100, 2, 16, 22050, 2, 16)
+    assert len(out) < len(pcm)
+
+
+def test_resample_pcm_multi_channel() -> None:
+    pcm = struct.pack("<hhhh", 1, 2, 3, 4)
+    out = resample_pcm(pcm, 44100, 4, 16, 44100, 3, 16)
+    assert len(out) == 6
+    assert struct.unpack("<hhh", out) == (1, 2, 3)
+
+
+def test_load_lib_missing() -> None:
+    assert load_lib("echotools_nonexistent_lib_xyz") is None
+
+
+def test_platform_flags() -> None:
+    import platform
+
+    assert _OS == platform.system()
+    assert sum((IS_WINDOWS, IS_MACOS, IS_LINUX)) <= 1
+
+
+def test_rgba_to_bgra() -> None:
+    data = bytes([255, 0, 0, 255])
+    out = rgba_to_bgra(data)
+    assert out[0] == 0
+    assert out[2] == 255
+
+
+def test_write_bmp_bottom_up() -> None:
+    pixels = b"\x00" * (4 * 2 * 2)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = str(Path(tmp) / "bottom.bmp")
+        write_bmp(path, 2, 2, pixels, top_down=False)
+        raw = Path(path).read_bytes()
+    (height,) = struct.unpack_from("<i", raw, 22)
+    assert height == 2
 
 
 def test_mix_streams_average() -> None:
@@ -98,6 +190,7 @@ def test_audio_record_config_defaults() -> None:
     assert cfg.buffer_ms == 50
     assert cfg.frame_bytes == 4
     assert cfg.buffer_frames == int(44100 * 50 / 1000)
+    assert cfg.total_frames == int(44100 * cfg.record_seconds)
 
 
 def test_screenshot_config_defaults() -> None:
