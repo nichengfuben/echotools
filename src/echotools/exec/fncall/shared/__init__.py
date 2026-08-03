@@ -1,5 +1,3 @@
-"""共享工具导出。"""
-
 from echotools.base.ids.generator import uuid7
 from echotools.exec.fncall.shared.coercion import (
     _build_param_schema_index,

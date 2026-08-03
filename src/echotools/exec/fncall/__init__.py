@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""fncall 模块导出。"""
-
 from echotools.base.ids.generator import gen_tool_id
 from echotools.exec.fncall.parsers.stream import FncallStreamParser
 from echotools.exec.fncall.prompt.inject import inject_fncall

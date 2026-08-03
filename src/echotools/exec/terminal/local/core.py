@@ -123,8 +123,6 @@ class LocalTerminal(
         # Cached PID (set after start)
         self._pid: Optional[int] = None
 
-    # Public interface
-
     async def start(self, cols: int = 80, rows: int = 24) -> bool:
         """Start a local shell process."""
         self.cols = cols

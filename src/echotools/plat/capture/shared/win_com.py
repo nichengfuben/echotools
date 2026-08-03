@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""Windows COM vtable helpers shared by capture backends."""
-
 from ctypes import (
     CFUNCTYPE,
     POINTER,
@@ -18,7 +16,7 @@ from ctypes import (
 
 try:
     from ctypes import WINFUNCTYPE
-except ImportError:  # non-Windows: coverage import only
+except ImportError:  # ctypes has no WINFUNCTYPE off Windows
     WINFUNCTYPE = CFUNCTYPE  # type: ignore[misc,assignment]
 
 HRESULT = c_int

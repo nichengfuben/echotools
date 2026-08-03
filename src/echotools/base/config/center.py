@@ -52,7 +52,6 @@ class ConfigCenter:
     """
 
     def __init__(self) -> None:
-        """初始化配置中心。"""
         self._raw: Dict[str, Any] = {}
         self._path: Optional[Path] = None
         self._callbacks: Dict[str, List[Callable[[Any, Any], Any]]] = {}
@@ -77,19 +76,7 @@ class ConfigCenter:
         filename: str = "config.toml",
         data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """加载配置。
-
-        Args:
-            path: 配置文件路径。
-            filename: 自动查找时的文件名。
-            data: 直接提供字典（最高优先，跳过文件）。
-
-        Returns:
-            原始配置字典。
-
-        Raises:
-            ConfigError: 无法定位或解析配置。
-        """
+        """加载配置；data 非空时跳过文件读取。"""
         if data is not None:
             self._raw = copy.deepcopy(data)
             return dict(self._raw)
@@ -104,15 +91,7 @@ class ConfigCenter:
         return dict(self._raw)
 
     def get(self, path: str, default: Any = None) -> Any:
-        """按点路径获取配置值。
-
-        Args:
-            path: 形如 "server.port" 的点路径。
-            default: 缺省值。
-
-        Returns:
-            配置值或默认值。
-        """
+        """按点路径获取配置值。"""
         node: Any = self._raw
         for part in path.split("."):
             if isinstance(node, dict) and part in node:
@@ -122,12 +101,7 @@ class ConfigCenter:
         return node
 
     def set(self, path: str, value: Any) -> None:
-        """按点路径设置配置值（内存中）。
-
-        Args:
-            path: 点路径。
-            value: 新值。
-        """
+        """按点路径设置配置值（仅内存，不写文件）。"""
         parts = path.split(".")
         node = self._raw
         for part in parts[:-1]:
@@ -137,15 +111,7 @@ class ConfigCenter:
         node[parts[-1]] = value
 
     def bind(self, schema: Type[C], section: str = "") -> C:
-        """将配置绑定到类型化 ConfigBase 子类。
-
-        Args:
-            schema: ConfigBase 子类。
-            section: 子段点路径，空表示根。
-
-        Returns:
-            类型化配置实例。
-        """
+        """将配置绑定到类型化 ConfigBase 子类。"""
         data = self.get(section, {}) if section else self._raw
         if not isinstance(data, dict):
             raise ConfigError(
@@ -155,31 +121,20 @@ class ConfigCenter:
 
     @property
     def raw(self) -> Dict[str, Any]:
-        """原始配置字典副本。"""
         return copy.deepcopy(self._raw)
 
     @property
     def path(self) -> Optional[Path]:
-        """配置文件路径。"""
         return self._path
 
     def on_change(
         self, path: str, callback: Callable[[Any, Any], Any]
     ) -> None:
-        """注册配置变更回调。
-
-        Args:
-            path: 监听的点路径。
-            callback: 回调(old, new)，支持同步/异步。
-        """
+        """注册配置变更回调；callback(old, new) 支持同步或异步。"""
         self._callbacks.setdefault(path, []).append(callback)
 
     async def reload(self) -> bool:
-        """热重载配置文件并触发变更回调。
-
-        Returns:
-            是否成功。
-        """
+        """热重载配置文件并触发已注册的变更回调。"""
         if self._path is None or not self._path.exists():
             return False
         async with self._get_lock():
@@ -214,11 +169,7 @@ class ConfigCenter:
         return init_from_template(self, **kwargs)
 
     def write(self, data: Optional[Dict[str, Any]] = None) -> None:
-        """将配置写回文件（tomlkit 保留注释）。
-
-        Args:
-            data: 要写入的字典，None 则写入当前 _raw。
-        """
+        """将配置写回文件（tomlkit 保留注释）。"""
         if self._path is None:
             raise ConfigError("配置路径未设置")
         write_toml(self._path, data if data is not None else self._raw)
@@ -226,14 +177,7 @@ class ConfigCenter:
             self._raw = copy.deepcopy(data)
 
     def backup(self, backup_dir: Optional[str] = None) -> Optional[Path]:
-        """创建配置文件的带时间戳备份。
-
-        Args:
-            backup_dir: 备份目录，默认 <config_dir>/template/old。
-
-        Returns:
-            备份文件路径，无配置路径时返回 None。
-        """
+        """创建配置文件的带时间戳备份；默认目录为 <config_dir>/template/old。"""
         if self._path is None or not self._path.exists():
             return None
         if backup_dir is None:
@@ -246,10 +190,6 @@ class ConfigCenter:
         shutil.copy2(str(self._path), str(backup_path))
         logger.debug("已备份: %s", backup_path)
         return backup_path
-
-    # ------------------------------------------------------------------
-    # __getattr__ 代理
-    # ------------------------------------------------------------------
 
     def bind_proxy(self, schema: Type[C], section: str = "") -> C:
         """绑定 schema 并启用 __getattr__ 代理。

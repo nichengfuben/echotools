@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""tracing 模块导出。"""
-
 from echotools.media.tracing.context import (
     get_current_span_id,
     get_current_trace_id,

@@ -21,21 +21,7 @@ async def retry_with_backoff(
     exceptions: Tuple[Type[Exception], ...] = (Exception,),
     **kw: Any,
 ) -> Any:
-    """指数退避重试。
-
-    Args:
-        func: 异步可调用对象。
-        max_attempts: 最大尝试次数。
-        base_delay: 初始等待秒数。
-        max_delay: 最大等待秒数。
-        exceptions: 需重试的异常类型。
-
-    Returns:
-        函数执行结果。
-
-    Raises:
-        最后一次异常。
-    """
+    """指数退避重试；耗尽次数后抛出最后一次异常。"""
     last: Optional[Exception] = None
     for i in range(max_attempts):
         try:
@@ -61,18 +47,7 @@ async def retry_on_empty(
     max_retries: int = 3,
     **kw: Any,
 ) -> Any:
-    """空响应重试。
-
-    Args:
-        func: 异步可调用对象。
-        max_retries: 最大重试次数。
-
-    Returns:
-        非空结果。
-
-    Raises:
-        ValueError: 仍为空。
-    """
+    """响应为空（None/空串/空 content）时重试。"""
     for i in range(max_retries):
         try:
             r = await func(*a, **kw)
@@ -100,20 +75,7 @@ async def retry_on_exception(
     on_retry: Optional[Callable[[int, Exception], None]] = None,
     **kw: Any,
 ) -> Any:
-    """指定异常类型重试。
-
-    Args:
-        func: 异步可调用对象。
-        max_retries: 最大重试次数。
-        exceptions: 触发重试的异常类型。
-        on_retry: 重试回调(attempt, error)。
-
-    Returns:
-        函数执行结果。
-
-    Raises:
-        最后一次异常。
-    """
+    """仅对指定异常类型重试。"""
     last: Optional[Exception] = None
     for i in range(max_retries):
         try:
@@ -146,7 +108,7 @@ async def retry_async_generator(
     exceptions: Tuple[Type[Exception], ...] = (Exception,),
     **kw: Any,
 ) -> AsyncGenerator[Any, None]:
-    """Retry an async generator factory with exponential backoff."""
+    """异步生成器 factory 失败时指数退避重建。"""
     last: Optional[Exception] = None
     for attempt in range(max_retries + 1):
         if attempt > 0:

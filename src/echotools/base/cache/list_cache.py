@@ -19,14 +19,7 @@ logger = get_logger(__name__)
 
 
 class ListCache:
-    """通用字符串列表缓存管理器。
-
-    职责：
-    1. 从持久化文件读取缓存
-    2. 定时调用 fetch_fn 刷新远程列表
-    3. 根据 overwrite 决定覆盖或追加
-    4. 更新后触发 on_update 回调
-    """
+    """持久化字符串列表；定时 fetch 刷新，overwrite 控制覆盖或只增不减。"""
 
     def __init__(
         self,
@@ -36,15 +29,6 @@ class ListCache:
         overwrite: bool = True,
         data_key: str = "items",
     ) -> None:
-        """初始化列表缓存。
-
-        Args:
-            name: 缓存标识名（仅用于日志）。
-            fallback: 兜底列表。
-            cache_path: 持久化文件路径。
-            overwrite: True=覆盖，False=只增不减。
-            data_key: JSON 中存储列表的键名，默认 "items"。
-        """
         self._name = name
         self._fallback = list(fallback)
         self._overwrite = overwrite
@@ -54,11 +38,6 @@ class ListCache:
         self._data_key = data_key
 
     async def load(self) -> List[str]:
-        """从缓存文件加载列表。
-
-        Returns:
-            缓存列表，无缓存则返回兜底列表。
-        """
         try:
             if self._cache_path.is_file():
                 text = self._cache_path.read_text(encoding="utf-8")
@@ -76,11 +55,6 @@ class ListCache:
         return list(self._items)
 
     async def save(self, items: List[str]) -> None:
-        """保存列表到缓存文件。
-
-        Args:
-            items: 要保存的列表。
-        """
         try:
             self._cache_path.parent.mkdir(parents=True, exist_ok=True)
             data = {self._data_key: items, "updated_at": int(time.time())}
@@ -92,7 +66,6 @@ class ListCache:
             logger.warning("[%s] 缓存保存失败: %s", self._name, e)
 
     def _merge(self, remote: List[str]) -> List[str]:
-        """根据策略合并列表。"""
         if self._overwrite:
             return list(remote) if remote else list(self._items)
         existing = set(self._items)
@@ -111,13 +84,6 @@ class ListCache:
             Callable[[List[str]], Awaitable[None]]
         ] = None,
     ) -> None:
-        """启动定时刷新循环（永久运行）。
-
-        Args:
-            fetch_fn: 返回远程列表的异步函数。
-            interval: 刷新间隔（秒）。
-            on_update: 更新回调。
-        """
         while True:
             await self._do_refresh(fetch_fn, on_update)
             await asyncio.sleep(interval)

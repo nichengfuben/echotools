@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""logger 模块导出。"""
-
 from echotools.base.logger.manager import (
     LoggerManager,
     configure,

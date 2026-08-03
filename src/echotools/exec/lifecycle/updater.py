@@ -27,14 +27,6 @@ class AutoUpdater:
         interval: int = 300,
         on_update: Optional[Callable[[], None]] = None,
     ) -> None:
-        """初始化更新器。
-
-        Args:
-            root: 仓库根目录。
-            branch: 跟踪分支。
-            interval: 检查间隔（秒）。
-            on_update: 更新成功后的回调（如触发重启）。
-        """
         self._root = root
         self._branch = branch
         self._interval = interval
@@ -178,10 +170,6 @@ class AutoUpdater:
         """默认重启动作：退出码 42。"""
         os._exit(42)
 
-
-# ---------------------------------------------------------------------------
-# 单例辅助
-# ---------------------------------------------------------------------------
 
 _updater: Optional[AutoUpdater] = None
 

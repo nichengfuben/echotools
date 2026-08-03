@@ -19,13 +19,6 @@ class EchoError(Exception):
         original: Optional[Exception] = None,
         status_code: int = 500,
     ) -> None:
-        """初始化异常。
-
-        Args:
-            message: 错误信息。
-            original: 原始异常。
-            status_code: 关联状态码。
-        """
         super().__init__(message)
         self.message = message
         self.original = original

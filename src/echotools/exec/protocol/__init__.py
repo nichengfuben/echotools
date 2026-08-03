@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""协议模块统一导出。"""
-
 from echotools.exec.protocol.base import (
     VALID_PROTOCOL_IDS,
     ToolProtocol,

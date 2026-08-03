@@ -31,13 +31,6 @@ class FileWatcher:
         extensions: Optional[Set[str]] = None,
         interval: float = 2.0,
     ) -> None:
-        """初始化监视器。
-
-        Args:
-            paths: 监视的文件或目录路径列表（str 或 Path）。
-            extensions: 仅监视的扩展名集合（含点），None 表示全部。
-            interval: 轮询间隔（秒）。
-        """
         self._paths = [Path(p) for p in paths]
         self._extensions = extensions
         self._interval = interval
@@ -70,11 +63,7 @@ class FileWatcher:
         return result
 
     async def start(self, callback: ChangeCallback) -> None:
-        """启动监视循环。
-
-        Args:
-            callback: 变更回调，接收变更文件路径集合。
-        """
+        """启动监视循环。"""
         self._callback = callback
         self._running = True
         self._mtimes = self._scan()

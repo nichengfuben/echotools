@@ -32,13 +32,6 @@ class Span:
         trace_id: str,
         parent_id: Optional[str] = None,
     ) -> None:
-        """初始化 Span。
-
-        Args:
-            name: span 名称。
-            trace_id: 所属 trace。
-            parent_id: 父 span id。
-        """
         self.name = name
         self.span_id = gen_span_id()
         self.trace_id = trace_id
@@ -104,11 +97,6 @@ class Trace:
     __slots__ = ("trace_id", "spans", "_span_stack")
 
     def __init__(self, trace_id: Optional[str] = None) -> None:
-        """初始化 Trace。
-
-        Args:
-            trace_id: 指定 trace_id，缺省时自动生成。
-        """
         self.trace_id = trace_id or gen_trace_id()
         self.spans: List[Span] = []
         self._span_stack: List[Span] = []

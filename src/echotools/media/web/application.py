@@ -24,16 +24,6 @@ class WebApplication:
         cors: bool = True,
         middlewares: Optional[List[Any]] = None,
     ) -> None:
-        """初始化应用。
-
-        Args:
-            client_max_size: 请求体上限。
-            cors: 是否启用 CORS。
-            middlewares: 额外中间件。
-
-        Raises:
-            ImportError: aiohttp 未安装。
-        """
         try:
             import aiohttp.web
         except ImportError as exc:
@@ -53,7 +43,6 @@ class WebApplication:
 
     @property
     def app(self) -> Any:
-        """底层 aiohttp Application。"""
         return self._app
 
     def __setitem__(self, key: Any, value: Any) -> None:

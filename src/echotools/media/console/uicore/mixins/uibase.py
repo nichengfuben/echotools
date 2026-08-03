@@ -63,7 +63,6 @@ class _ConsoleUIBase:
         self._commands: Dict[str, Dict[str, Any]] = {}
 
     def _init_subcomponents(self, border_style: BorderStyle) -> None:
-        """初始化 ConsoleUI 子组件。"""
         self._box_builder = BoxBuilder(
             self._renderer, border_style=border_style,
         )
@@ -102,17 +101,14 @@ class _ConsoleUIBase:
 
     @property
     def line_count(self) -> int:
-        """已输出的行数"""
         return self._line_count
 
     @property
     def theme(self) -> GradientTheme:
-        """当前主题"""
         return self._theme
 
     @property
     def commands(self) -> Dict[str, Dict[str, Any]]:
-        """注册的命令（副本）"""
         return self._commands.copy()
 
     def _complete_command(self, prefix: str) -> List[str]:
@@ -123,17 +119,14 @@ class _ConsoleUIBase:
 
     @property
     def renderer(self) -> GradientRenderer:
-        """获取渲染器（高级用法）"""
         return self._renderer
 
     @property
     def console(self) -> Console:
-        """获取 Rich Console 实例"""
         return self._console
 
     @property
     def is_normal_mode(self) -> bool:
-        """是否为普通模式"""
         return self._normal_mode
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -141,7 +134,6 @@ class _ConsoleUIBase:
     # ══════════════════════════════════════════════════════════════════════════
 
     def set_theme(self, theme: GradientTheme) -> ConsoleUI:
-        """设置主题"""
         self._theme = theme
         self._renderer.theme = theme
         self._renderer.clear_cache()
@@ -163,13 +155,11 @@ class _ConsoleUIBase:
         return self
 
     def set_char_map(self, char_map: Dict[str, List[str]]) -> ConsoleUI:
-        """设置 ASCII 艺术字符映射"""
         self._char_map = char_map
         self._art_builder = AsciiArtBuilder(self._renderer, char_map)
         return self
 
     def set_border_style(self, style: BorderStyle) -> ConsoleUI:
-        """设置默认边框样式"""
         self._border_style = style
         self._box_builder = BoxBuilder(
             self._renderer, border_style=style,
@@ -180,12 +170,10 @@ class _ConsoleUIBase:
         return self
 
     def refresh_size(self) -> ConsoleUI:
-        """刷新终端尺寸"""
         self._renderer.update_reference_width()
         return self
 
     def reset_lines(self) -> ConsoleUI:
-        """重置行计数"""
         self._line_count = 0
         return self
 

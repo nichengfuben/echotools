@@ -1,9 +1,4 @@
-"""Dynamic speed print stream system for controlled console output.
-
-This module provides a PrintStream class that implements dynamic speed
-printing with ordered queue management, suitable for controlled output
-of large text blocks with adaptive speed based on queue depth.
-"""
+"""动态速率打印流：按队列深度自适应输出速度。"""
 
 from __future__ import annotations
 
@@ -17,21 +12,7 @@ from typing import Any, Optional
 
 
 class PrintStream:
-    """Dynamic speed print stream system with ordered queue.
-
-    This class manages a queue of text blocks and outputs them with
-    adaptive speed based on the current queue depth. The output speed
-    increases as more text is pending, providing smooth, controlled output.
-
-    Attributes:
-        min_speed: Minimum output speed in characters per second.
-        max_speed: Maximum output speed in characters per second.
-        decay_factor: Controls how quickly speed adapts to queue depth.
-        smoothing_factor: Controls speed change smoothing (0.0-1.0).
-        current_speed: Current output speed in characters per second.
-        accumulated_chars: Fractional characters pending output.
-        total_pending_chars: Total characters waiting to be output.
-    """
+    """按队列深度自适应输出速度的打印流。"""
 
     def __init__(
         self,
@@ -40,14 +21,6 @@ class PrintStream:
         decay_factor: float = 20.0,
         smoothing_factor: float = 0.8,
     ) -> None:
-        """Initialize the print stream.
-
-        Args:
-            min_speed: Minimum output speed (characters/second).
-            max_speed: Maximum output speed (characters/second).
-            decay_factor: Controls speed adaptation curve.
-            smoothing_factor: Controls speed change smoothing.
-        """
         # Queue management
         self._text_queue: deque[str] = deque()
         self._current_text: str = ""
@@ -80,10 +53,7 @@ class PrintStream:
             self._output_thread.start()
 
     def stop(self) -> None:
-        """Stop the print stream system.
-
-        Waits for all pending output to complete before stopping.
-        """
+        """停止输出；会等待队列中待输出内容排空。"""
         if self._running:
             self._running = False
             # Wait for all content to be output
@@ -98,11 +68,7 @@ class PrintStream:
                 self._output_thread.join(timeout=1)
 
     def add_to_buffer(self, text: str) -> None:
-        """Add text to the output queue.
-
-        Args:
-            text: Text to add to the queue.
-        """
+        """将文本加入输出队列。"""
         if not self._running:
             self.start()
 
@@ -129,14 +95,7 @@ class PrintStream:
             self.accumulated_chars = 0.0
 
     def _calculate_dynamic_speed(self, buffer_length: int) -> float:
-        """Calculate dynamic output speed based on buffer length.
-
-        Args:
-            buffer_length: Number of pending characters.
-
-        Returns:
-            Calculated speed in characters per second.
-        """
+        """根据待输出字符数计算当前输出速率。"""
         if buffer_length <= 0:
             return self.min_speed
 
@@ -201,31 +160,16 @@ class PrintStream:
 
     @property
     def buffer_size(self) -> int:
-        """Get total characters waiting to be output.
-
-        Returns:
-            Number of pending characters.
-        """
         with self._lock:
             queue_chars = sum(len(text) for text in self._text_queue)
             return len(self._current_text) + queue_chars
 
     @property
     def is_running(self) -> bool:
-        """Check if the system is running.
-
-        Returns:
-            True if running, False otherwise.
-        """
         return self._running
 
     @property
     def queue_length(self) -> int:
-        """Get number of text blocks in queue.
-
-        Returns:
-            Number of queued text blocks.
-        """
         with self._lock:
             return len(self._text_queue)
 
@@ -240,17 +184,7 @@ def print_stream(
     end: str = "\n",
     flush: bool = False,
 ) -> None:
-    """Dynamic speed print function.
-
-    This function provides a drop-in replacement for the built-in print()
-    function with dynamic speed output based on queue depth.
-
-    Args:
-        *args: Content to print.
-        sep: Separator between arguments (default: space).
-        end: End character (default: newline).
-        flush: If True, output immediately without queuing.
-    """
+    """动态速率 print 替代；flush=True 时立即输出不入队。"""
     try:
         # Ensure system is started
         if not _global_print_stream.is_running:
@@ -288,39 +222,19 @@ def flush_print_stream() -> None:
 
 
 def get_buffer_size() -> int:
-    """Get current buffer size.
-
-    Returns:
-        Number of pending characters.
-    """
     return _global_print_stream.buffer_size
 
 
 def get_queue_length() -> int:
-    """Get number of text blocks in queue.
-
-    Returns:
-        Number of queued text blocks.
-    """
     return _global_print_stream.queue_length
 
 
 def is_print_stream_running() -> bool:
-    """Check if the print stream system is running.
-
-    Returns:
-        True if running, False otherwise.
-    """
     return _global_print_stream.is_running
 
 
 def set_print_speed(min_speed: float = 5.0, max_speed: float = 50.0) -> None:
-    """Set print speed range.
-
-    Args:
-        min_speed: Minimum print speed (characters/second).
-        max_speed: Maximum print speed (characters/second).
-    """
+    """设置输出速率上下限。"""
     _global_print_stream.min_speed = max(1.0, min_speed)
     _global_print_stream.max_speed = max(_global_print_stream.min_speed, max_speed)
 
@@ -331,14 +245,7 @@ def configure_print_stream(
     decay_factor: float = 20.0,
     smoothing_factor: float = 0.8,
 ) -> None:
-    """Configure print stream system parameters.
-
-    Args:
-        min_speed: Minimum print speed.
-        max_speed: Maximum print speed.
-        decay_factor: Decay factor for speed adaptation.
-        smoothing_factor: Smoothing factor for speed changes.
-    """
+    """配置输出速率与平滑参数。"""
     _global_print_stream.min_speed = max(1.0, min_speed)
     _global_print_stream.max_speed = max(_global_print_stream.min_speed, max_speed)
     _global_print_stream.decay_factor = max(1.0, decay_factor)
@@ -357,8 +264,6 @@ def _cleanup() -> None:
 # Register cleanup function
 atexit.register(_cleanup)
 
-
-# Module exports
 __all__ = [
     "PrintStream",
     "print_stream",

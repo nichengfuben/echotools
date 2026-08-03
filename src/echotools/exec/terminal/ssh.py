@@ -14,20 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class SSHTerminal(TerminalSession):
-    """Terminal session backed by an SSH connection via *paramiko*.
-
-    *paramiko* is imported lazily so that the rest of the terminal module
-    remains usable even when it is not installed.
-
-    Args:
-        session_id: Unique session identifier.
-        host:       Remote hostname or IP address.
-        port:       SSH port (default 22).
-        username:   SSH username.
-        password:   Password for authentication (optional).
-        key_data:   Private key content as a string (optional).
-        callback:   Callback handlers for output/error/exit events.
-    """
+    """通过 paramiko 建立的 SSH 终端会话（paramiko 懒加载，未安装时不影响其他终端类型）。"""
 
     def __init__(
         self,
@@ -48,10 +35,6 @@ class SSHTerminal(TerminalSession):
 
         self._ssh_client: Any = None  # paramiko.SSHClient
         self._ssh_channel: Any = None  # paramiko.Channel
-
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
 
     async def start(self, cols: int = 80, rows: int = 24) -> bool:
         """Open an SSH connection and start an interactive shell."""
@@ -150,10 +133,6 @@ class SSHTerminal(TerminalSession):
             except Exception:
                 pass
             self._ssh_client = None
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _try_parse_key(paramiko: Any, key_data: str) -> Any:

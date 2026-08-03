@@ -24,11 +24,6 @@ class Tracer:
         self,
         on_finish: Optional[Callable[[Trace], None]] = None,
     ) -> None:
-        """初始化 Tracer。
-
-        Args:
-            on_finish: trace 完成回调，用于导出。
-        """
         self._on_finish = on_finish
         self._active: List[Trace] = []
 
@@ -50,14 +45,7 @@ class Tracer:
 
     @contextlib.contextmanager
     def trace(self, name: str = "root") -> Iterator[Trace]:
-        """trace 上下文管理器。
-
-        Args:
-            name: 根 span 名称。
-
-        Yields:
-            Trace 实例。
-        """
+        """trace 上下文管理器。"""
         trace = self.start_trace()
         root = trace.start_span(name)
         token = set_current_span_id(root.span_id)
@@ -73,15 +61,7 @@ class Tracer:
 
     @contextlib.contextmanager
     def span(self, trace: Trace, name: str) -> Iterator[Span]:
-        """span 上下文管理器。
-
-        Args:
-            trace: 所属 trace。
-            name: span 名称。
-
-        Yields:
-            Span 实例。
-        """
+        """span 上下文管理器。"""
         span = trace.start_span(name)
         token = set_current_span_id(span.span_id)
         try:

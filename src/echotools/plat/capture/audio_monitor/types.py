@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-"""Unified audio process descriptor."""
-
 
 class AudioProcess:
-    """Cross-platform audio process descriptor."""
-
     __slots__ = ("pid", "name", "state", "volume")
 
     def __init__(

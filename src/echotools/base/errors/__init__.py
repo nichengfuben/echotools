@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""错误模块统一导出。"""
-
 from echotools.base.errors.base import EchoError
 from echotools.base.errors.classify import classify_http_error
 from echotools.base.errors.common import (

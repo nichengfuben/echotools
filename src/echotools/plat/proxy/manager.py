@@ -31,7 +31,6 @@ class ProxyManager:
     """
 
     def __init__(self) -> None:
-        """初始化代理管理器。"""
         self._active = False
         self._proxies: Dict[str, str] = {}
         self._config_server = ""
@@ -44,13 +43,7 @@ class ProxyManager:
         enabled: bool = False,
         url_patterns: Optional[List[str]] = None,
     ) -> None:
-        """配置代理。
-
-        Args:
-            proxy_server: 代理地址。
-            enabled: 是否启用配置代理。
-            url_patterns: URL 正则匹配列表，空表示全部非 IP 走代理。
-        """
+        """配置代理；url_patterns 为空时全部非 IP 地址走代理。"""
         self._config_server = proxy_server
         self._config_enabled = enabled
         self._patterns = [re.compile(p) for p in (url_patterns or [])]
@@ -78,11 +71,9 @@ class ProxyManager:
         logger.debug("代理已停用")
 
     def is_active(self) -> bool:
-        """返回是否激活。"""
         return self._active
 
     def get_proxy_dict(self) -> Dict[str, str]:
-        """返回代理字典。"""
         return dict(self._proxies) if self._active else {}
 
     def should_proxy_url(self, url: str) -> bool:
@@ -100,14 +91,7 @@ class ProxyManager:
     def make_aiohttp_connector(
         self, proxy_url: Optional[str] = None
     ) -> Any:
-        """为代理创建 aiohttp connector。
-
-        Args:
-            proxy_url: 代理 URL（SOCKS 使用专用 connector）。
-
-        Returns:
-            connector 实例。
-        """
+        """为代理创建 aiohttp connector；SOCKS 需 aiohttp-socks。"""
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE

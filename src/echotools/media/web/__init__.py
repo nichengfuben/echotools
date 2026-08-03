@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""Web module exports."""
-
 from typing import Any
 
 from echotools.media.web.stats import RequestStats, get_stats

@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.9** | 新增 `AGENTS.md` 注释规范；全库清理机械 docstring 与套话分隔块 |
 | **2.4.8** | CI 修复：`WINFUNCTYPE` 非 Windows 导入、capture 覆盖率与 shared 单测补全 |
 | **2.4.7** | 新增 `plat.capture`：跨平台音频会话监控、多设备录音、多帧截图（WASAPI/DXGI/XCB 等 ctypes 直调） |
 | **2.4.6** | `<function_calling_behavior>` 显式禁止模型输出 `<!-- Tool Result ID:… -->` HTML 注释 |
@@ -27,6 +28,16 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.9] - 2026-08-03
+
+### Added
+
+- 根目录 `AGENTS.md`：注释与文档分工、禁止套话清单、好/坏注释模式
+
+### Changed
+
+- 全库 docstring/注释整改：移除 `模块导出`、机械 `Args`/`Returns`、`初始化 xxx`、property 复述、无实质分隔块等（46 文件）
 
 ## [2.4.8] - 2026-08-03
 

@@ -55,14 +55,6 @@ class EchoTools:
         enabled_modules: Optional[FrozenSet[str]] = None,
         cache_cleanup_interval: float = 0.0,
     ) -> None:
-        """初始化 SDK。
-
-        Args:
-            service_name: 服务名（用于日志/运行时摘要）。
-            persist_dir: 持久化根目录，默认 ~/.echotools。
-            enabled_modules: 启用的子模块集合，None 表示全部启用。
-            cache_cleanup_interval: 缓存过期清理间隔（秒），0 表示禁用。
-        """
         self._service_name = service_name
         self._persist_dir = Path(persist_dir or _DEFAULT_PERSIST)
         self._persist_dir.mkdir(parents=True, exist_ok=True)
@@ -89,7 +81,6 @@ class EchoTools:
 
     @property
     def config(self) -> ConfigCenter:
-        """配置中心。"""
         self._check_module("config")
         if self._config is None:
             self._config = ConfigCenter()
@@ -97,7 +88,6 @@ class EchoTools:
 
     @property
     def logger(self) -> LoggerManager:
-        """日志管理器。"""
         self._check_module("logger")
         if self._logger_manager is None:
             self._logger_manager = LoggerManager()
@@ -105,7 +95,6 @@ class EchoTools:
 
     @property
     def events(self) -> EventBus:
-        """事件总线。"""
         self._check_module("events")
         if self._events is None:
             self._events = EventBus()
@@ -113,7 +102,6 @@ class EchoTools:
 
     @property
     def cache(self) -> MemoryCache:
-        """内存缓存。"""
         self._check_module("cache")
         if self._cache is None:
             self._cache = MemoryCache()
@@ -121,7 +109,6 @@ class EchoTools:
 
     @property
     def scheduler(self) -> TaskScheduler:
-        """任务调度器。"""
         self._check_module("scheduler")
         if self._scheduler is None:
             self._scheduler = TaskScheduler()
@@ -129,7 +116,6 @@ class EchoTools:
 
     @property
     def lifecycle(self) -> LifecycleManager:
-        """生命周期管理器。"""
         self._check_module("lifecycle")
         if self._lifecycle is None:
             self._lifecycle = LifecycleManager()
@@ -137,7 +123,6 @@ class EchoTools:
 
     @property
     def proxy(self) -> ProxyManager:
-        """代理管理器。"""
         self._check_module("proxy")
         if self._proxy is None:
             self._proxy = ProxyManager()
@@ -145,7 +130,6 @@ class EchoTools:
 
     @property
     def plugins(self) -> PluginRegistry:
-        """插件注册表。"""
         self._check_module("plugins")
         if self._plugins is None:
             self._plugins = PluginRegistry()
@@ -153,7 +137,6 @@ class EchoTools:
 
     @property
     def selector(self) -> AdaptiveSelector:
-        """自适应选择器。"""
         self._check_module("selector")
         if self._selector is None:
             self._selector = AdaptiveSelector(
@@ -163,7 +146,6 @@ class EchoTools:
 
     @property
     def dispatcher(self) -> TaskDispatcher:
-        """任务调度分发器。"""
         self._check_module("dispatcher")
         if self._dispatcher is None:
             self._dispatcher = TaskDispatcher(selector=self.selector)
@@ -171,7 +153,6 @@ class EchoTools:
 
     @property
     def tracer(self) -> Tracer:
-        """调用链追踪器。"""
         self._check_module("tracer")
         if self._tracer is None:
             self._tracer = Tracer()
@@ -179,7 +160,6 @@ class EchoTools:
 
     @property
     def runtime(self) -> RuntimeCollector:
-        """运行时收集器。"""
         self._check_module("runtime")
         if self._runtime is None:
             self._runtime = RuntimeCollector(self._service_name)

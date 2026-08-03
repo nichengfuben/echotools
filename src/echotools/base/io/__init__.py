@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""io 模块导出。"""
-
 from echotools.base.io.io_utils import (
     atomic_write_text,
     ensure_directory,

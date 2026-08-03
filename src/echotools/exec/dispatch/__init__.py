@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-"""dispatch 模块导出 -- 贝叶斯汤普森采样版。"""
-
 from echotools.exec.dispatch.candidate import TaskCandidate, make_id
 from echotools.exec.dispatch.dispatcher import TaskDispatcher
 from echotools.exec.dispatch.proxy_selector import ProxyRecord, ProxySelector

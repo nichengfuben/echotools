@@ -27,7 +27,6 @@ class PluginRegistry:
     """
 
     def __init__(self) -> None:
-        """初始化注册表。"""
         self._plugins: Dict[str, Any] = {}
         self._shutdown_method: str = "shutdown"
 
@@ -43,18 +42,7 @@ class PluginRegistry:
         init_method: str = "startup",
         shutdown_method: str = "shutdown",
     ) -> None:
-        """发现并注册插件。
-
-        Args:
-            root_package: 插件根包名。
-            context: 共享上下文，传给 init_method。
-            whitelist: 白名单（仅注册名单内）。
-            blacklist: 黑名单（排除名单内）。
-            base_class: 插件基类，默认 Plugin。
-            required_methods: 鸭子类型所需方法名。
-            init_method: 初始化方法名，默认 "startup"。
-            shutdown_method: 关闭方法名，默认 "shutdown"。
-        """
+        """发现并注册插件。"""
         self._shutdown_method = shutdown_method
         classes = discover_plugins(
             root_package,
@@ -84,12 +72,10 @@ class PluginRegistry:
         self._plugins[plugin.name] = plugin
 
     def get(self, name: str) -> Optional[Plugin]:
-        """获取指定插件。"""
         return self._plugins.get(name)
 
     @property
     def plugins(self) -> Dict[str, Plugin]:
-        """全部插件字典。"""
         return dict(self._plugins)
 
     async def reload(
@@ -103,21 +89,7 @@ class PluginRegistry:
         init_method: str = "startup",
         shutdown_method: Optional[str] = None,
     ) -> bool:
-        """热重载指定插件。
-
-        Args:
-            name: 插件名。
-            root_package: 该插件所在的子包名。
-            context: 共享上下文。
-            base_class: 插件基类，默认 Plugin。
-            required_methods: 鸭子类型所需方法名。
-            init_method: 初始化方法名，默认 "startup"。
-            shutdown_method: 关闭方法名，默认使用 discover_and_register
-                时设定的值。显式传入可避免依赖内部状态。
-
-        Returns:
-            是否成功。
-        """
+        """热重载指定插件；shutdown_method 默认沿用 discover_and_register 时的设定。"""
         sm = shutdown_method or self._shutdown_method
         old = self._plugins.get(name)
         if old is not None:
@@ -157,19 +129,8 @@ class PluginRegistry:
         )
         self._plugins.clear()
 
-    # ------------------------------------------------------------------
-    # 能力查询 & 聚合
-    # ------------------------------------------------------------------
-
     def get_by_capability(self, capability: str) -> Optional[Plugin]:
-        """获取第一个支持指定能力的插件。
-
-        Args:
-            capability: 能力名称。
-
-        Returns:
-            插件实例或 None。
-        """
+        """获取第一个支持指定能力的插件。"""
         for plugin in self._plugins.values():
             caps = getattr(plugin, "capabilities", {})
             if caps.get(capability, False):
@@ -182,15 +143,7 @@ class PluginRegistry:
         *,
         filter_fn: Any = None,
     ) -> List[Any]:
-        """调用所有插件的指定异步方法，聚合结果。
-
-        Args:
-            method_name: 插件上的异步方法名（如 'candidates'）。
-            filter_fn: 可选的过滤函数，接收单个结果项，返回 bool。
-
-        Returns:
-            所有插件返回结果的聚合列表。
-        """
+        """调用所有插件的指定异步方法，聚合结果。"""
         results: List[Any] = []
         for name, plugin in self._plugins.items():
             method = getattr(plugin, method_name, None)
@@ -211,15 +164,7 @@ class PluginRegistry:
         *,
         extra_attrs: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
-        """收集所有插件的项目信息（去重）。
-
-        Args:
-            items_attr: 插件上的属性名（如 'supported_models'）。
-            extra_attrs: 额外需要收集的属性（如 'capabilities', 'context_length'）。
-
-        Returns:
-            去重后的项目字典列表。
-        """
+        """收集所有插件的项目信息（去重）。"""
 
         out: List[Dict[str, Any]] = []
         seen: set = set()
