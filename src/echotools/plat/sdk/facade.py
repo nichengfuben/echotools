@@ -16,8 +16,8 @@ from echotools.media.events.bus import EventBus
 from echotools.media.tracing.tracer import Tracer
 from echotools.plat.plugin.registry import PluginRegistry
 from echotools.plat.proxy.manager import ProxyManager
-from echotools.plat.runtime.collector import RuntimeCollector
-from echotools.plat.scheduler.scheduler import TaskScheduler
+from echotools.plat.sdk.runtime import RuntimeCollector
+from echotools.plat.sdk.scheduler import TaskScheduler
 
 __all__ = ["EchoTools"]
 

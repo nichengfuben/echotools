@@ -105,6 +105,14 @@ __all__ = [
     "ProtocolError",
     "classify_http_error",
     "Spinner",
+    "AudioProcess",
+    "AudioMonitorConfig",
+    "get_playing_processes",
+    "run_audio_monitor",
+    "AudioRecordConfig",
+    "record_audio_session",
+    "ScreenshotConfig",
+    "capture_screenshots",
 ]
 
 _EXPORTS: dict[str, tuple[str, str]] = {
@@ -131,7 +139,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "make_id": ("echotools.exec.dispatch", "make_id"),
     "AdaptiveSelector": ("echotools.exec.dispatch", "AdaptiveSelector"),
     "TaskDispatcher": ("echotools.exec.dispatch", "TaskDispatcher"),
-    "TaskScheduler": ("echotools.plat.scheduler", "TaskScheduler"),
+    "TaskScheduler": ("echotools.plat.sdk.scheduler", "TaskScheduler"),
     "ProxySelector": ("echotools.exec.dispatch", "ProxySelector"),
     "ProxyRecord": ("echotools.exec.dispatch", "ProxyRecord"),
     "Plugin": ("echotools.plat.plugin", "Plugin"),
@@ -147,7 +155,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "ProxyManager": ("echotools.plat.proxy", "ProxyManager"),
     "PortReleaseResult": ("echotools.exec.process", "PortReleaseResult"),
     "ensure_port_available": ("echotools.exec.process", "ensure_port_available"),
-    "RuntimeCollector": ("echotools.plat.runtime", "RuntimeCollector"),
+    "RuntimeCollector": ("echotools.plat.sdk.runtime", "RuntimeCollector"),
     "WebApplication": ("echotools.media.web.application", "WebApplication"),
     "json_body": ("echotools.media.web.utils", "json_body"),
     "safe_flush": ("echotools.media.web.utils", "safe_flush"),
@@ -197,6 +205,14 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "ProtocolError": ("echotools.base.errors", "ProtocolError"),
     "classify_http_error": ("echotools.base.errors", "classify_http_error"),
     "Spinner": ("echotools.media.spinner", "Spinner"),
+    "AudioProcess": ("echotools.plat.capture", "AudioProcess"),
+    "AudioMonitorConfig": ("echotools.plat.capture", "AudioMonitorConfig"),
+    "get_playing_processes": ("echotools.plat.capture", "get_playing_processes"),
+    "run_audio_monitor": ("echotools.plat.capture", "run_audio_monitor"),
+    "AudioRecordConfig": ("echotools.plat.capture", "AudioRecordConfig"),
+    "record_audio_session": ("echotools.plat.capture", "record_audio_session"),
+    "ScreenshotConfig": ("echotools.plat.capture", "ScreenshotConfig"),
+    "capture_screenshots": ("echotools.plat.capture", "capture_screenshots"),
 }
 
 

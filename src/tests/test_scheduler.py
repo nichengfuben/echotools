@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from echotools.plat.scheduler import TaskScheduler
+from echotools.plat.sdk.scheduler import TaskScheduler
 
 
 async def test_scheduler_limits_concurrency() -> None:

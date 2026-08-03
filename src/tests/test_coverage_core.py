@@ -42,7 +42,7 @@ from echotools.media.tracing.tracer import Tracer
 from echotools.media.web import stats as stats_mod
 from echotools.media.web.broker import RequestBroker, request_broker
 from echotools.media.web.stats import RequestStats
-from echotools.plat.scheduler import TaskScheduler
+from echotools.plat.sdk.scheduler import TaskScheduler
 from echotools.version import get_version
 
 

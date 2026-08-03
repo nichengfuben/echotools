@@ -8,6 +8,7 @@
 
 | 主版本 | 要点 |
 |--------|------|
+| **2.4.7** | 新增 `plat.capture`：跨平台音频会话监控、多设备录音、多帧截图（WASAPI/DXGI/XCB 等 ctypes 直调） |
 | **2.4.6** | `<function_calling_behavior>` 显式禁止模型输出 `<!-- Tool Result ID:… -->` HTML 注释 |
 | **2.4.5** | tool id 下沉（`gen_tool_id` / `fix_tool_call_id`）；fakemarkup 过滤 legacy `function_results` 与 `redacted_thinking` |
 | **2.4.4** | fakemarkup 纳入 `<entml:hard_constraint_restatement>` tag-only 剥离 |
@@ -25,6 +26,21 @@
 ## [Unreleased]
 
 （暂无）
+
+## [2.4.7] - 2026-08-03
+
+### Added
+
+- `echotools.plat.capture`：从独立脚本移植的跨平台 capture 模块
+  - `get_playing_processes` / `run_audio_monitor`：WASAPI / CoreAudio / PulseAudio 及多级回退
+  - `record_audio_session`：WASAPI / AudioQueue / ALSA 多设备混音录音
+  - `capture_screenshots`：DXGI / CGDisplay / XCB SHM 连续截图
+- 配置 dataclass：`AudioMonitorConfig`、`AudioRecordConfig`、`ScreenshotConfig`
+- 懒加载导出：`AudioProcess`、`get_playing_processes`、`record_audio_session`、`capture_screenshots` 等
+
+### Changed
+
+- `plat.scheduler` / `plat.runtime` 合并入 `plat.sdk`（`from echotools import TaskScheduler` 等顶层导出不变）
 
 ## [2.4.6] - 2026-08-03
 

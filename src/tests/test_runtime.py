@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from echotools.plat.runtime import RuntimeCollector
+from echotools.plat.sdk.runtime import RuntimeCollector
 
 
 async def test_runtime_collector_sync_and_async() -> None:

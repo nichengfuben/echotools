@@ -2,7 +2,7 @@
 
 通用基础设施 SDK：配置、日志、事件、调度、插件、调用链，以及 **entml** LLM 工具调用协议与终端 Console UI。
 
-完全项目无关，兼容 Python 3.8–3.14。当前版本：**2.4.6**（详见 [CHANGELOG](docs/CHANGELOG.md)）。
+完全项目无关，兼容 Python 3.8–3.14。当前版本：**2.4.7**（详见 [CHANGELOG](docs/CHANGELOG.md)）。
 
 ## 安装
 
@@ -118,6 +118,7 @@ choice = run_select(ui, "选择主题", ["ocean", "forest", "sunset"])
 | `LocalTerminal` / `SSHTerminal` | 终端会话（需 `[terminal]` / `[ssh]`） |
 | `AutoUpdater` | git 自动更新 |
 | `FileWatcher` | 轮询文件监视 |
+| `plat.capture` | 跨平台音频监控/录音/截图（纯 ctypes，零第三方依赖） |
 
 ## 开发
 
